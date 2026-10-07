@@ -7,7 +7,8 @@
 //!     cargo test -p patch-core --test official_firmware -- --ignored
 //! ```
 //!
-//! The pinned identities are public (DeckVolve xdj-700-mods, MIT) and contain no firmware bytes.
+//! The pinned identities are public (published by the reference implementation; see the README's
+//! Acknowledgements) and contain no firmware bytes.
 
 use patch_core::upd::ImageReport;
 use patch_core::{read_firmware, sha256_hex, verify_roundtrip, xdj700};
@@ -22,7 +23,7 @@ const APPLICATION_DECODED_LEN: usize = 18_601_864;
 const APPLICATION_DECODED_SHA256: &str =
     "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939";
 /// Re-encoding of the stock application (not the stock packer's bytes). Verified byte-identical
-/// to DeckVolve's `encode_section` output for the same input (2026-10-07), and pinned so any
+/// to the reference encoder's output for the same input (2026-10-07), and pinned so any
 /// encoder drift is noticed.
 const REENCODED_STREAM_LEN: usize = 6_988_604;
 const REENCODED_STREAM_SHA256: &str =

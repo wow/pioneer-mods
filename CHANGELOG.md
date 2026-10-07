@@ -60,7 +60,7 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
   section is reported with its reason instead of failing the whole report.
 - Deterministic LZSS encoder (`patch_core::lzss::encode`, `encode_section_stream`). It is
-  decision-identical to DeckVolve's reference encoder. It was verified byte-identical on random,
+  decision-identical to the reference encoder (see README, Acknowledgements). It was verified byte-identical on random,
   exhaustive and adversarial inputs and on the official v1.15 application. CI pins golden vectors
   for each search decision: history insertion order, probe order, the 4096 window edge, a binding
   candidate cap, and the early exit. Candidates are kept in hash chains (a fixed 24-bit key

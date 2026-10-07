@@ -1,4 +1,4 @@
-//! Encoder tests. Golden vectors were produced by DeckVolve's `lzss_pioneer.py` encoder (MIT);
+//! Encoder tests. Golden vectors were produced by the reference encoder (README, Acknowledgements);
 //! matching them byte-for-byte keeps our encoder decision-identical to that reference.
 
 use patch_core::lzss::{decode, encode, encode_section_stream};
