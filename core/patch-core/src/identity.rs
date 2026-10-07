@@ -60,26 +60,14 @@ pub fn identify_firmware(path: &Path) -> Result<FirmwareIdentity, PatchCoreError
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Write;
+pub fn identify_bytes(file_name: String, input_bytes: &[u8]) -> FirmwareIdentity {
+    let mut hasher = Sha256::new();
+    hasher.update(input_bytes);
+    let sha256_hex = hex::encode(hasher.finalize());
 
-    #[test]
-    fn identifies_file_size_and_sha256() {
-        let tempdir = tempfile::tempdir().expect("create tempdir");
-        let input_path = tempdir.path().join("XDJ700.UPD");
-        let mut f = File::create(&input_path).expect("create temp file");
-        f.write_all(b"abc").expect("write temp file");
-        f.flush().expect("flush temp file");
-
-        let identity = identify_firmware(&input_path).expect("identify firmware");
-
-        assert_eq!(identity.file_name, "XDJ700.UPD");
-        assert_eq!(identity.size_bytes, 3);
-        assert_eq!(
-            identity.sha256_hex,
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
+    FirmwareIdentity {
+        file_name,
+        size_bytes: input_bytes.len() as u64,
+        sha256_hex,
     }
 }

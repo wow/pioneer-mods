@@ -254,6 +254,7 @@ dependencies = [
  "patch-core",
  "patch-schema",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -272,6 +273,7 @@ name = "patch-schema"
 version = "0.1.0-alpha.0"
 dependencies = [
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
