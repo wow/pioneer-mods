@@ -269,3 +269,70 @@ pub enum SectionError {
     #[error("encoded section failed its self-check: it decodes to different bytes")]
     EncodeSelfCheckMismatch,
 }
+
+/// Why a `.UPD` could not be rebuilt around a new application, or why a rebuilt one was refused.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum RebuildError {
+    #[error("input is not the pinned official release (SHA-256 {sha256})")]
+    UnpinnedInput { sha256: String },
+
+    #[error("input is not a canonical .UPD container: {0}")]
+    Input(UpdError),
+
+    #[error("input MAIN document or section is invalid: {0}")]
+    InputSection(SectionError),
+
+    #[error("new application could not be encoded: {0}")]
+    Encode(SectionError),
+
+    #[error("version label {label:?} is not of the form VerX.YY")]
+    InvalidVersionLabel { label: String },
+
+    #[error(
+        "stock MAIN image has data after the application section (only 0xFF padding is allowed)"
+    )]
+    DataAfterSection,
+
+    #[error(
+        "stock MAIN records do not follow the layout a rebuild reproduces (32-byte S2 grid, \
+         section inside the last extent)"
+    )]
+    NonCanonicalRecordLayout,
+
+    #[error("rebuilt MAIN image of {len} bytes exceeds the {limit}-byte limit for this release")]
+    ImageTooLarge { len: usize, limit: usize },
+
+    #[error("rebuilt update does not parse: {0}")]
+    OutputUnparseable(UpdError),
+
+    #[error("rebuilt MAIN image or application section is invalid: {0}")]
+    OutputSection(SectionError),
+
+    #[error("rebuilt update failed verification: {0}")]
+    Verification(RebuildCheck),
+}
+
+/// The property a rebuilt update failed, checked on the re-parsed output.
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+pub enum RebuildCheck {
+    #[error("the document count differs from the input")]
+    DocumentCount,
+
+    #[error("document {index} is not MAIN and differs from the input")]
+    UntouchedDocument { index: usize },
+
+    #[error("MAIN descriptor, header or termination differs from the input and declared version")]
+    MainFraming,
+
+    #[error("MAIN records do not follow the input's 32-byte record grid")]
+    RecordLayout,
+
+    #[error("MAIN loader region differs from the input")]
+    Loader,
+
+    #[error("MAIN image continues after the application section")]
+    TrailingData,
+
+    #[error("application section does not decode to the requested application")]
+    Application,
+}

@@ -61,28 +61,39 @@ impl UpdContainer {
         Err(UpdError::RoundTripMismatch { offset })
     }
 
-    /// Encodes into a single buffer sized up front: the length header needs every document's
-    /// encoded length before any document is written.
     fn encode(&self) -> Vec<u8> {
-        let lengths: Vec<usize> = self
-            .documents
-            .iter()
-            .map(UpdDocument::encoded_len)
-            .collect();
-        let header: String = lengths
-            .iter()
-            .map(|length| format!("{length}\r\n"))
-            .collect();
-        let mut out = Vec::with_capacity(header.len() + lengths.iter().sum::<usize>());
-        out.extend_from_slice(header.as_bytes());
-        for document in &self.documents {
-            document.encode_into(&mut out);
-        }
-        out
+        let parts: Vec<DocumentParts<'_>> = self.documents.iter().map(UpdDocument::parts).collect();
+        encode_parts(&parts)
     }
 }
 
+/// What the canonical writer needs for one document. Crate-internal: bytes written from parts
+/// that did not come from the parser must be re-parsed with [`super::parse_upd`] before use.
+pub(crate) struct DocumentParts<'a> {
+    pub(crate) descriptor: &'a Descriptor,
+    pub(crate) header: &'a SRecord,
+    pub(crate) data: &'a [SRecord],
+    pub(crate) termination: &'a SRecord,
+}
+
 impl UpdDocument {
+    pub(crate) fn parts(&self) -> DocumentParts<'_> {
+        DocumentParts {
+            descriptor: &self.descriptor,
+            header: &self.header,
+            data: &self.data,
+            termination: &self.termination,
+        }
+    }
+}
+
+impl DocumentParts<'_> {
+    fn records(&self) -> impl Iterator<Item = &SRecord> {
+        std::iter::once(self.header)
+            .chain(self.data)
+            .chain(std::iter::once(self.termination))
+    }
+
     fn encoded_len(&self) -> usize {
         DESCRIPTOR_LEN + self.records().map(SRecord::line_len).sum::<usize>() + CRC_LEN
     }
@@ -96,6 +107,22 @@ impl UpdDocument {
         let crc = crc16_xmodem(&out[start..]);
         out.extend_from_slice(&crc.to_le_bytes());
     }
+}
+
+/// Encodes documents into a single buffer sized up front: the length header needs every
+/// document's encoded length before any document is written.
+pub(crate) fn encode_parts(documents: &[DocumentParts<'_>]) -> Vec<u8> {
+    let lengths: Vec<usize> = documents.iter().map(DocumentParts::encoded_len).collect();
+    let header: String = lengths
+        .iter()
+        .map(|length| format!("{length}\r\n"))
+        .collect();
+    let mut out = Vec::with_capacity(header.len() + lengths.iter().sum::<usize>());
+    out.extend_from_slice(header.as_bytes());
+    for document in documents {
+        document.encode_into(&mut out);
+    }
+    out
 }
 
 impl Descriptor {

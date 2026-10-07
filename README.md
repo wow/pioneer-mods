@@ -31,8 +31,12 @@ This repository currently includes:
   reconstruction
 - XDJ-700 MAIN application section verification, LZSS decoding, and self-checked LZSS section
   encoding (byte-identical to the reference encoder)
+- XDJ-700 `.UPD` rebuild around a modified application (`xdj700::rebuild_with_application`),
+  verified against its input by `xdj700::verify_rebuild`. It reproduces the reference alpha.2
+  update byte-for-byte. Library only for now.
 
-Rebuilding the MAIN document and `.UPD` container from a re-encoded section is still in progress.
+A CLI command that writes rebuilt updates, and recipes that target the decoded application,
+are still in progress.
 
 ## Quick start (developer)
 

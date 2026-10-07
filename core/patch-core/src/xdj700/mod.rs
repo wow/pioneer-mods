@@ -10,6 +10,15 @@
 //! reference implementation, the boot loader verifies it and falls back to a smaller updater
 //! section on mismatch.
 
+mod grid;
+mod rebuild;
+
+pub use grid::RECORD_DATA_LEN;
+pub use rebuild::{
+    MAX_MAIN_GROWTH, OFFICIAL_V115, RebuiltUpdate, StockRelease, rebuild_with_application,
+    verify_rebuild,
+};
+
 use crate::error::SectionError;
 use crate::identity::sha256_hex;
 use crate::lzss;
@@ -73,6 +82,33 @@ impl DecodedSection {
 /// A [`SectionError`] for out-of-bounds fields, a checksum mismatch, a missing tag, or an LZSS
 /// decode failure (including exceeding [`MAX_DECODED_LEN`]).
 pub fn decode_section(image: &[u8], offset: usize) -> Result<DecodedSection, SectionError> {
+    let frame = section_frame(image, offset)?;
+    let decoded = lzss::decode(&image[frame.stream.clone()], MAX_DECODED_LEN)?;
+
+    Ok(DecodedSection {
+        offset,
+        compressed_len: frame.stream.len(),
+        checksum: frame.checksum,
+        decoded,
+    })
+}
+
+/// A section whose framing is verified (bounds, checksum, tag) but whose stream is not decoded.
+pub(crate) struct SectionFrame {
+    /// Image range of the compressed stream (after the size field, before the checksum).
+    pub(crate) stream: std::ops::Range<usize>,
+    pub(crate) checksum: u16,
+}
+
+impl SectionFrame {
+    /// Image offset just past the checksum.
+    pub(crate) fn end(&self) -> usize {
+        self.stream.end + CHECKSUM_LEN
+    }
+}
+
+/// Every check of [`decode_section`] except decompression.
+pub(crate) fn section_frame(image: &[u8], offset: usize) -> Result<SectionFrame, SectionError> {
     let size_bytes = offset
         .checked_add(SIZE_FIELD_LEN)
         .and_then(|end| image.get(offset..end))
@@ -104,13 +140,9 @@ pub fn decode_section(image: &[u8], offset: usize) -> Result<DecodedSection, Sec
     if !has_prefix {
         return Err(SectionError::MissingTag);
     }
-    let decoded = lzss::decode(stream, MAX_DECODED_LEN)?;
-
-    Ok(DecodedSection {
-        offset,
-        compressed_len,
+    Ok(SectionFrame {
+        stream: data_start..data_end,
         checksum: stored,
-        decoded,
     })
 }
 
