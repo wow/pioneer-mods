@@ -33,6 +33,8 @@ The patch-application command path is intentionally not released yet.
 cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-targets --all-features
+cargo audit
+python scripts/check_file_size_caps.py
 ```
 
 Inspect owner-supplied firmware identity:
@@ -40,6 +42,20 @@ Inspect owner-supplied firmware identity:
 ```bash
 cargo run -p patch-cli -- inspect --input /path/to/XDJ700.UPD --format json
 ```
+
+## Code quality baseline
+
+- Rust:
+  - `rustfmt` (`rustfmt.toml`)
+  - `clippy` (`clippy.toml`)
+  - tests (`cargo test`)
+  - advisory checks (`cargo audit`)
+- Python (when present):
+  - `ruff` format + lint
+  - `mypy` static typing
+  - `pytest`
+- Repository hygiene:
+  - file-size cap check via `scripts/check_file_size_caps.py`
 
 ## Versioning and release docs
 

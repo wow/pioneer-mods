@@ -23,6 +23,8 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+.hypothesis/
 
 # --- Local secrets ---
 .env

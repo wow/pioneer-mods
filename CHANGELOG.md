@@ -14,6 +14,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   - `core/patch-schema` (recipe manifest and validation model),
   - `core/patch-cli` (initial `inspect` command and explicit `patch` placeholder error).
 - CI workflow for rustfmt, clippy, and tests.
+- Quality-hardening baseline:
+  - `rustfmt.toml`, `clippy.toml`, `.editorconfig`,
+  - `pyproject.toml` for Ruff/mypy/pytest standards,
+  - repository file-size cap script (`scripts/check_file_size_caps.py`),
+  - expanded CI jobs for Rust advisory audit, Python quality, and repository hygiene.
 - Community health files: `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue templates, and pull request template.
 
 ### Changed

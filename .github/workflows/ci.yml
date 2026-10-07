@@ -5,6 +5,12 @@ on:
   push:
     branches:
       - main
+  schedule:
+    - cron: "0 4 * * 1"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   rust:
@@ -31,3 +37,79 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --all-targets --all-features
+
+  rust-security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.0
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Advisory audit
+        run: cargo audit
+
+  python-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Detect Python files
+        id: pyfiles
+        run: echo "count=$(git ls-files '*.py' | wc -l)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Python quality tools
+        if: steps.pyfiles.outputs.count != '0'
+        run: python -m pip install --upgrade pip ruff mypy pytest
+
+      - name: Ruff format and lint
+        if: steps.pyfiles.outputs.count != '0'
+        run: |
+          git ls-files '*.py' | xargs ruff format --check
+          git ls-files '*.py' | xargs ruff check
+
+      - name: mypy static checks
+        if: steps.pyfiles.outputs.count != '0'
+        run: git ls-files '*.py' | xargs mypy
+
+      - name: pytest
+        if: steps.pyfiles.outputs.count != '0'
+        run: |
+          if find tests -type f -name 'test_*.py' | grep -q .; then
+            pytest -q
+          else
+            echo "No Python tests found; skipping pytest."
+          fi
+
+      - name: Skip note
+        if: steps.pyfiles.outputs.count == '0'
+        run: echo "No Python files tracked; skipping Python quality job."
+
+  repository-hygiene:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Enforce file size caps
+        run: python scripts/check_file_size_caps.py
