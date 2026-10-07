@@ -91,3 +91,92 @@ impl fmt::Display for OperationRegion {
         f.write_str(label)
     }
 }
+
+/// Structural violations found by [`crate::upd::parse_upd`].
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum UpdError {
+    #[error("container does not start with a decimal document-length header")]
+    MissingLengthHeader,
+
+    #[error("container document-length header is malformed")]
+    MalformedLengthHeader,
+
+    #[error(
+        "container document lengths sum to {declared} bytes but {available} bytes follow the header"
+    )]
+    LengthHeaderMismatch { declared: u64, available: usize },
+
+    #[error("document[{document_index}] is too short ({length} bytes)")]
+    DocumentTooShort {
+        document_index: usize,
+        length: usize,
+    },
+
+    #[error(
+        "document[{document_index}] CRC-16 mismatch: stored=0x{stored:04X}, computed=0x{computed:04X}"
+    )]
+    DocumentCrcMismatch {
+        document_index: usize,
+        stored: u16,
+        computed: u16,
+    },
+
+    #[error("document[{document_index}] descriptor field '{field}' is invalid")]
+    InvalidDescriptor {
+        document_index: usize,
+        field: &'static str,
+    },
+
+    #[error("document[{document_index}] S-record body does not end with CRLF")]
+    MissingFinalCrlf { document_index: usize },
+
+    #[error("document[{document_index}] record[{record_index}]: {defect}")]
+    MalformedRecord {
+        document_index: usize,
+        record_index: usize,
+        defect: RecordDefect,
+    },
+
+    #[error("document[{document_index}] record[{record_index}]: {violation}")]
+    UnexpectedRecordLayout {
+        document_index: usize,
+        record_index: usize,
+        violation: LayoutViolation,
+    },
+}
+
+/// Why a single S-record line was rejected.
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+pub enum RecordDefect {
+    #[error("not a CRLF-terminated uppercase-hex S-record line")]
+    Syntax,
+    #[error("unsupported S-record type")]
+    UnsupportedType,
+    #[error("byte count does not match record length")]
+    ByteCountMismatch,
+    #[error("record is shorter than its address field plus checksum")]
+    TooShort,
+    #[error("record checksum mismatch")]
+    ChecksumMismatch,
+    #[error("record data exceeds the address space of its type")]
+    AddressOverflow,
+}
+
+/// Which S-record layout rule a document broke.
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+pub enum LayoutViolation {
+    #[error("first record must be an S0 header")]
+    HeaderNotFirst,
+    #[error("last record must be S7, S8, or S9")]
+    TerminationNotLast,
+    #[error("termination record must not carry data")]
+    TerminationHasData,
+    #[error("document contains no data records")]
+    NoDataRecords,
+    #[error("only S1/S2/S3 data records may appear between header and termination")]
+    NonDataRecordInBody,
+    #[error("data record carries no data")]
+    EmptyDataRecord,
+    #[error("data records must ascend without overlap")]
+    DataNotAscending,
+}

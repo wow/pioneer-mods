@@ -26,6 +26,7 @@ This repository currently includes:
 - Compatibility-gated recipe execution with deterministic byte-span patch operations
   (I/O-free engine in `patch-core` via `apply_recipe`; `patch-cli` handles files only)
 - CI checks for format/lint/test
+- Read-only `.UPD` container parser (`inspect --structure`)
 
 Container-aware section codecs/repacking are still in progress.
 
@@ -48,6 +49,13 @@ Inspect owner-supplied firmware identity:
 cargo run -p patch-cli -- inspect --input /path/to/XDJ700.UPD --format json
 ```
 
+Inspect the `.UPD` container structure (documents, CRC-16 trailers, S-record layout, address
+extents). This is read-only and refuses malformed containers:
+
+```bash
+cargo run -p patch-cli -- inspect --input /path/to/XDJ700.UPD --structure
+```
+
 Apply a compatibility-gated recipe manifest:
 
 ```bash
@@ -60,6 +68,9 @@ cargo run -p patch-cli -- patch \
 Notes:
 - Existing output files are refused by default; pass `--force` to allow overwrite.
 - Patch output is written atomically and reports both input/output SHA-256 identities.
+- `patch` currently writes byte spans to the raw input file. It does not yet rebuild `.UPD`
+  CRCs, S-record checksums, or compressed-section checksums, so it cannot produce an installable
+  update yet. Do not flash its output.
 
 ## Code quality baseline
 

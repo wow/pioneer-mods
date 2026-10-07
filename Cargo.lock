@@ -253,6 +253,7 @@ dependencies = [
  "clap",
  "patch-core",
  "patch-schema",
+ "serde",
  "serde_json",
  "tempfile",
 ]
@@ -262,6 +263,7 @@ name = "patch-core"
 version = "0.1.0-alpha.0"
 dependencies = [
  "hex",
+ "libc",
  "patch-schema",
  "serde",
  "sha2",

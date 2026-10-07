@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use patch_core::identify_firmware;
-use std::path::PathBuf;
+use patch_core::upd::UpdSummary;
+use patch_core::{FirmwareIdentity, identify_firmware, parse_upd, read_firmware};
+use serde::Serialize;
+use std::path::{Path, PathBuf};
 
 #[derive(clap::Args, Debug)]
 pub struct InspectArgs {
@@ -12,6 +14,10 @@ pub struct InspectArgs {
     /// Output format.
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
+
+    /// Also parse and validate the .UPD container structure (documents, CRCs, S-records).
+    #[arg(long, default_value_t = false)]
+    pub structure: bool,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -20,26 +26,89 @@ pub enum OutputFormat {
     Json,
 }
 
+#[derive(Serialize)]
+struct InspectReport {
+    #[serde(flatten)]
+    identity: FirmwareIdentity,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    container: Option<UpdSummary>,
+}
+
 pub fn inspect(args: InspectArgs) -> Result<()> {
-    let identity = identify_firmware(&args.input).with_context(|| {
-        format!(
-            "failed to inspect firmware identity for '{}'",
-            args.input.display()
-        )
-    })?;
+    let report = if args.structure {
+        inspect_structure(&args.input)?
+    } else {
+        let identity = identify_firmware(&args.input).with_context(|| {
+            format!(
+                "failed to inspect firmware identity for '{}'",
+                args.input.display()
+            )
+        })?;
+        InspectReport {
+            identity,
+            container: None,
+        }
+    };
 
     match args.format {
-        OutputFormat::Text => {
-            println!("file_name: {}", identity.file_name);
-            println!("size_bytes: {}", identity.size_bytes);
-            println!("sha256_hex: {}", identity.sha256_hex);
-        }
+        OutputFormat::Text => print_text(&report),
         OutputFormat::Json => {
-            let json = serde_json::to_string_pretty(&identity)
+            let json = serde_json::to_string_pretty(&report)
                 .context("failed to serialize inspection output as JSON")?;
             println!("{json}");
         }
     }
 
     Ok(())
+}
+
+/// Reads the input once; identity and structure are derived from the same bytes.
+fn inspect_structure(input: &Path) -> Result<InspectReport> {
+    let (identity, bytes) = read_firmware(input)
+        .with_context(|| format!("failed to read input firmware '{}'", input.display()))?;
+    let container = parse_upd(&bytes)
+        .with_context(|| format!("input '{}' is not a valid .UPD container", input.display()))?;
+    Ok(InspectReport {
+        identity,
+        container: Some(container.summary()),
+    })
+}
+
+fn print_text(report: &InspectReport) {
+    println!("file_name: {}", report.identity.file_name);
+    println!("size_bytes: {}", report.identity.size_bytes);
+    println!("sha256_hex: {}", report.identity.sha256_hex);
+    let Some(container) = &report.container else {
+        return;
+    };
+    println!("documents: {}", container.documents.len());
+    for doc in &container.documents {
+        let prefix = format!("document[{}]", doc.index);
+        println!(
+            "{prefix}: kind={} model={:?} version={:?} offset={} length={} crc16={} (ok)",
+            doc.kind, doc.model, doc.version, doc.offset, doc.length, doc.crc16
+        );
+        println!(
+            "{prefix}.records: data={} types={} bytes={} termination={} entry={}",
+            doc.data_records,
+            doc.data_record_types
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
+            doc.data_bytes,
+            doc.termination_type,
+            doc.entry_address
+        );
+        let extents: Vec<String> = doc
+            .extents
+            .iter()
+            .map(|extent| format!("0x{:06X}..0x{:06X}", extent.start, extent.end))
+            .collect();
+        println!("{prefix}.extents: {}", extents.join(" "));
+        println!(
+            "{prefix}.descriptor: reserved_hex={} header=\"{}\"",
+            doc.reserved_hex, doc.header_text
+        );
+    }
 }
