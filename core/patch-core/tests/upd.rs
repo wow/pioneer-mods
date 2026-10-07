@@ -2,7 +2,7 @@ mod common;
 
 use common::*;
 use patch_core::upd::{SRecordType, crc16_xmodem};
-use patch_core::{UpdError, parse_upd};
+use patch_core::{UpdContainer, UpdError, parse_upd};
 
 #[test]
 fn crc16_xmodem_matches_known_check_value() {
@@ -184,4 +184,44 @@ fn rejects_every_truncation_and_single_byte_corruption() {
             "byte {index} ^= {flip:#04x} accepted"
         );
     }
+}
+
+fn descriptor_error(field: &'static str) -> Result<UpdContainer, UpdError> {
+    Err(UpdError::InvalidDescriptor {
+        document_index: 0,
+        field,
+    })
+}
+
+fn container_with_descriptor(descriptor: &[u8]) -> Vec<u8> {
+    container(&[document_with_descriptor(descriptor, &main_lines())])
+}
+
+#[test]
+fn rejects_all_space_descriptor_model() {
+    let bytes = container_with_descriptor(b"            MAINVer9.99\0       0");
+
+    assert_eq!(parse_upd(&bytes), descriptor_error("model"));
+}
+
+#[test]
+fn rejects_non_alphanumeric_descriptor_kind() {
+    let bytes = container_with_descriptor(b"SYN-100     MA-NVer9.99\0       0");
+
+    assert_eq!(parse_upd(&bytes), descriptor_error("kind"));
+}
+
+#[test]
+fn rejects_control_byte_in_descriptor_version() {
+    let bytes = container_with_descriptor(b"SYN-100     MAINVer9\x079\0       0");
+
+    assert_eq!(parse_upd(&bytes), descriptor_error("version"));
+}
+
+#[test]
+fn rejects_length_header_sum_overflow() {
+    let mut bytes = b"9999999999999999999\r\n9999999999999999999\r\n".to_vec();
+    bytes.extend_from_slice(&document("MAIN", &main_lines()));
+
+    assert_eq!(parse_upd(&bytes), Err(UpdError::MalformedLengthHeader));
 }

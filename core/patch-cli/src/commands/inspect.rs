@@ -1,9 +1,8 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use patch_core::upd::UpdSummary;
-use patch_core::{FirmwareIdentity, identify_bytes, identify_firmware, parse_upd};
+use patch_core::{FirmwareIdentity, identify_firmware, parse_upd, read_firmware};
 use serde::Serialize;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(clap::Args, Debug)]
@@ -65,13 +64,8 @@ pub fn inspect(args: InspectArgs) -> Result<()> {
 
 /// Reads the input once; identity and structure are derived from the same bytes.
 fn inspect_structure(input: &Path) -> Result<InspectReport> {
-    let bytes = fs::read(input)
+    let (identity, bytes) = read_firmware(input)
         .with_context(|| format!("failed to read input firmware '{}'", input.display()))?;
-    let file_name = input
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| input.to_string_lossy().into_owned());
-    let identity = identify_bytes(file_name, &bytes);
     let container = parse_upd(&bytes)
         .with_context(|| format!("input '{}' is not a valid .UPD container", input.display()))?;
     Ok(InspectReport {
@@ -91,7 +85,7 @@ fn print_text(report: &InspectReport) {
     for doc in &container.documents {
         let prefix = format!("document[{}]", doc.index);
         println!(
-            "{prefix}: kind={} model={} version={} offset={} length={} crc16={} (ok)",
+            "{prefix}: kind={} model={:?} version={:?} offset={} length={} crc16={} (ok)",
             doc.kind, doc.model, doc.version, doc.offset, doc.length, doc.crc16
         );
         println!(
@@ -109,7 +103,7 @@ fn print_text(report: &InspectReport) {
             .collect();
         println!("{prefix}.extents: {}", extents.join(" "));
         println!(
-            "{prefix}.descriptor: reserved_hex={} header={:?}",
+            "{prefix}.descriptor: reserved_hex={} header=\"{}\"",
             doc.reserved_hex, doc.header_text
         );
     }

@@ -1,7 +1,15 @@
 mod common;
 
 use common::*;
-use patch_core::{RecordDefect, UpdError, parse_upd};
+use patch_core::{LayoutViolation, RecordDefect, UpdContainer, UpdError, parse_upd};
+
+fn layout_error(record_index: usize, violation: LayoutViolation) -> Result<UpdContainer, UpdError> {
+    Err(UpdError::UnexpectedRecordLayout {
+        document_index: 0,
+        record_index,
+        violation,
+    })
+}
 
 #[test]
 fn rejects_record_checksum_mismatch_even_with_valid_document_crc() {
@@ -84,13 +92,10 @@ fn rejects_bare_lf_line_ending() {
 fn rejects_overlapping_data_records() {
     let line = record(b'2', 3, 0x000002, &[0x22; 4]);
 
-    assert!(matches!(
+    assert_eq!(
         parse_upd(&container_with_main_line(2, &line)),
-        Err(UpdError::UnexpectedRecordLayout {
-            record_index: 2,
-            ..
-        })
-    ));
+        layout_error(2, LayoutViolation::DataNotAscending)
+    );
 }
 
 #[test]
@@ -100,8 +105,9 @@ fn rejects_missing_header_record() {
     assert!(matches!(
         parse_upd(&container_with_main_line(0, &line)),
         Err(UpdError::UnexpectedRecordLayout {
+            document_index: 0,
             record_index: 0,
-            ..
+            violation: LayoutViolation::HeaderNotFirst,
         })
     ));
 }
@@ -110,13 +116,10 @@ fn rejects_missing_header_record() {
 fn rejects_termination_record_before_end() {
     let line = record(b'7', 4, 0, &[]);
 
-    assert!(matches!(
+    assert_eq!(
         parse_upd(&container_with_main_line(2, &line)),
-        Err(UpdError::UnexpectedRecordLayout {
-            record_index: 2,
-            ..
-        })
-    ));
+        layout_error(2, LayoutViolation::NonDataRecordInBody)
+    );
 }
 
 #[test]
@@ -124,10 +127,10 @@ fn rejects_document_without_data_records() {
     let lines = vec![record(b'0', 2, 0, &[]), record(b'7', 4, 0, &[])];
     let bytes = container(&[document("MAIN", &lines)]);
 
-    assert!(matches!(
+    assert_eq!(
         parse_upd(&bytes),
-        Err(UpdError::UnexpectedRecordLayout { .. })
-    ));
+        layout_error(1, LayoutViolation::NoDataRecords)
+    );
 }
 
 #[test]
@@ -141,4 +144,54 @@ fn rejects_data_beyond_address_space() {
             ..
         })
     ));
+}
+
+#[test]
+fn rejects_non_termination_record_last() {
+    let line = record(b'5', 2, 3, &[]);
+
+    assert_eq!(
+        parse_upd(&container_with_main_line(4, &line)),
+        layout_error(4, LayoutViolation::TerminationNotLast)
+    );
+}
+
+#[test]
+fn rejects_termination_record_with_data() {
+    let line = record(b'7', 4, 0xA000_0000, &[0x01]);
+
+    assert_eq!(
+        parse_upd(&container_with_main_line(4, &line)),
+        layout_error(4, LayoutViolation::TerminationHasData)
+    );
+}
+
+#[test]
+fn rejects_count_record_between_data_records() {
+    let line = record(b'5', 2, 3, &[]);
+
+    assert_eq!(
+        parse_upd(&container_with_main_line(2, &line)),
+        layout_error(2, LayoutViolation::NonDataRecordInBody)
+    );
+}
+
+#[test]
+fn rejects_second_header_record_in_body() {
+    let line = record(b'0', 2, 0, &[]);
+
+    assert_eq!(
+        parse_upd(&container_with_main_line(2, &line)),
+        layout_error(2, LayoutViolation::NonDataRecordInBody)
+    );
+}
+
+#[test]
+fn rejects_empty_data_record() {
+    let line = record(b'2', 3, 0x000004, &[]);
+
+    assert_eq!(
+        parse_upd(&container_with_main_line(2, &line)),
+        layout_error(2, LayoutViolation::EmptyDataRecord)
+    );
 }

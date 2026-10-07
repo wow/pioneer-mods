@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use patch_core::apply_recipe;
+use patch_core::{apply_recipe, read_firmware};
 use patch_schema::RecipeManifest;
 use std::fs;
 use std::io::Write;
@@ -34,7 +34,7 @@ pub fn patch(args: PatchArgs) -> Result<()> {
         )
     })?;
 
-    let input_bytes = fs::read(&args.input)
+    let (input_identity, input_bytes) = read_firmware(&args.input)
         .with_context(|| format!("failed to read input firmware '{}'", args.input.display()))?;
     let outcome = apply_recipe(&manifest, &input_bytes).with_context(|| {
         format!(
@@ -52,7 +52,7 @@ pub fn patch(args: PatchArgs) -> Result<()> {
         "matched_target: {} {}",
         outcome.target.model, outcome.target.version
     );
-    println!("input_file: {}", firmware_file_name(&args.input));
+    println!("input_file: {}", input_identity.file_name);
     println!("input_sha256_hex: {}", outcome.input_sha256_hex);
     println!("output_file: {}", args.output.display());
     println!("output_sha256_hex: {}", outcome.output_sha256_hex);
@@ -150,13 +150,6 @@ fn write_output_atomically(output_path: &Path, bytes: &[u8], force: bool) -> Res
     })?;
     sync_output_directory(output_dir)?;
     Ok(())
-}
-
-fn firmware_file_name(path: &Path) -> String {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
 #[cfg(unix)]

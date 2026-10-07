@@ -19,7 +19,7 @@ pub use crc::crc16_xmodem;
 pub use srecord::{SRecord, SRecordType};
 pub use summary::{DocumentSummary, Extent, UpdSummary};
 
-use crate::error::UpdError;
+use crate::error::{LayoutViolation, UpdError};
 use std::collections::BTreeSet;
 use std::ops::Range;
 
@@ -216,23 +216,23 @@ fn parse_records(index: usize, body: &[u8]) -> Result<Vec<SRecord>, UpdError> {
 }
 
 fn validate_layout(index: usize, records: &[SRecord]) -> Result<(), UpdError> {
-    let layout_error = |record_index, reason| UpdError::UnexpectedRecordLayout {
+    let layout_error = |record_index, violation| UpdError::UnexpectedRecordLayout {
         document_index: index,
         record_index,
-        reason,
+        violation,
     };
     let last = records.len() - 1;
     if records[0].record_type != SRecordType::S0 {
-        return Err(layout_error(0, "first record must be an S0 header"));
+        return Err(layout_error(0, LayoutViolation::HeaderNotFirst));
     }
     if !records[last].record_type.is_termination() {
-        return Err(layout_error(last, "last record must be S7, S8, or S9"));
+        return Err(layout_error(last, LayoutViolation::TerminationNotLast));
     }
     if !records[last].data.is_empty() {
-        return Err(layout_error(last, "termination record must not carry data"));
+        return Err(layout_error(last, LayoutViolation::TerminationHasData));
     }
     if last < 2 {
-        return Err(layout_error(last, "document contains no data records"));
+        return Err(layout_error(last, LayoutViolation::NoDataRecords));
     }
 
     let mut previous_end = 0u64;
@@ -240,16 +240,16 @@ fn validate_layout(index: usize, records: &[SRecord]) -> Result<(), UpdError> {
         if !record.record_type.is_data() {
             return Err(layout_error(
                 record_index,
-                "only S1/S2/S3 data records may appear between header and termination",
+                LayoutViolation::NonDataRecordInBody,
             ));
         }
         if record.data.is_empty() {
-            return Err(layout_error(record_index, "data record carries no data"));
+            return Err(layout_error(record_index, LayoutViolation::EmptyDataRecord));
         }
         if u64::from(record.address) < previous_end {
             return Err(layout_error(
                 record_index,
-                "data records must ascend without overlap",
+                LayoutViolation::DataNotAscending,
             ));
         }
         previous_end = record.end_address();

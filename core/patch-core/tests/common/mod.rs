@@ -74,3 +74,14 @@ pub fn container_with_main_line(index: usize, line: &[u8]) -> Vec<u8> {
     lines[index] = line.to_vec();
     container(&[document("MAIN", &lines), document("PANL", &panel_lines())])
 }
+
+/// Builds a document from an arbitrary 32-byte descriptor and appends a valid CRC trailer.
+pub fn document_with_descriptor(descriptor: &[u8], lines: &[Vec<u8>]) -> Vec<u8> {
+    let mut doc = descriptor.to_vec();
+    for line in lines {
+        doc.extend_from_slice(line);
+    }
+    let crc = crc16_xmodem(&doc);
+    doc.extend_from_slice(&crc.to_le_bytes());
+    doc
+}

@@ -137,11 +137,11 @@ pub enum UpdError {
         defect: RecordDefect,
     },
 
-    #[error("document[{document_index}] record[{record_index}]: {reason}")]
+    #[error("document[{document_index}] record[{record_index}]: {violation}")]
     UnexpectedRecordLayout {
         document_index: usize,
         record_index: usize,
-        reason: &'static str,
+        violation: LayoutViolation,
     },
 }
 
@@ -160,4 +160,23 @@ pub enum RecordDefect {
     ChecksumMismatch,
     #[error("record data exceeds the address space of its type")]
     AddressOverflow,
+}
+
+/// Which S-record layout rule a document broke.
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+pub enum LayoutViolation {
+    #[error("first record must be an S0 header")]
+    HeaderNotFirst,
+    #[error("last record must be S7, S8, or S9")]
+    TerminationNotLast,
+    #[error("termination record must not carry data")]
+    TerminationHasData,
+    #[error("document contains no data records")]
+    NoDataRecords,
+    #[error("only S1/S2/S3 data records may appear between header and termination")]
+    NonDataRecordInBody,
+    #[error("data record carries no data")]
+    EmptyDataRecord,
+    #[error("data records must ascend without overlap")]
+    DataNotAscending,
 }

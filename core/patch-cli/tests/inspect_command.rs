@@ -49,7 +49,7 @@ fn inspect_structure_reports_documents_as_text() {
     );
     assert!(stdout.contains("documents: 1"), "stdout: {stdout}");
     assert!(
-        stdout.contains("kind=MAIN model=SYN-100 version=Ver9.99"),
+        stdout.contains(r#"kind=MAIN model="SYN-100" version="Ver9.99""#),
         "stdout: {stdout}"
     );
     assert!(
@@ -118,4 +118,18 @@ fn inspect_structure_rejects_corrupted_container() {
     );
     assert!(stderr.contains("CRC-16 mismatch"), "stderr: {stderr}");
     assert!(output.stdout.is_empty(), "no partial report on refusal");
+}
+
+#[test]
+fn inspect_structure_refuses_directory_input() {
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+
+    let output = run_inspect(tempdir.path(), &["--structure"]);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("does not point to a regular file"),
+        "stderr: {stderr}"
+    );
 }
