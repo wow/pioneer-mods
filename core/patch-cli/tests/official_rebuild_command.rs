@@ -61,5 +61,10 @@ fn rebuild_writes_the_pinned_noop_update_once() {
     let second = run();
 
     assert!(!second.status.success(), "a second run must not overwrite");
+    assert!(
+        String::from_utf8_lossy(&second.stderr).contains("choose a new output path"),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
     assert_eq!(std::fs::read(&output).expect("reread output"), written);
 }

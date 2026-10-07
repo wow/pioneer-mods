@@ -112,6 +112,11 @@ fn refuses_a_non_regular_input() {
     let result = rebuild(dir.path(), &output, "Ver1.15");
 
     assert!(!result.status.success());
+    assert!(
+        stderr(&result).contains("does not point to a regular file"),
+        "{}",
+        stderr(&result)
+    );
     assert!(!output.exists());
 }
 

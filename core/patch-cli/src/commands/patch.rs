@@ -1,5 +1,5 @@
-use super::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
 use anyhow::{Context, Result};
+use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
 use patch_core::{apply_recipe, firmware_file_name, read_regular_file};
 use patch_schema::RecipeManifest;
 use std::fs;

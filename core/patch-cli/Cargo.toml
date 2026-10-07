@@ -13,3 +13,6 @@ patch-schema = { path = "../patch-schema" }
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true

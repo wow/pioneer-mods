@@ -64,10 +64,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   application re-encoded under the declared label.
   - It refuses any input other than the pinned official file, and any malformed label before
     reading the input.
-  - The output is never overwritten. It is written atomically (fsync, no-clobber persist,
-    directory sync) and read back; a mismatch removes the file and fails.
+  - The output is never overwritten. It is written atomically: the temporary file is
+    fsynced and read back before a no-clobber rename, so only verified bytes ever appear under
+    the output name; then the directory is synced, and a failure there removes the output.
+  - A file system without a no-clobber rename (for example exFAT) is refused with a hint.
   - It reports input, application, MAIN image and output identities.
   - `patch_core::xdj700::validate_version_label` is now public.
+  - Owner guide for flashing rebuilt files: `docs/xdj700-flashing.md`.
 - `patch_core::xdj700::rebuild_with_application` rebuilds a complete XDJ-700 `.UPD` around a
   new decoded application:
   - it encodes the section and places it after the input's unchanged loader region, dropping
@@ -105,8 +108,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
-- `patch-cli` output-file safety (input-path check, no-clobber atomic write) moved to a shared
-  module used by `patch` and `rebuild`. The overwrite refusal names the fix that applies to each
+- `patch-cli` output-file safety (input-path check, no-clobber atomic write) moved to a
+  library module, `patch_cli::output`, used by `patch` and `rebuild` and tested directly.
+  `patch` output is now also read back before it is renamed into place. The overwrite refusal names the fix that applies to each
   command: `--force` for `patch`, a new path for `rebuild`.
 - `patch-core` builds with `opt-level = 1` in the dev/test profile, so codec tests on 64 MiB
   inputs stay fast. Debug assertions and overflow checks remain enabled.

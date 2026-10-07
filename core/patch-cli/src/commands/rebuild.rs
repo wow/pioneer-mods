@@ -1,7 +1,5 @@
-use super::output::{
-    Overwrite, ensure_safe_output_path, verify_read_back, write_output_atomically,
-};
 use anyhow::{Context, Result, bail};
+use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
 use patch_core::xdj700::{
     OFFICIAL_V115, decode_application, rebuild_with_application, validate_version_label,
 };
@@ -59,8 +57,7 @@ pub fn rebuild(args: RebuildArgs) -> Result<()> {
         rebuild_with_application(&input, &OFFICIAL_V115, application.decoded(), &args.label)
             .with_context(|| format!("refusing to rebuild '{}'", args.input.display()))?;
 
-    write_output_atomically(&args.output, rebuilt.bytes(), Overwrite::Never)?;
-    let written_sha256 = verify_read_back(&args.output, rebuilt.bytes())?;
+    let written_sha256 = write_output_atomically(&args.output, rebuilt.bytes(), Overwrite::Never)?;
 
     println!("release: XDJ-700 v1.15 (official)");
     println!("input_file: {}", firmware_file_name(&args.input));
@@ -73,6 +70,9 @@ pub fn rebuild(args: RebuildArgs) -> Result<()> {
     println!("output_file: {}", args.output.display());
     println!("output_len: {}", rebuilt.bytes().len());
     println!("output_sha256_hex: {written_sha256}");
-    println!("verified: rebuild re-parsed and checked against the input; file read back");
+    println!(
+        "verified: rebuild re-parsed and checked against the input; file read back through the \
+         file system before it was renamed into place"
+    );
     Ok(())
 }

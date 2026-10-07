@@ -108,9 +108,13 @@ Notes:
   accepted as input.
 - `--label` is required. Which labels the device's updater accepts is not yet confirmed.
 - The output must not exist; it is never overwritten. The rebuild is verified against the input
-  before it is written, then written atomically and read back.
-- Flashing any rebuilt file is at your own risk. Follow the hardware test plan, and never flash
-  a file whose SHA-256 differs from the one the command reports.
+  before it is written. It is then written atomically, after its temporary file has been read
+  back through the file system. Write to a local disk; exFAT is refused.
+- With `--label Ver1.15` the output is always 17,368,545 bytes with SHA-256
+  `f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c`.
+- Flashing any rebuilt file is at your own risk. Read
+  [docs/xdj700-flashing.md](./docs/xdj700-flashing.md) first: it covers the stages, how to check
+  the file on the USB stick itself, and recovery.
 
 ## Code quality baseline
 
