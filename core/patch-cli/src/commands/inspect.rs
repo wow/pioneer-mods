@@ -1,7 +1,11 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use patch_core::upd::{ImageReport, MAX_IMAGE_LEN, MAX_TOTAL_IMAGE_LEN, UpdSummary};
-use patch_core::{FirmwareIdentity, identify_firmware, parse_upd, read_firmware};
+use patch_core::xdj700::DecodedSection;
+use patch_core::{
+    FirmwareIdentity, SectionError, UpdContainer, identify_firmware, parse_upd, read_firmware,
+    xdj700,
+};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
@@ -36,6 +40,70 @@ struct InspectReport {
     /// (present only with `--structure`; a failed roundtrip aborts the command).
     #[serde(skip_serializing_if = "Option::is_none")]
     roundtrip_verified: Option<bool>,
+    /// XDJ-700 compressed application section (MAIN image offset 0x40000), when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    application: Option<ApplicationReport>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum ApplicationReport {
+    Decoded {
+        offset: String,
+        compressed_len: usize,
+        checksum: String,
+        decoded_len: usize,
+        decoded_sha256: String,
+    },
+    /// The MAIN version's section layout has not been verified, so nothing was decoded.
+    Unsupported { reason: String },
+    /// The section failed verification; reported rather than failing the structure report.
+    Invalid { reason: String },
+}
+
+impl ApplicationReport {
+    fn from_result(result: Result<DecodedSection, SectionError>) -> Self {
+        match result {
+            Ok(section) => Self::Decoded {
+                offset: format!("0x{:X}", section.offset()),
+                compressed_len: section.compressed_len(),
+                checksum: format!("0x{:04X}", section.checksum()),
+                decoded_len: section.decoded().len(),
+                decoded_sha256: section.decoded_sha256(),
+            },
+            Err(error @ SectionError::UnverifiedVersion { .. }) => Self::Unsupported {
+                reason: error.to_string(),
+            },
+            Err(error) => Self::Invalid {
+                reason: error.to_string(),
+            },
+        }
+    }
+}
+
+/// Summarizes the container and, for XDJ-700 updates, decodes the application section from the
+/// MAIN image the summary builds, so the image is built once and within the image budget.
+fn summarize(container: &UpdContainer) -> Result<(UpdSummary, Option<ApplicationReport>)> {
+    let main = xdj700::is_xdj700(container).then(|| {
+        xdj700::main_document(container).and_then(|main| {
+            xdj700::verify_main_version(main)?;
+            Ok(main)
+        })
+    });
+    let mut decoded = None;
+    let summary = container.summary_with_images(|document, image| {
+        if let Some(Ok(main)) = &main
+            && std::ptr::eq(document, *main)
+        {
+            decoded = Some(xdj700::decode_main_image(document, image));
+        }
+    })?;
+    let application = main.map(|main| {
+        ApplicationReport::from_result(
+            main.and_then(|_| decoded.unwrap_or(Err(SectionError::ImageNotReconstructed))),
+        )
+    });
+    Ok((summary, application))
 }
 
 pub fn inspect(args: InspectArgs) -> Result<()> {
@@ -52,6 +120,7 @@ pub fn inspect(args: InspectArgs) -> Result<()> {
             identity,
             container: None,
             roundtrip_verified: None,
+            application: None,
         }
     };
 
@@ -81,7 +150,7 @@ fn inspect_structure(input: &Path) -> Result<InspectReport> {
             input.display()
         )
     })?;
-    let summary = container.summary().with_context(|| {
+    let (summary, application) = summarize(&container).with_context(|| {
         format!(
             "internal error: failed to summarize '{}'; please report this as a patch-cli bug",
             input.display()
@@ -89,6 +158,7 @@ fn inspect_structure(input: &Path) -> Result<InspectReport> {
     })?;
     Ok(InspectReport {
         identity,
+        application,
         container: Some(summary),
         roundtrip_verified: Some(true),
     })
@@ -104,6 +174,23 @@ fn print_text(report: &InspectReport) {
     println!("documents: {}", container.documents.len());
     if report.roundtrip_verified == Some(true) {
         println!("roundtrip: byte-identical");
+    }
+    match &report.application {
+        Some(ApplicationReport::Decoded {
+            offset,
+            compressed_len,
+            checksum,
+            decoded_len,
+            decoded_sha256,
+        }) => println!(
+            "application: offset={offset} compressed_len={compressed_len} checksum={checksum} (ok) \
+             decoded_len={decoded_len} decoded_sha256={decoded_sha256}"
+        ),
+        Some(ApplicationReport::Unsupported { reason }) => {
+            println!("application: unsupported ({reason})");
+        }
+        Some(ApplicationReport::Invalid { reason }) => println!("application: invalid ({reason})"),
+        None => {}
     }
     for doc in &container.documents {
         let prefix = format!("document[{}]", doc.index);

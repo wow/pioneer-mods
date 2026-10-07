@@ -1,6 +1,6 @@
 //! Serializable structure report for `patch-cli inspect --structure`.
 
-use super::{MAX_TOTAL_IMAGE_LEN, SRecordType, UpdContainer, UpdDocument};
+use super::{DocumentImage, MAX_TOTAL_IMAGE_LEN, SRecordType, UpdContainer, UpdDocument};
 use crate::error::UpdError;
 use crate::identity::sha256_hex;
 use serde::Serialize;
@@ -70,23 +70,40 @@ impl UpdContainer {
     /// Any image error other than the per-document cap (none exist today); such errors are
     /// propagated rather than reported as a skipped image.
     pub fn summary(&self) -> Result<UpdSummary, UpdError> {
+        self.summary_with_images(|_, _| {})
+    }
+
+    /// Like [`Self::summary`], and also passes every image it reconstructs to `visit` before
+    /// dropping it, so callers can analyse images without building them a second time or
+    /// outside the budget.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::summary`].
+    pub fn summary_with_images<F>(&self, mut visit: F) -> Result<UpdSummary, UpdError>
+    where
+        F: FnMut(&UpdDocument, &DocumentImage),
+    {
         let mut budget = MAX_TOTAL_IMAGE_LEN;
         let documents = self
             .documents()
             .iter()
-            .map(|document| document.summary(&mut budget))
+            .map(|document| document.summary(&mut budget, &mut visit))
             .collect::<Result<_, _>>()?;
         Ok(UpdSummary { documents })
     }
 }
 
 impl UpdDocument {
-    fn summary(&self, budget: &mut u64) -> Result<DocumentSummary, UpdError> {
+    fn summary<F>(&self, budget: &mut u64, visit: &mut F) -> Result<DocumentSummary, UpdError>
+    where
+        F: FnMut(&UpdDocument, &DocumentImage),
+    {
         let descriptor = self.descriptor();
         let data = self.data_records();
         let span = self.image_span();
         let image_span = span.end - span.start;
-        let image = self.image_report(image_span, budget)?;
+        let image = self.image_report(image_span, budget, visit)?;
         Ok(DocumentSummary {
             index: self.index(),
             offset: self.offset(),
@@ -116,13 +133,22 @@ impl UpdDocument {
     }
 
     /// The budget is checked before allocating; the per-document cap is enforced by `image()`.
-    fn image_report(&self, image_span: u64, budget: &mut u64) -> Result<ImageReport, UpdError> {
+    fn image_report<F>(
+        &self,
+        image_span: u64,
+        budget: &mut u64,
+        visit: &mut F,
+    ) -> Result<ImageReport, UpdError>
+    where
+        F: FnMut(&UpdDocument, &DocumentImage),
+    {
         if image_span > *budget {
             return Ok(ImageReport::BudgetExhausted);
         }
         match self.image() {
             Ok(image) => {
                 *budget -= image_span;
+                visit(self, &image);
                 Ok(ImageReport::Reconstructed {
                     base: format!("0x{:08X}", image.base()),
                     len: image.bytes().len() as u64,

@@ -48,6 +48,17 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   report, not as an invalid input file.
 - Ignored-by-default owner-input test (`official_firmware`) that checks an official XDJ-700 v1.15
   update against public pinned identities when `PIONEER_XDJ700_V115_UPD` is set.
+- LZSS decoder for the XDJ-700 MAIN section format (`patch_core::lzss::decode`): 4096-byte ring
+  pre-filled with spaces, absolute ring positions, 3..=18-byte matches, and a bounded output.
+- XDJ-700 application section support (`patch_core::xdj700`). It verifies the size field, the
+  16-bit additive checksum and the zero-prefix tag at MAIN image offset `0x40000`, then decodes
+  the section with a 64 MiB output cap.
+- `inspect --structure` reports the decoded application (offset, compressed length, checksum,
+  decoded length and SHA-256) for XDJ-700 updates. Decoding is limited to MAIN versions whose
+  layout has been verified (currently `Ver1.15`); other versions are reported as `unsupported`.
+  A container with more than one XDJ-700 MAIN document is refused as ambiguous. The MAIN image
+  is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
+  section is reported with its reason instead of failing the whole report.
 - `patch_core::read_firmware` reads an input once and returns its identity plus the hashed
   bytes; `read_regular_file` reads without hashing. Both refuse non-regular files (directories,
   FIFOs, devices): the path is checked first, the file is opened non-blocking on Unix so a path

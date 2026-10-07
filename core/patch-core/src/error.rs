@@ -93,7 +93,7 @@ impl fmt::Display for OperationRegion {
 }
 
 /// Structural violations found by [`crate::upd::parse_upd`].
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum UpdError {
     #[error("container does not start with a decimal document-length header")]
     MissingLengthHeader,
@@ -191,4 +191,57 @@ pub enum LayoutViolation {
     EmptyDataRecord,
     #[error("data records must ascend without overlap")]
     DataNotAscending,
+}
+
+/// Why an LZSS stream could not be decoded.
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+pub enum LzssError {
+    #[error("LZSS stream ends inside a match token at input offset {input_offset}")]
+    TruncatedMatch { input_offset: usize },
+
+    #[error("LZSS output would exceed the {limit}-byte limit")]
+    OutputLimitExceeded { limit: usize },
+}
+
+/// Why a compressed firmware section was refused.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum SectionError {
+    #[error("container has no XDJ-700 MAIN document")]
+    NoMainDocument,
+
+    #[error("container has {count} XDJ-700 MAIN documents; exactly one is required")]
+    AmbiguousMainDocument { count: usize },
+
+    #[error("MAIN version {version} has no verified application-section layout")]
+    UnverifiedVersion { version: String },
+
+    #[error("MAIN image could not be reconstructed: {0}")]
+    Image(#[from] UpdError),
+
+    #[error("MAIN image starts at {base:#X}; the application layout requires address 0")]
+    ImageBase { base: u64 },
+
+    #[error(
+        "MAIN image was not reconstructed (over the per-document cap or the total image budget; \
+         see its image status)"
+    )]
+    ImageNotReconstructed,
+
+    #[error("section size field at offset {offset:#X} is outside the image")]
+    SizeFieldOutOfBounds { offset: usize },
+
+    #[error("section at offset {offset:#X} declares {declared_len} bytes, beyond the image end")]
+    DataOutOfBounds { offset: usize, declared_len: u32 },
+
+    #[error("section checksum after offset {offset:#X} is outside the image")]
+    ChecksumOutOfBounds { offset: usize },
+
+    #[error("section checksum mismatch: stored={stored:#06X}, computed={computed:#06X}")]
+    ChecksumMismatch { stored: u16, computed: u16 },
+
+    #[error("section stream does not start with the zero-prefix tag (literal 00, match EE FF)")]
+    MissingTag,
+
+    #[error("section stream could not be decoded: {0}")]
+    Decode(#[from] LzssError),
 }
