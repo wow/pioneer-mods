@@ -3,7 +3,8 @@ mod common;
 use common::*;
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, MAX_DECODED_LEN, SECTION_TAG, VERIFIED_MAIN_VERSIONS,
-    decode_application, decode_section, is_xdj700,
+    decode_application, decode_main_image, decode_section, is_xdj700, main_document,
+    section_checksum,
 };
 use patch_core::{LzssError, SectionError, parse_upd};
 
@@ -11,9 +12,7 @@ use patch_core::{LzssError, SectionError, parse_upd};
 fn section(stream: &[u8]) -> Vec<u8> {
     let mut bytes = (stream.len() as u32).to_le_bytes().to_vec();
     bytes.extend_from_slice(stream);
-    let checksum = bytes
-        .iter()
-        .fold(0u16, |sum, &byte| sum.wrapping_add(u16::from(byte)));
+    let checksum = section_checksum(&bytes);
     bytes.extend_from_slice(&checksum.to_le_bytes());
     bytes
 }
@@ -219,7 +218,7 @@ fn application_requires_image_based_at_zero() {
 
     assert_eq!(
         decode_application(&parsed),
-        Err(SectionError::ImageUnavailable)
+        Err(SectionError::ImageBase { base: 0x100 })
     );
 }
 
@@ -237,4 +236,45 @@ fn application_requires_verified_main_version() {
             version: "Ver1.16".to_owned()
         })
     );
+}
+
+#[test]
+fn section_checksum_is_wrapping_16_bit_sum() {
+    assert_eq!(section_checksum(&[]), 0);
+    assert_eq!(section_checksum(&[0xFF; 3]), 0x02FD);
+    // 0xFF * 0x102 = 0x100FE, which wraps to 0x00FE.
+    assert_eq!(section_checksum(&[0xFF; 0x102]), 0x00FE);
+}
+
+#[test]
+fn refuses_more_than_one_xdj700_main_document() {
+    let image = image_with(APPLICATION_SECTION_OFFSET, &section(&literal_stream()));
+    let one = xdj700_container(&image, 0);
+    let parsed_one = parse_upd(&one).expect("valid container");
+    let main_doc = &one[one.iter().position(|&b| b == b'X').expect("model")..];
+    let bytes = container(&[main_doc.to_vec(), main_doc.to_vec()]);
+    let parsed = parse_upd(&bytes).expect("valid container");
+
+    assert!(main_document(&parsed_one).is_ok());
+    assert!(is_xdj700(&parsed));
+    assert_eq!(
+        main_document(&parsed).map(|_| ()),
+        Err(SectionError::AmbiguousMainDocument { count: 2 })
+    );
+    assert_eq!(
+        decode_application(&parsed),
+        Err(SectionError::AmbiguousMainDocument { count: 2 })
+    );
+}
+
+#[test]
+fn decode_main_image_uses_a_prebuilt_image() {
+    let image = image_with(APPLICATION_SECTION_OFFSET, &section(&literal_stream()));
+    let parsed = parse_upd(&xdj700_container(&image, 0)).expect("valid container");
+    let main = main_document(&parsed).expect("main");
+    let built = main.image().expect("image");
+
+    let decoded = decode_main_image(main, &built).expect("decode");
+
+    assert_eq!(Ok(decoded), decode_application(&parsed));
 }

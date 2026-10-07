@@ -93,7 +93,7 @@ impl fmt::Display for OperationRegion {
 }
 
 /// Structural violations found by [`crate::upd::parse_upd`].
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum UpdError {
     #[error("container does not start with a decimal document-length header")]
     MissingLengthHeader,
@@ -209,11 +209,23 @@ pub enum SectionError {
     #[error("container has no XDJ-700 MAIN document")]
     NoMainDocument,
 
+    #[error("container has {count} XDJ-700 MAIN documents; exactly one is required")]
+    AmbiguousMainDocument { count: usize },
+
     #[error("MAIN version {version} has no verified application-section layout")]
     UnverifiedVersion { version: String },
 
-    #[error("MAIN image is not available (span over the cap, or not based at address 0)")]
-    ImageUnavailable,
+    #[error("MAIN image could not be reconstructed: {0}")]
+    Image(#[from] UpdError),
+
+    #[error("MAIN image starts at {base:#X}; the application layout requires address 0")]
+    ImageBase { base: u64 },
+
+    #[error(
+        "MAIN image was not reconstructed (over the per-document cap or the total image budget; \
+         see its image status)"
+    )]
+    ImageNotReconstructed,
 
     #[error("section size field at offset {offset:#X} is outside the image")]
     SizeFieldOutOfBounds { offset: usize },

@@ -1,5 +1,6 @@
 use patch_core::sha256_hex;
 use patch_core::upd::crc16_xmodem;
+use patch_core::xdj700::section_checksum;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -208,13 +209,11 @@ fn inspect_structure_reports_oversized_image_without_failing() {
 
 const XDJ700_STREAM: [u8; 13] = [0xFD, 0x00, 0xEE, 0xFF, 1, 2, 3, 4, 5, 6, 0x03, 7, 8];
 
-/// Additive checksum of the size field (13 as u32 LE) plus the stream bytes.
-fn xdj700_checksum() -> u16 {
-    13u16
-        + XDJ700_STREAM
-            .iter()
-            .map(|&byte| u16::from(byte))
-            .sum::<u16>()
+/// Size field (u32 LE) followed by the stream: the bytes the section checksum covers.
+fn xdj700_section_bytes() -> Vec<u8> {
+    let mut section = (XDJ700_STREAM.len() as u32).to_le_bytes().to_vec();
+    section.extend_from_slice(&XDJ700_STREAM);
+    section
 }
 
 /// XDJ-700 MAIN container (`version`) whose image holds a compressed section at 0x40000 that
@@ -224,12 +223,8 @@ fn xdj700_upd(corrupt: bool) -> Vec<u8> {
 }
 
 fn xdj700_upd_version(version: &str, corrupt: bool) -> Vec<u8> {
-    let stream = XDJ700_STREAM;
-    let mut section = (stream.len() as u32).to_le_bytes().to_vec();
-    section.extend_from_slice(&stream);
-    let mut checksum = section
-        .iter()
-        .fold(0u16, |sum, &byte| sum.wrapping_add(u16::from(byte)));
+    let mut section = xdj700_section_bytes();
+    let mut checksum = section_checksum(&section);
     if corrupt {
         checksum ^= 1;
     }
@@ -266,7 +261,7 @@ fn inspect_structure_decodes_xdj700_application_section() {
     assert_eq!(application["compressed_len"], 13);
     assert_eq!(
         application["checksum"],
-        format!("0x{:04X}", xdj700_checksum())
+        format!("0x{:04X}", section_checksum(&xdj700_section_bytes()))
     );
     let mut decoded = vec![0u8; 19];
     decoded.extend(1..=8);
@@ -297,6 +292,11 @@ fn inspect_structure_omits_application_for_other_models() {
 
     let output = run_inspect(&input, &["--structure", "--format", "json"]);
 
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("valid JSON");
     assert!(json.get("application").is_none(), "json: {json}");
 }
@@ -313,6 +313,50 @@ fn inspect_structure_reports_unverified_main_version_as_unsupported() {
     assert!(output.status.success(), "stdout: {stdout}");
     assert!(
         stdout.contains("application: unsupported (MAIN version Ver1.16 has no verified"),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn inspect_structure_reports_unreconstructed_main_image() {
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+    let input = tempdir.path().join("XDJ700.UPD");
+    let lines = [
+        srec('0', 2, 0, &[]),
+        srec('3', 4, 0, &[1]),
+        srec('3', 4, 64 << 20, &[2]),
+        srec('7', 4, 0, &[]),
+    ];
+    fs::write(&input, upd_for("XDJ-700", "Ver1.15", &lines)).expect("write input");
+
+    let output = run_inspect(&input, &["--structure"]);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout: {stdout}");
+    assert!(
+        stdout.contains("application: invalid (MAIN image was not reconstructed"),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn inspect_structure_reports_ambiguous_main_documents() {
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+    let input = tempdir.path().join("XDJ700.UPD");
+    let single = xdj700_upd(false);
+    let doc_start = single.iter().position(|&b| b == b'X').expect("model byte");
+    let doc = &single[doc_start..];
+    let mut bytes = format!("{}\r\n{}\r\n", doc.len(), doc.len()).into_bytes();
+    bytes.extend_from_slice(doc);
+    bytes.extend_from_slice(doc);
+    fs::write(&input, bytes).expect("write input");
+
+    let output = run_inspect(&input, &["--structure"]);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout: {stdout}");
+    assert!(
+        stdout.contains("application: invalid (container has 2 XDJ-700 MAIN documents"),
         "stdout: {stdout}"
     );
 }

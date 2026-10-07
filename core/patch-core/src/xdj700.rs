@@ -12,7 +12,7 @@
 use crate::error::SectionError;
 use crate::identity::sha256_hex;
 use crate::lzss;
-use crate::upd::{UpdContainer, UpdDocument};
+use crate::upd::{DocumentImage, UpdContainer, UpdDocument};
 
 /// Offset of the compressed application section inside the MAIN image.
 pub const APPLICATION_SECTION_OFFSET: usize = 0x40000;
@@ -97,9 +97,7 @@ pub fn decode_section(image: &[u8], offset: usize) -> Result<DecodedSection, Sec
         .ok_or(SectionError::ChecksumOutOfBounds { offset })?;
 
     let stored = u16::from_le_bytes([checksum_bytes[0], checksum_bytes[1]]);
-    let computed = image[offset..data_end]
-        .iter()
-        .fold(0u16, |sum, &byte| sum.wrapping_add(u16::from(byte)));
+    let computed = section_checksum(&image[offset..data_end]);
     if stored != computed {
         return Err(SectionError::ChecksumMismatch { stored, computed });
     }
@@ -119,36 +117,89 @@ pub fn decode_section(image: &[u8], offset: usize) -> Result<DecodedSection, Sec
     })
 }
 
-/// True when the container looks like an XDJ-700 update (a `MAIN` document from model
-/// `XDJ-700`), i.e. when [`decode_application`] applies.
-pub fn is_xdj700(container: &UpdContainer) -> bool {
-    main_document(container).is_some()
+/// The section checksum: 16-bit wrapping sum of `size_field_and_stream` (the `u32` size field
+/// followed by the compressed stream).
+pub fn section_checksum(size_field_and_stream: &[u8]) -> u16 {
+    size_field_and_stream
+        .iter()
+        .fold(0u16, |sum, &byte| sum.wrapping_add(u16::from(byte)))
 }
 
-/// Reconstructs the MAIN image and decodes its application section.
+/// True when the container has at least one `MAIN` document from model `XDJ-700`, i.e. when an
+/// application report applies (an ambiguous container is then reported, not ignored).
+pub fn is_xdj700(container: &UpdContainer) -> bool {
+    container.documents().iter().any(is_xdj700_main)
+}
+
+/// The container's single XDJ-700 `MAIN` document.
 ///
 /// # Errors
 ///
-/// [`SectionError::NoMainDocument`] if the container is not an XDJ-700 update,
-/// [`SectionError::UnverifiedVersion`] if the MAIN version is not in
-/// [`VERIFIED_MAIN_VERSIONS`], an image error, or any [`decode_section`] error.
-pub fn decode_application(container: &UpdContainer) -> Result<DecodedSection, SectionError> {
-    let main = main_document(container).ok_or(SectionError::NoMainDocument)?;
-    let version = main.descriptor().version();
-    if !VERIFIED_MAIN_VERSIONS.contains(&version) {
-        return Err(SectionError::UnverifiedVersion {
-            version: version.to_owned(),
-        });
+/// [`SectionError::NoMainDocument`] if there is none, or
+/// [`SectionError::AmbiguousMainDocument`] if there is more than one: the device would use only
+/// one of them, so a report about "the" application could describe the wrong bytes.
+pub fn main_document(container: &UpdContainer) -> Result<&UpdDocument, SectionError> {
+    let mut mains = container
+        .documents()
+        .iter()
+        .filter(|doc| is_xdj700_main(doc));
+    let first = mains.next().ok_or(SectionError::NoMainDocument)?;
+    let others = mains.count();
+    if others > 0 {
+        return Err(SectionError::AmbiguousMainDocument { count: others + 1 });
     }
-    let image = main.image().map_err(|_| SectionError::ImageUnavailable)?;
+    Ok(first)
+}
+
+/// Refuses MAIN versions whose application layout has not been verified.
+///
+/// # Errors
+///
+/// [`SectionError::UnverifiedVersion`] if the version is not in [`VERIFIED_MAIN_VERSIONS`].
+pub fn verify_main_version(main: &UpdDocument) -> Result<(), SectionError> {
+    let version = main.descriptor().version();
+    if VERIFIED_MAIN_VERSIONS.contains(&version) {
+        Ok(())
+    } else {
+        Err(SectionError::UnverifiedVersion {
+            version: version.to_owned(),
+        })
+    }
+}
+
+/// Decodes the application section from an already reconstructed MAIN image.
+///
+/// `image` must be `main.image()`; this lets callers that already built the image (for example
+/// during a budgeted summary) avoid building it again.
+///
+/// # Errors
+///
+/// [`SectionError::UnverifiedVersion`], [`SectionError::ImageBase`] if the image does not start
+/// at address 0, or any [`decode_section`] error.
+pub fn decode_main_image(
+    main: &UpdDocument,
+    image: &DocumentImage,
+) -> Result<DecodedSection, SectionError> {
+    verify_main_version(main)?;
     if image.base() != 0 {
-        return Err(SectionError::ImageUnavailable);
+        return Err(SectionError::ImageBase { base: image.base() });
     }
     decode_section(image.bytes(), APPLICATION_SECTION_OFFSET)
 }
 
-fn main_document(container: &UpdContainer) -> Option<&UpdDocument> {
-    container.documents().iter().find(|document| {
-        document.descriptor().model() == "XDJ-700" && document.descriptor().kind() == "MAIN"
-    })
+/// Finds the single MAIN document, reconstructs its image, and decodes the application section.
+///
+/// # Errors
+///
+/// Any [`main_document`] or [`decode_main_image`] error, or [`SectionError::Image`] with the
+/// underlying image error.
+pub fn decode_application(container: &UpdContainer) -> Result<DecodedSection, SectionError> {
+    let main = main_document(container)?;
+    verify_main_version(main)?;
+    let image = main.image()?;
+    decode_main_image(main, &image)
+}
+
+fn is_xdj700_main(document: &UpdDocument) -> bool {
+    document.descriptor().model() == "XDJ-700" && document.descriptor().kind() == "MAIN"
 }

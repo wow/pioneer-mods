@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use patch_core::upd::{ImageReport, MAX_IMAGE_LEN, MAX_TOTAL_IMAGE_LEN, UpdSummary};
+use patch_core::xdj700::DecodedSection;
 use patch_core::{
     FirmwareIdentity, SectionError, UpdContainer, identify_firmware, parse_upd, read_firmware,
     xdj700,
@@ -61,11 +62,8 @@ enum ApplicationReport {
 }
 
 impl ApplicationReport {
-    fn from_container(container: &UpdContainer) -> Option<Self> {
-        if !xdj700::is_xdj700(container) {
-            return None;
-        }
-        Some(match xdj700::decode_application(container) {
+    fn from_result(result: Result<DecodedSection, SectionError>) -> Self {
+        match result {
             Ok(section) => Self::Decoded {
                 offset: format!("0x{:X}", section.offset()),
                 compressed_len: section.compressed_len(),
@@ -79,8 +77,33 @@ impl ApplicationReport {
             Err(error) => Self::Invalid {
                 reason: error.to_string(),
             },
-        })
+        }
     }
+}
+
+/// Summarizes the container and, for XDJ-700 updates, decodes the application section from the
+/// MAIN image the summary builds, so the image is built once and within the image budget.
+fn summarize(container: &UpdContainer) -> Result<(UpdSummary, Option<ApplicationReport>)> {
+    let main = xdj700::is_xdj700(container).then(|| {
+        xdj700::main_document(container).and_then(|main| {
+            xdj700::verify_main_version(main)?;
+            Ok(main)
+        })
+    });
+    let mut decoded = None;
+    let summary = container.summary_with_images(|document, image| {
+        if let Some(Ok(main)) = &main
+            && std::ptr::eq(document, *main)
+        {
+            decoded = Some(xdj700::decode_main_image(document, image));
+        }
+    })?;
+    let application = main.map(|main| {
+        ApplicationReport::from_result(
+            main.and_then(|_| decoded.unwrap_or(Err(SectionError::ImageNotReconstructed))),
+        )
+    });
+    Ok((summary, application))
 }
 
 pub fn inspect(args: InspectArgs) -> Result<()> {
@@ -127,7 +150,7 @@ fn inspect_structure(input: &Path) -> Result<InspectReport> {
             input.display()
         )
     })?;
-    let summary = container.summary().with_context(|| {
+    let (summary, application) = summarize(&container).with_context(|| {
         format!(
             "internal error: failed to summarize '{}'; please report this as a patch-cli bug",
             input.display()
@@ -135,7 +158,7 @@ fn inspect_structure(input: &Path) -> Result<InspectReport> {
     })?;
     Ok(InspectReport {
         identity,
-        application: ApplicationReport::from_container(&container),
+        application,
         container: Some(summary),
         roundtrip_verified: Some(true),
     })

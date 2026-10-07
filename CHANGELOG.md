@@ -56,7 +56,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - `inspect --structure` reports the decoded application (offset, compressed length, checksum,
   decoded length and SHA-256) for XDJ-700 updates. Decoding is limited to MAIN versions whose
   layout has been verified (currently `Ver1.15`); other versions are reported as `unsupported`.
-  An invalid section is reported with its reason instead of failing the whole report.
+  A container with more than one XDJ-700 MAIN document is refused as ambiguous. The MAIN image
+  is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
+  section is reported with its reason instead of failing the whole report.
 - `patch_core::read_firmware` reads an input once and returns its identity plus the hashed
   bytes; `read_regular_file` reads without hashing. Both refuse non-regular files (directories,
   FIFOs, devices): the path is checked first, the file is opened non-blocking on Unix so a path

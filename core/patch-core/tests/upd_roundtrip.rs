@@ -232,3 +232,19 @@ fn summary_stops_reconstructing_when_total_budget_is_used_up() {
     assert_eq!(summary.documents[2].image, ImageReport::BudgetExhausted);
     assert_eq!(summary.documents[2].data_records, 1);
 }
+
+#[test]
+fn summary_with_images_visits_each_reconstructed_image_once() {
+    let bytes = valid_container();
+    let parsed = parse_upd(&bytes).expect("valid container");
+    let mut visited = Vec::new();
+
+    let summary = parsed
+        .summary_with_images(|document, image| {
+            visited.push((document.index(), image.base(), image.bytes().len()));
+        })
+        .expect("summary");
+
+    assert_eq!(visited, [(0, 0, 0x12), (1, 0x0C0000, 3)]);
+    assert_eq!(summary, parsed.summary().expect("summary"));
+}

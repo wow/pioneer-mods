@@ -16,10 +16,10 @@ use crate::error::LzssError;
 
 pub const WINDOW_SIZE: usize = 4096;
 const WINDOW_MASK: usize = WINDOW_SIZE - 1;
-pub const INITIAL_WRITE_INDEX: usize = WINDOW_SIZE - 18;
-pub const RING_FILL: u8 = 0x20;
 pub const MIN_MATCH: usize = 3;
 pub const MAX_MATCH: usize = 18;
+pub const INITIAL_WRITE_INDEX: usize = WINDOW_SIZE - MAX_MATCH;
+pub const RING_FILL: u8 = 0x20;
 
 /// Decodes `stream`, refusing to produce more than `max_output` bytes.
 ///
@@ -30,7 +30,8 @@ pub const MAX_MATCH: usize = 18;
 pub fn decode(stream: &[u8], max_output: usize) -> Result<Vec<u8>, LzssError> {
     let mut ring = [RING_FILL; WINDOW_SIZE];
     let mut write_index = INITIAL_WRITE_INDEX;
-    let mut output = Vec::with_capacity(stream.len().saturating_mul(2).min(max_output));
+    // Stock sections expand about 2.7x; reserving 3x avoids a mid-decode reallocation.
+    let mut output = Vec::with_capacity(stream.len().saturating_mul(3).min(max_output));
     let mut input = stream.iter().copied().enumerate();
 
     while let Some((_, flags)) = input.next() {
