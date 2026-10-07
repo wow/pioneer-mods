@@ -10,7 +10,7 @@
 //! The pinned identities are public (DeckVolve xdj-700-mods, MIT) and contain no firmware bytes.
 
 use patch_core::upd::ImageReport;
-use patch_core::{read_firmware, sha256_hex, verify_roundtrip};
+use patch_core::{read_firmware, sha256_hex, verify_roundtrip, xdj700};
 use std::path::PathBuf;
 
 const ENV_VAR: &str = "PIONEER_XDJ700_V115_UPD";
@@ -18,6 +18,9 @@ const UPD_SIZE: u64 = 17_371_335;
 const UPD_SHA256: &str = "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c";
 const MAIN_IMAGE_SHA256: &str = "de683f253eba02e86ada5c89f2302a0f3a45331ffdcb5e6f9f20359aa6f6ce3a";
 const PANL_IMAGE_SHA256: &str = "52c5a54320c11477c50ed1da93fc585128c50e9e78d624c5ae27a8f4ad4c3a99";
+const APPLICATION_DECODED_LEN: usize = 18_601_864;
+const APPLICATION_DECODED_SHA256: &str =
+    "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939";
 
 fn official_upd_path() -> PathBuf {
     std::env::var_os(ENV_VAR)
@@ -68,4 +71,10 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
         })
         .collect();
     assert_eq!(reported, [Some(MAIN_IMAGE_SHA256), Some(PANL_IMAGE_SHA256)]);
+
+    let application = xdj700::decode_application(&container).expect("application section");
+    assert_eq!(application.offset(), xdj700::APPLICATION_SECTION_OFFSET);
+    assert_eq!(application.decoded().len(), APPLICATION_DECODED_LEN);
+    assert_eq!(application.decoded_sha256(), APPLICATION_DECODED_SHA256);
+    assert_eq!(&application.decoded()[..19], &[0; 19]);
 }

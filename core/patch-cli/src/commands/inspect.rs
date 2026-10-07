@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use patch_core::upd::{ImageReport, MAX_IMAGE_LEN, MAX_TOTAL_IMAGE_LEN, UpdSummary};
-use patch_core::{FirmwareIdentity, identify_firmware, parse_upd, read_firmware};
+use patch_core::{
+    FirmwareIdentity, UpdContainer, identify_firmware, parse_upd, read_firmware, xdj700,
+};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
@@ -36,6 +38,43 @@ struct InspectReport {
     /// (present only with `--structure`; a failed roundtrip aborts the command).
     #[serde(skip_serializing_if = "Option::is_none")]
     roundtrip_verified: Option<bool>,
+    /// XDJ-700 compressed application section (MAIN image offset 0x40000), when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    application: Option<ApplicationReport>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum ApplicationReport {
+    Decoded {
+        offset: String,
+        compressed_len: usize,
+        checksum: String,
+        decoded_len: usize,
+        decoded_sha256: String,
+    },
+    /// The section failed verification; reported rather than failing the structure report.
+    Invalid { reason: String },
+}
+
+impl ApplicationReport {
+    fn from_container(container: &UpdContainer) -> Option<Self> {
+        if !xdj700::is_xdj700(container) {
+            return None;
+        }
+        Some(match xdj700::decode_application(container) {
+            Ok(section) => Self::Decoded {
+                offset: format!("0x{:X}", section.offset()),
+                compressed_len: section.compressed_len(),
+                checksum: format!("0x{:04X}", section.checksum()),
+                decoded_len: section.decoded().len(),
+                decoded_sha256: section.decoded_sha256(),
+            },
+            Err(error) => Self::Invalid {
+                reason: error.to_string(),
+            },
+        })
+    }
 }
 
 pub fn inspect(args: InspectArgs) -> Result<()> {
@@ -52,6 +91,7 @@ pub fn inspect(args: InspectArgs) -> Result<()> {
             identity,
             container: None,
             roundtrip_verified: None,
+            application: None,
         }
     };
 
@@ -89,6 +129,7 @@ fn inspect_structure(input: &Path) -> Result<InspectReport> {
     })?;
     Ok(InspectReport {
         identity,
+        application: ApplicationReport::from_container(&container),
         container: Some(summary),
         roundtrip_verified: Some(true),
     })
@@ -104,6 +145,20 @@ fn print_text(report: &InspectReport) {
     println!("documents: {}", container.documents.len());
     if report.roundtrip_verified == Some(true) {
         println!("roundtrip: byte-identical");
+    }
+    match &report.application {
+        Some(ApplicationReport::Decoded {
+            offset,
+            compressed_len,
+            checksum,
+            decoded_len,
+            decoded_sha256,
+        }) => println!(
+            "application: offset={offset} compressed_len={compressed_len} checksum={checksum} (ok) \
+             decoded_len={decoded_len} decoded_sha256={decoded_sha256}"
+        ),
+        Some(ApplicationReport::Invalid { reason }) => println!("application: invalid ({reason})"),
+        None => {}
     }
     for doc in &container.documents {
         let prefix = format!("document[{}]", doc.index);

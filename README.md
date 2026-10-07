@@ -29,6 +29,7 @@ This repository currently includes:
 - Read-only `.UPD` container parser (`inspect --structure`)
 - Canonical `.UPD` serializer with self-check, byte-exact no-op roundtrip, and memory image
   reconstruction
+- XDJ-700 MAIN application section verification and LZSS decoding (read-only)
 
 Container-aware section codecs/repacking are still in progress.
 
@@ -54,7 +55,8 @@ cargo run -p patch-cli -- inspect --input /path/to/XDJ700.UPD --format json
 Inspect the `.UPD` container structure (documents, CRC-16 trailers, S-record layout, address
 extents, reconstructed image identities). This is read-only and refuses malformed containers.
 It also proves that re-serializing the parsed container reproduces the input byte-for-byte
-(`roundtrip: byte-identical`):
+(`roundtrip: byte-identical`). For XDJ-700 updates it verifies and decompresses the MAIN
+application section at image offset `0x40000` and reports its decoded size and SHA-256:
 
 ```bash
 cargo run -p patch-cli -- inspect --input /path/to/XDJ700.UPD --structure

@@ -16,7 +16,12 @@ fn srec(record_type: char, address_len: usize, address: u32, data: &[u8]) -> Str
 
 /// Synthetic one-document container (no vendor bytes) with a valid CRC and length header.
 fn upd(lines: &[String]) -> Vec<u8> {
-    let mut doc = b"SYN-100     MAINVer9.99\0       0".to_vec();
+    upd_for_model("SYN-100", lines)
+}
+
+fn upd_for_model(model: &str, lines: &[String]) -> Vec<u8> {
+    let mut doc = format!("{model:<12}MAINVer9.99").into_bytes();
+    doc.extend_from_slice(b"\0       0");
     for line in lines {
         doc.extend_from_slice(line.as_bytes());
     }
@@ -194,4 +199,76 @@ fn inspect_structure_reports_oversized_image_without_failing() {
         stdout.contains("document[0].image: not reconstructed (span 67108865 bytes exceeds"),
         "stdout: {stdout}"
     );
+}
+
+/// XDJ-700 MAIN container whose image holds a compressed section at 0x40000 that decodes to
+/// 19 zeros followed by 1..=8. `corrupt` flips one checksum bit.
+fn xdj700_upd(corrupt: bool) -> Vec<u8> {
+    let stream = [0xFD, 0x00, 0xEE, 0xFF, 1, 2, 3, 4, 5, 6, 0x03, 7, 8];
+    let mut section = (stream.len() as u32).to_le_bytes().to_vec();
+    section.extend_from_slice(&stream);
+    let mut checksum = section
+        .iter()
+        .fold(0u16, |sum, &byte| sum.wrapping_add(u16::from(byte)));
+    if corrupt {
+        checksum ^= 1;
+    }
+    section.extend_from_slice(&checksum.to_le_bytes());
+    let mut image = vec![0xFF; 0x40000];
+    image.extend_from_slice(&section);
+
+    let mut lines = vec![srec('0', 2, 0, &[])];
+    for (index, chunk) in image.chunks(32).enumerate() {
+        lines.push(srec('2', 3, (index * 32) as u32, chunk));
+    }
+    lines.push(srec('7', 4, 0, &[]));
+    upd_for_model("XDJ-700", &lines)
+}
+
+#[test]
+fn inspect_structure_decodes_xdj700_application_section() {
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+    let input = tempdir.path().join("XDJ700.UPD");
+    fs::write(&input, xdj700_upd(false)).expect("write input");
+
+    let output = run_inspect(&input, &["--structure", "--format", "json"]);
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("valid JSON");
+    let application = &json["application"];
+    assert_eq!(application["status"], "decoded");
+    assert_eq!(application["offset"], "0x40000");
+    assert_eq!(application["decoded_len"], 27);
+}
+
+#[test]
+fn inspect_structure_reports_invalid_application_section_without_failing() {
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+    let input = tempdir.path().join("XDJ700.UPD");
+    fs::write(&input, xdj700_upd(true)).expect("write input");
+
+    let output = run_inspect(&input, &["--structure"]);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout: {stdout}");
+    assert!(
+        stdout.contains("application: invalid (section checksum mismatch"),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn inspect_structure_omits_application_for_other_models() {
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+    let input = tempdir.path().join("SYN100.UPD");
+    fs::write(&input, synthetic_upd()).expect("write input");
+
+    let output = run_inspect(&input, &["--structure", "--format", "json"]);
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("valid JSON");
+    assert!(json.get("application").is_none(), "json: {json}");
 }

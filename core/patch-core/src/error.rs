@@ -192,3 +192,41 @@ pub enum LayoutViolation {
     #[error("data records must ascend without overlap")]
     DataNotAscending,
 }
+
+/// Why an LZSS stream could not be decoded.
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+pub enum LzssError {
+    #[error("LZSS stream ends inside a match token at input offset {input_offset}")]
+    TruncatedMatch { input_offset: usize },
+
+    #[error("LZSS output would exceed the {limit}-byte limit")]
+    OutputLimitExceeded { limit: usize },
+}
+
+/// Why a compressed firmware section was refused.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum SectionError {
+    #[error("container has no XDJ-700 MAIN document")]
+    NoMainDocument,
+
+    #[error("MAIN image is not available (span over the cap, or not based at address 0)")]
+    ImageUnavailable,
+
+    #[error("section size field at offset {offset:#X} is outside the image")]
+    SizeFieldOutOfBounds { offset: usize },
+
+    #[error("section at offset {offset:#X} declares {declared_len} bytes, beyond the image end")]
+    DataOutOfBounds { offset: usize, declared_len: u32 },
+
+    #[error("section checksum after offset {offset:#X} is outside the image")]
+    ChecksumOutOfBounds { offset: usize },
+
+    #[error("section checksum mismatch: stored={stored:#06X}, computed={computed:#06X}")]
+    ChecksumMismatch { stored: u16, computed: u16 },
+
+    #[error("section stream does not start with the zero-prefix tag (literal 00, match EE FF)")]
+    MissingTag,
+
+    #[error("section stream could not be decoded: {0}")]
+    Decode(#[from] LzssError),
+}
