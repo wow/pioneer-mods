@@ -33,6 +33,11 @@ The patch-application command path is intentionally not released yet.
 cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-targets --all-features
+cargo install cargo-audit --version 0.22.2 --locked
+cargo audit
+python scripts/check_file_size_caps.py
+python -m pip install --upgrade pip -r .github/requirements/python-quality.txt
+bash scripts/run_python_quality.sh
 ```
 
 Inspect owner-supplied firmware identity:
@@ -40,6 +45,19 @@ Inspect owner-supplied firmware identity:
 ```bash
 cargo run -p patch-cli -- inspect --input /path/to/XDJ700.UPD --format json
 ```
+
+## Code quality baseline
+
+- Rust:
+  - `rustfmt`
+  - `clippy`
+  - tests (`cargo test`)
+  - advisory checks (`cargo audit`, pinned installer version)
+- Python (when present):
+  - pinned toolchain versions via `.github/requirements/python-quality.txt`
+  - unified checker entrypoint: `bash scripts/run_python_quality.sh`
+- Repository hygiene:
+  - file-size cap check via `scripts/check_file_size_caps.py`
 
 ## Versioning and release docs
 

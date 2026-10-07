@@ -33,7 +33,24 @@ Run from repository root:
 cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-targets --all-features
+cargo install cargo-audit --version 0.22.2 --locked
+cargo audit
+python scripts/check_file_size_caps.py
 ```
+
+If Python files are present:
+
+```bash
+python -m pip install --upgrade pip -r .github/requirements/python-quality.txt
+bash scripts/run_python_quality.sh
+```
+
+## Coding standards
+
+- Rust and Python line-length target is 100 columns.
+- Prefer small modules; file-size caps are enforced by `scripts/check_file_size_caps.py`.
+- Keep parser/patch behavior fail-closed (explicit errors, no silent fallback).
+- Keep compatibility contracts strict (hash/version/size gated).
 
 ## Pull request checklist
 

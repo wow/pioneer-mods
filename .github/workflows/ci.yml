@@ -5,6 +5,17 @@ on:
   push:
     branches:
       - main
+  schedule:
+    - cron: "0 4 * * 1"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  RUST_TOOLCHAIN: "1.99.0"
+  CARGO_AUDIT_VERSION: "0.22.2"
+  PYTHON_VERSION: "3.13"
 
 jobs:
   rust:
@@ -17,7 +28,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.99.0
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
 
       - name: Rust cache
@@ -31,3 +42,69 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --all-targets --all-features
+
+  rust-security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}" --locked
+
+      - name: Advisory audit
+        run: cargo audit
+
+  python-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Detect Python files
+        id: pyfiles
+        run: |
+          count="$(git ls-files -z '*.py' | tr -cd '\0' | wc -c | tr -d '[:space:]')"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Python quality tools
+        if: steps.pyfiles.outputs.count != '0'
+        run: python -m pip install --upgrade pip -r .github/requirements/python-quality.txt
+
+      - name: Run Python quality checks
+        if: steps.pyfiles.outputs.count != '0'
+        run: bash scripts/run_python_quality.sh
+
+      - name: Skip note
+        if: steps.pyfiles.outputs.count == '0'
+        run: echo "No Python files tracked; skipping Python quality job."
+
+  repository-hygiene:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Enforce file size caps
+        run: python scripts/check_file_size_caps.py
