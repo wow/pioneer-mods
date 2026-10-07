@@ -1,27 +1,25 @@
 //! Canonical `.UPD` serializer with a runtime self-check.
 
-use super::{DESCRIPTOR_LEN, Descriptor, MODEL_LEN, UpdContainer, UpdDocument, crc16_xmodem};
+use super::{
+    CRC_LEN, DESCRIPTOR_LEN, Descriptor, MODEL_LEN, SRecord, UpdContainer, UpdDocument,
+    crc16_xmodem,
+};
 use crate::error::UpdError;
-
-/// Serialized bytes that passed [`UpdContainer::verify_serialized`].
-///
-/// `encode` is private, so `to_bytes` is the only public way to obtain serialized bytes. Routing
-/// it through this type means a bypass leaves `self_checked` unused, which CI's
-/// `clippy -D warnings` rejects.
-struct SelfChecked(Vec<u8>);
 
 impl UpdContainer {
     /// Serializes the container and verifies the result before returning it.
     ///
     /// The output is re-parsed and must yield a container equal to `self`; any serializer defect
-    /// is refused here, before a caller can write the bytes anywhere.
+    /// is refused here, before a caller can write the bytes anywhere. `encode` is private, so
+    /// this is the only public way to obtain serialized bytes.
     ///
     /// # Errors
     ///
     /// [`UpdError::SerializerOutputUnparseable`] or [`UpdError::SerializerSelfCheckFailed`] if
     /// the output does not re-parse to `self`.
     pub fn to_bytes(&self) -> Result<Vec<u8>, UpdError> {
-        let SelfChecked(bytes) = self.self_checked(self.encode())?;
+        let bytes = self.encode();
+        self.verify_serialized(&bytes)?;
         Ok(bytes)
     }
 
@@ -40,36 +38,63 @@ impl UpdContainer {
         Ok(())
     }
 
-    /// Wraps `bytes` in [`SelfChecked`] after [`Self::verify_serialized`] accepts them.
-    fn self_checked(&self, bytes: Vec<u8>) -> Result<SelfChecked, UpdError> {
-        self.verify_serialized(&bytes)?;
-        Ok(SelfChecked(bytes))
+    /// Proves that serializing `self` reproduces `input` byte-for-byte.
+    ///
+    /// Byte equality with the input that `self` was parsed from is the strongest possible check,
+    /// so the output is only re-parsed when it differs, to diagnose the serializer defect.
+    ///
+    /// # Errors
+    ///
+    /// A serializer self-check error, or [`UpdError::RoundTripMismatch`] with the first differing
+    /// byte offset. Both indicate a defect in this library, not in the input.
+    pub fn verify_reproduces(&self, input: &[u8]) -> Result<(), UpdError> {
+        let output = self.encode();
+        if output == input {
+            return Ok(());
+        }
+        self.verify_serialized(&output)?;
+        let offset = output
+            .iter()
+            .zip(input)
+            .position(|(a, b)| a != b)
+            .unwrap_or_else(|| output.len().min(input.len()));
+        Err(UpdError::RoundTripMismatch { offset })
     }
 
+    /// Encodes into a single buffer sized up front: the length header needs every document's
+    /// encoded length before any document is written.
     fn encode(&self) -> Vec<u8> {
-        let documents: Vec<Vec<u8>> = self.documents.iter().map(UpdDocument::encode).collect();
-        let total: usize = documents.iter().map(Vec::len).sum();
-        let mut out = Vec::with_capacity(total + 24 * documents.len());
-        for document in &documents {
-            out.extend_from_slice(format!("{}\r\n", document.len()).as_bytes());
-        }
-        for document in &documents {
-            out.extend_from_slice(document);
+        let lengths: Vec<usize> = self
+            .documents
+            .iter()
+            .map(UpdDocument::encoded_len)
+            .collect();
+        let header: String = lengths
+            .iter()
+            .map(|length| format!("{length}\r\n"))
+            .collect();
+        let mut out = Vec::with_capacity(header.len() + lengths.iter().sum::<usize>());
+        out.extend_from_slice(header.as_bytes());
+        for document in &self.documents {
+            document.encode_into(&mut out);
         }
         out
     }
 }
 
 impl UpdDocument {
-    fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(self.length);
-        self.descriptor.encode(&mut out);
+    fn encoded_len(&self) -> usize {
+        DESCRIPTOR_LEN + self.records().map(SRecord::line_len).sum::<usize>() + CRC_LEN
+    }
+
+    fn encode_into(&self, out: &mut Vec<u8>) {
+        let start = out.len();
+        self.descriptor.encode(out);
         for record in self.records() {
-            record.write_line(&mut out);
+            record.write_line(out);
         }
-        let crc = crc16_xmodem(&out);
+        let crc = crc16_xmodem(&out[start..]);
         out.extend_from_slice(&crc.to_le_bytes());
-        out
     }
 }
 
@@ -93,18 +118,10 @@ impl Descriptor {
 ///
 /// # Errors
 ///
-/// Any parse error, [`UpdError::SerializerSelfCheckFailed`], or
-/// [`UpdError::RoundTripMismatch`] with the first differing byte offset.
+/// Any parse error (the input is invalid), or an error from
+/// [`UpdContainer::verify_reproduces`] (a defect in this library).
 pub fn verify_roundtrip(input: &[u8]) -> Result<UpdContainer, UpdError> {
     let container = super::parse_upd(input)?;
-    let output = container.to_bytes()?;
-    if output != input {
-        let offset = output
-            .iter()
-            .zip(input)
-            .position(|(a, b)| a != b)
-            .unwrap_or_else(|| output.len().min(input.len()));
-        return Err(UpdError::RoundTripMismatch { offset });
-    }
+    container.verify_reproduces(input)?;
     Ok(container)
 }

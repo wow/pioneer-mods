@@ -96,6 +96,12 @@ impl SRecord {
         u64::from(self.address) + self.data.len() as u64
     }
 
+    /// Length of the canonical line written by `write_line`, including CRLF.
+    pub(super) fn line_len(&self) -> usize {
+        let bytes = 1 + self.record_type.address_len() + self.data.len() + 1;
+        2 + 2 * bytes + 2
+    }
+
     /// Appends the canonical line for this record (uppercase hex, computed count and checksum,
     /// CRLF). Every parsed record reproduces its source line exactly.
     pub(super) fn write_line(&self, out: &mut Vec<u8>) {

@@ -33,12 +33,19 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - Canonical `.UPD` serializer (`UpdContainer::to_bytes`). It re-parses its own output and refuses
   unless the result equals the source container (`verify_serialized`). If the output does not
   parse, the error keeps the underlying parse error. `verify_roundtrip` is the
-  Phase 1 no-op gate: parse, serialize, and require a byte-identical result.
+  Phase 1 no-op gate: parse, serialize, and require a byte-identical result
+  (`UpdContainer::verify_reproduces`). The output is encoded into a single buffer and only
+  re-parsed to diagnose a mismatch.
 - Memory image reconstruction per document (`UpdDocument::image`): spans from the first to the last
   data byte, gaps filled with `0xFF`, capped at 64 MiB.
-- `inspect --structure` now verifies the byte-exact roundtrip and reports each document's
-  `image_span` and `image` (8-digit base, length, SHA-256). An image larger than the cap is
-  reported as not reconstructed (`image: null`) instead of failing the whole report.
+- `inspect --structure` now verifies the byte-exact roundtrip (`roundtrip_verified: true`) and
+  reports each document's `image_span` and `image` with a `status`:
+  - `reconstructed`, with an 8-digit base, length and SHA-256;
+  - `span_exceeds_cap` (per-document 64 MiB cap);
+  - `budget_exhausted` (128 MiB total across documents, which bounds the work a small crafted
+    file can cause).
+- Roundtrip and summary failures after a successful parse are reported as internal errors to
+  report, not as an invalid input file.
 - Ignored-by-default owner-input test (`official_firmware`) that checks an official XDJ-700 v1.15
   update against public pinned identities when `PIONEER_XDJ700_V115_UPD` is set.
 - `patch_core::read_firmware` reads an input once and returns its identity plus the hashed

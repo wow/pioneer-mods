@@ -19,9 +19,9 @@ mod summary;
 mod write;
 
 pub use crc::crc16_xmodem;
-pub use image::{DocumentImage, GAP_FILL, MAX_IMAGE_LEN};
+pub use image::{DocumentImage, GAP_FILL, MAX_IMAGE_LEN, MAX_TOTAL_IMAGE_LEN};
 pub use srecord::{SRecord, SRecordType};
-pub use summary::{DocumentSummary, Extent, ImageSummary, UpdSummary};
+pub use summary::{DocumentSummary, Extent, ImageReport, UpdSummary};
 pub use write::verify_roundtrip;
 
 use crate::error::{LayoutViolation, UpdError};

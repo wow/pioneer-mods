@@ -3,24 +3,48 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-/// Minimal synthetic one-document container: S0 header, two S2 data records with a gap, S7.
-fn synthetic_upd() -> Vec<u8> {
+/// Encodes one S-record line with computed byte count and checksum, CRLF-terminated.
+fn srec(record_type: char, address_len: usize, address: u32, data: &[u8]) -> String {
+    let mut raw = vec![(address_len + data.len() + 1) as u8];
+    raw.extend_from_slice(&address.to_be_bytes()[4 - address_len..]);
+    raw.extend_from_slice(data);
+    let checksum = !raw.iter().fold(0u8, |sum, &byte| sum.wrapping_add(byte));
+    raw.push(checksum);
+    let hex: String = raw.iter().map(|byte| format!("{byte:02X}")).collect();
+    format!("S{record_type}{hex}\r\n")
+}
+
+/// Synthetic one-document container (no vendor bytes) with a valid CRC and length header.
+fn upd(lines: &[String]) -> Vec<u8> {
     let mut doc = b"SYN-100     MAINVer9.99\0       0".to_vec();
-    for line in [
-        "S0030000FC",
-        "S20700000011223392",
-        "S207000010445566E9",
-        "S70500000000FA",
-    ] {
+    for line in lines {
         doc.extend_from_slice(line.as_bytes());
-        doc.extend_from_slice(b"\r\n");
     }
     let crc = crc16_xmodem(&doc);
     doc.extend_from_slice(&crc.to_le_bytes());
-
     let mut bytes = format!("{}\r\n", doc.len()).into_bytes();
     bytes.extend_from_slice(&doc);
     bytes
+}
+
+/// S0 header, two S2 data records with a gap, S7 termination.
+fn synthetic_upd() -> Vec<u8> {
+    upd(&[
+        srec('0', 2, 0, &[]),
+        srec('2', 3, 0x000000, &[0x11, 0x22, 0x33]),
+        srec('2', 3, 0x000010, &[0x44, 0x55, 0x66]),
+        srec('7', 4, 0, &[]),
+    ])
+}
+
+/// Two 1-byte S3 records at addresses 0 and `far`, so the image span is `far + 1` bytes.
+fn sparse_upd(far: u32) -> Vec<u8> {
+    upd(&[
+        srec('0', 2, 0, &[]),
+        srec('3', 4, 0, &[1]),
+        srec('3', 4, far, &[2]),
+        srec('7', 4, 0, &[]),
+    ])
 }
 
 fn run_inspect(input: &Path, extra_args: &[&str]) -> Output {
@@ -87,7 +111,11 @@ fn inspect_structure_reports_json_with_identity_fields() {
     assert_eq!(json["file_name"], "SYN100.UPD");
     assert_eq!(json["container"]["documents"][0]["kind"], "MAIN");
     assert_eq!(json["container"]["documents"][0]["data_records"], 2);
-    assert_eq!(json["roundtrip"], "byte-identical");
+    assert_eq!(json["roundtrip_verified"], true);
+    assert_eq!(
+        json["container"]["documents"][0]["image"]["status"],
+        "reconstructed"
+    );
     assert_eq!(json["container"]["documents"][0]["image"]["len"], 19);
 }
 
@@ -142,33 +170,6 @@ fn inspect_structure_refuses_directory_input() {
         stderr.contains("does not point to a regular file"),
         "stderr: {stderr}"
     );
-}
-
-/// One document with two 1-byte S3 records `span` bytes apart (no vendor bytes).
-fn sparse_upd(far: u32) -> Vec<u8> {
-    let mut doc = b"SYN-100     MAINVer9.99\0       0".to_vec();
-    let s3 = |address: u32, value: u8| {
-        let mut raw = vec![6u8];
-        raw.extend_from_slice(&address.to_be_bytes());
-        raw.push(value);
-        let checksum = !raw.iter().fold(0u8, |sum, &b| sum.wrapping_add(b));
-        raw.push(checksum);
-        let hex: String = raw.iter().map(|b| format!("{b:02X}")).collect();
-        format!("S3{hex}\r\n")
-    };
-    for line in [
-        "S0030000FC\r\n".to_owned(),
-        s3(0, 1),
-        s3(far, 2),
-        "S70500000000FA\r\n".to_owned(),
-    ] {
-        doc.extend_from_slice(line.as_bytes());
-    }
-    let crc = crc16_xmodem(&doc);
-    doc.extend_from_slice(&crc.to_le_bytes());
-    let mut bytes = format!("{}\r\n", doc.len()).into_bytes();
-    bytes.extend_from_slice(&doc);
-    bytes
 }
 
 #[test]

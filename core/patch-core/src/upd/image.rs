@@ -7,6 +7,12 @@ use std::ops::Range;
 /// Largest image span [`UpdDocument::image`] will allocate (the XDJ-700 MAIN image is ~7 MiB).
 pub const MAX_IMAGE_LEN: u64 = 64 * 1024 * 1024;
 
+/// Total image bytes [`crate::upd::UpdContainer::summary`] reconstructs across all documents.
+///
+/// Bounds the work a small crafted file can cause (many sparse documents) independently of the
+/// per-document cap; the official XDJ-700 v1.15 images total about 7.3 MiB.
+pub const MAX_TOTAL_IMAGE_LEN: u64 = 2 * MAX_IMAGE_LEN;
+
 /// Byte value used for addresses between data records (erased flash).
 pub const GAP_FILL: u8 = 0xFF;
 

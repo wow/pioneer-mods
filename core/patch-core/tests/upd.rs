@@ -45,9 +45,10 @@ fn summary_reports_structure_deterministically() {
     let bytes = valid_container();
     let parsed = parse_upd(&bytes).expect("valid container");
 
-    let summary = parsed.summary();
+    let summary = parsed.summary().expect("summary");
 
-    assert_eq!(summary, parse_upd(&bytes).expect("reparse").summary());
+    let again = parse_upd(&bytes).expect("reparse").summary();
+    assert_eq!(Ok(summary.clone()), again);
     let main = &summary.documents[0];
     assert_eq!(main.data_records, 3);
     assert_eq!(main.data_bytes, 10);

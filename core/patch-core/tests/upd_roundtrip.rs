@@ -1,7 +1,7 @@
 mod common;
 
 use common::*;
-use patch_core::upd::{GAP_FILL, MAX_IMAGE_LEN};
+use patch_core::upd::{GAP_FILL, ImageReport, MAX_IMAGE_LEN, MAX_TOTAL_IMAGE_LEN};
 use patch_core::{UpdError, parse_upd, sha256_hex, verify_roundtrip};
 
 /// Length of the decimal document-length header (everything before the first model byte).
@@ -132,7 +132,7 @@ fn image_refuses_span_above_limit_but_summary_still_reports() {
     let parsed = parse_upd(&sparse_s3_container(far)).expect("structurally valid");
 
     let error = parsed.documents()[0].image().expect_err("span too large");
-    let summary = parsed.summary();
+    let summary = parsed.summary().expect("summary");
 
     assert_eq!(
         error,
@@ -142,7 +142,7 @@ fn image_refuses_span_above_limit_but_summary_still_reports() {
         }
     );
     assert_eq!(summary.documents[0].image_span, MAX_IMAGE_LEN + 1);
-    assert_eq!(summary.documents[0].image, None);
+    assert_eq!(summary.documents[0].image, ImageReport::SpanExceedsCap);
     assert_eq!(summary.documents[0].data_records, 2);
 }
 
@@ -151,21 +151,28 @@ fn summary_reports_image_identity() {
     let bytes = valid_container();
     let container = parse_upd(&bytes).expect("valid container");
 
-    let summary = container.summary();
+    let summary = container.summary().expect("summary");
 
-    let main = summary.documents[0].image.as_ref().expect("main image");
-    let main_bytes = container.documents()[0].image().expect("image");
-    assert_eq!(main.base, "0x00000000");
-    assert_eq!(main.len, 0x12);
-    assert_eq!(main.sha256, sha256_hex(main_bytes.bytes()));
     let mut expected = vec![0x11; 4];
     expected.extend_from_slice(&[0x22; 4]);
     expected.extend_from_slice(&[0xFF; 8]);
     expected.extend_from_slice(&[0x33; 2]);
-    assert_eq!(main.sha256, sha256_hex(&expected));
-    let panel = summary.documents[1].image.as_ref().expect("panel image");
-    assert_eq!(panel.base, "0x000C0000");
-    assert_eq!(panel.sha256, sha256_hex(&[0x44; 3]));
+    assert_eq!(
+        summary.documents[0].image,
+        ImageReport::Reconstructed {
+            base: "0x00000000".to_owned(),
+            len: 0x12,
+            sha256: sha256_hex(&expected),
+        }
+    );
+    assert_eq!(
+        summary.documents[1].image,
+        ImageReport::Reconstructed {
+            base: "0x000C0000".to_owned(),
+            len: 3,
+            sha256: sha256_hex(&[0x44; 3]),
+        }
+    );
 }
 
 #[test]
@@ -193,4 +200,35 @@ fn verify_serialized_refuses_bytes_of_a_different_container() {
         )))
     );
     assert_eq!(container.verify_serialized(&bytes), Ok(()));
+}
+
+#[test]
+fn summary_stops_reconstructing_when_total_budget_is_used_up() {
+    assert_eq!(MAX_TOTAL_IMAGE_LEN, 2 * MAX_IMAGE_LEN);
+    let far = u32::try_from(MAX_IMAGE_LEN - 1).expect("limit fits u32");
+    let at_cap = || {
+        document(
+            "MAIN",
+            &[
+                record(b'0', 2, 0, &[]),
+                record(b'3', 4, 0, &[0x01]),
+                record(b'3', 4, far, &[0x02]),
+                record(b'7', 4, 0, &[]),
+            ],
+        )
+    };
+    let small = document("PANL", &panel_lines());
+    let bytes = container(&[at_cap(), at_cap(), small]);
+    let parsed = parse_upd(&bytes).expect("structurally valid");
+
+    let summary = parsed.summary().expect("summary");
+
+    let statuses: Vec<bool> = summary
+        .documents
+        .iter()
+        .map(|doc| matches!(doc.image, ImageReport::Reconstructed { .. }))
+        .collect();
+    assert_eq!(statuses, [true, true, false]);
+    assert_eq!(summary.documents[2].image, ImageReport::BudgetExhausted);
+    assert_eq!(summary.documents[2].data_records, 1);
 }

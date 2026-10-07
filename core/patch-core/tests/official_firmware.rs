@@ -9,6 +9,7 @@
 //!
 //! The pinned identities are public (DeckVolve xdj-700-mods, MIT) and contain no firmware bytes.
 
+use patch_core::upd::ImageReport;
 use patch_core::{read_firmware, sha256_hex, verify_roundtrip};
 use std::path::PathBuf;
 
@@ -57,11 +58,14 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
     assert_eq!(sha256_hex(panel_image.bytes()), PANL_IMAGE_SHA256);
 
     // The structure report must show the same identities that users compare with the pins.
-    let summary = container.summary();
-    let reported: Vec<_> = summary
+    let summary = container.summary().expect("summary");
+    let reported: Vec<Option<&str>> = summary
         .documents
         .iter()
-        .map(|doc| doc.image.as_ref().map(|image| image.sha256.as_str()))
+        .map(|doc| match &doc.image {
+            ImageReport::Reconstructed { sha256, .. } => Some(sha256.as_str()),
+            _ => None,
+        })
         .collect();
     assert_eq!(reported, [Some(MAIN_IMAGE_SHA256), Some(PANL_IMAGE_SHA256)]);
 }
