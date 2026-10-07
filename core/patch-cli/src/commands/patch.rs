@@ -1,9 +1,8 @@
 use anyhow::{Context, Result, bail};
-use patch_core::identify_bytes;
-use patch_schema::{PatchOperation, RecipeManifest};
+use patch_core::apply_recipe;
+use patch_schema::RecipeManifest;
 use std::fs;
 use std::io::Write;
-use std::ops::Range;
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
@@ -37,52 +36,26 @@ pub fn patch(args: PatchArgs) -> Result<()> {
 
     let input_bytes = fs::read(&args.input)
         .with_context(|| format!("failed to read input firmware '{}'", args.input.display()))?;
-    let identity = identify_bytes(firmware_file_name(&args.input), &input_bytes);
-
-    let target = manifest
-        .matching_target(identity.size_bytes, &identity.sha256_hex)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "input firmware '{}' (size={}, sha256={}) is not compatible with recipe '{}'",
-                identity.file_name,
-                identity.size_bytes,
-                identity.sha256_hex,
-                manifest.recipe_id
-            )
-        })?;
-
-    let declared_destination_ranges =
-        declared_destination_ranges(&manifest.operations, input_bytes.len())?;
-    let patched_bytes = apply_operations(&input_bytes, &manifest.operations)?;
-    verify_mutations_within_declared_regions(
-        &input_bytes,
-        &patched_bytes,
-        &declared_destination_ranges,
-    )?;
-
-    let output_identity = identify_bytes(firmware_file_name(&args.output), &patched_bytes);
-    if let Some(expected_output_sha256) = &target.expected_output_sha256
-        && !output_identity
-            .sha256_hex
-            .eq_ignore_ascii_case(expected_output_sha256)
-    {
-        bail!(
-            "output SHA-256 mismatch for recipe '{}': expected={}, actual={}",
-            manifest.recipe_id,
-            expected_output_sha256,
-            output_identity.sha256_hex
-        );
-    }
+    let outcome = apply_recipe(&manifest, &input_bytes).with_context(|| {
+        format!(
+            "refusing to patch input firmware '{}' with recipe '{}'",
+            args.input.display(),
+            args.recipe.display()
+        )
+    })?;
 
     ensure_safe_output_path(&args.input, &args.output, args.force)?;
-    write_output_atomically(&args.output, &patched_bytes, args.force)?;
+    write_output_atomically(&args.output, &outcome.output_bytes, args.force)?;
 
     println!("recipe_id: {}", manifest.recipe_id);
-    println!("matched_target: {} {}", target.model, target.version);
-    println!("input_file: {}", identity.file_name);
-    println!("input_sha256_hex: {}", identity.sha256_hex);
+    println!(
+        "matched_target: {} {}",
+        outcome.target.model, outcome.target.version
+    );
+    println!("input_file: {}", firmware_file_name(&args.input));
+    println!("input_sha256_hex: {}", outcome.input_sha256_hex);
     println!("output_file: {}", args.output.display());
-    println!("output_sha256_hex: {}", output_identity.sha256_hex);
+    println!("output_sha256_hex: {}", outcome.output_sha256_hex);
 
     Ok(())
 }
@@ -92,144 +65,6 @@ fn load_manifest(path: &Path) -> Result<RecipeManifest> {
         .with_context(|| format!("failed to read recipe manifest '{}'", path.display()))?;
     serde_json::from_slice::<RecipeManifest>(&raw)
         .with_context(|| format!("failed to parse recipe manifest JSON '{}'", path.display()))
-}
-
-fn apply_operations(input_bytes: &[u8], operations: &[PatchOperation]) -> Result<Vec<u8>> {
-    let mut output_bytes = input_bytes.to_vec();
-    for (idx, operation) in operations.iter().enumerate() {
-        match operation {
-            PatchOperation::WriteSpan(span) => {
-                let range = checked_range(
-                    span.offset,
-                    span.length,
-                    output_bytes.len(),
-                    &format!("operations[{idx}] write_span"),
-                )?;
-                output_bytes[range].copy_from_slice(&span.bytes);
-            }
-            PatchOperation::OwnerCopyWindow(window) => {
-                let source_range = checked_range(
-                    window.source_offset,
-                    window.length,
-                    input_bytes.len(),
-                    &format!("operations[{idx}] owner_copy_window source"),
-                )?;
-                let destination_range = checked_range(
-                    window.destination_offset,
-                    window.length,
-                    output_bytes.len(),
-                    &format!("operations[{idx}] owner_copy_window destination"),
-                )?;
-                output_bytes[destination_range].copy_from_slice(&input_bytes[source_range]);
-            }
-        }
-    }
-    Ok(output_bytes)
-}
-
-fn declared_destination_ranges(
-    operations: &[PatchOperation],
-    total_len: usize,
-) -> Result<Vec<Range<usize>>> {
-    let mut indexed_ranges: Vec<(usize, Range<usize>)> = Vec::with_capacity(operations.len());
-    for (idx, operation) in operations.iter().enumerate() {
-        let range = match operation {
-            PatchOperation::WriteSpan(span) => checked_range(
-                span.offset,
-                span.length,
-                total_len,
-                &format!("operations[{idx}] write_span destination"),
-            )?,
-            PatchOperation::OwnerCopyWindow(window) => checked_range(
-                window.destination_offset,
-                window.length,
-                total_len,
-                &format!("operations[{idx}] owner_copy_window destination"),
-            )?,
-        };
-        indexed_ranges.push((idx, range));
-    }
-
-    indexed_ranges.sort_by_key(|(_, range)| (range.start, range.end));
-    for pair in indexed_ranges.windows(2) {
-        let (previous_idx, previous_range) = &pair[0];
-        let (current_idx, current_range) = &pair[1];
-        if current_range.start < previous_range.end {
-            bail!(
-                "operations[{current_idx}] destination range {}..{} overlaps with operations[{previous_idx}] range {}..{}",
-                current_range.start,
-                current_range.end,
-                previous_range.start,
-                previous_range.end
-            );
-        }
-    }
-
-    Ok(indexed_ranges
-        .into_iter()
-        .map(|(_, range)| range)
-        .collect::<Vec<_>>())
-}
-
-fn verify_mutations_within_declared_regions(
-    input_bytes: &[u8],
-    output_bytes: &[u8],
-    declared_destination_ranges: &[Range<usize>],
-) -> Result<()> {
-    if input_bytes.len() != output_bytes.len() {
-        bail!(
-            "mutation verification failed: input and output lengths differ (input={}, output={})",
-            input_bytes.len(),
-            output_bytes.len()
-        );
-    }
-
-    let mut range_idx = 0usize;
-    for (byte_idx, (input_byte, output_byte)) in input_bytes.iter().zip(output_bytes).enumerate() {
-        if input_byte == output_byte {
-            continue;
-        }
-
-        while range_idx < declared_destination_ranges.len()
-            && byte_idx >= declared_destination_ranges[range_idx].end
-        {
-            range_idx += 1;
-        }
-
-        if range_idx >= declared_destination_ranges.len()
-            || byte_idx < declared_destination_ranges[range_idx].start
-        {
-            bail!(
-                "mutation verification failed: byte offset {} changed outside declared destination ranges",
-                byte_idx
-            );
-        }
-    }
-
-    Ok(())
-}
-
-fn checked_range(
-    offset: u64,
-    length: u64,
-    total_len: usize,
-    context_label: &str,
-) -> Result<std::ops::Range<usize>> {
-    let start = usize::try_from(offset)
-        .with_context(|| format!("{context_label}: offset does not fit platform usize"))?;
-    let span_len = usize::try_from(length)
-        .with_context(|| format!("{context_label}: length does not fit platform usize"))?;
-    let end = start
-        .checked_add(span_len)
-        .ok_or_else(|| anyhow::anyhow!("{context_label}: offset+length overflowed"))?;
-    if end > total_len {
-        bail!(
-            "{context_label}: out of bounds (offset={}, length={}, input_size={total_len})",
-            offset,
-            length
-        );
-    }
-    Ok(start..end)
 }
 
 fn ensure_safe_output_path(input_path: &Path, output_path: &Path, force: bool) -> Result<()> {

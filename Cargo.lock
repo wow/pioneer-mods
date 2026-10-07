@@ -262,6 +262,7 @@ name = "patch-core"
 version = "0.1.0-alpha.0"
 dependencies = [
  "hex",
+ "patch-schema",
  "serde",
  "sha2",
  "tempfile",

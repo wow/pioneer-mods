@@ -34,6 +34,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - `patch-cli patch` now hashes in-memory input bytes (single-read flow), rejects overlapping destination
   ranges, verifies that all byte mutations stay within declared destination regions, and reports
   output SHA-256.
+- The patch engine moved from `patch-cli` into `patch-core` as an I/O-free `apply_recipe` API
+  (manifest validation, size + SHA-256 gating, bounds/overlap checks, bounded-diff verification,
+  expected output hash) with typed `PatchEngineError` refusals. `patch-cli patch` now only reads
+  input, writes output, and prints results; its refusal messages now name the input and recipe
+  paths, followed by the engine's reason.
 
 ### Fixed
 - `scripts/check_file_size_caps.py` now reads tracked files with `git ls-files -z` from repository root,

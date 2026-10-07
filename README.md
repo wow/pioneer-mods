@@ -24,6 +24,7 @@ This repository currently includes:
 - Deterministic firmware identity inspection (`inspect`) command
 - Recipe schema baseline and validation primitives
 - Compatibility-gated recipe execution with deterministic byte-span patch operations
+  (I/O-free engine in `patch-core` via `apply_recipe`; `patch-cli` handles files only)
 - CI checks for format/lint/test
 
 Container-aware section codecs/repacking are still in progress.
