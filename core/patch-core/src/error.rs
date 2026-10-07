@@ -273,11 +273,17 @@ pub enum SectionError {
 /// Why a `.UPD` could not be rebuilt around a new application, or why a rebuilt one was refused.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum RebuildError {
+    #[error("input is not the pinned official release (SHA-256 {sha256})")]
+    UnpinnedInput { sha256: String },
+
     #[error("input is not a canonical .UPD container: {0}")]
     Input(UpdError),
 
-    #[error("{0}")]
-    Section(#[from] SectionError),
+    #[error("input MAIN document or section is invalid: {0}")]
+    InputSection(SectionError),
+
+    #[error("new application could not be encoded: {0}")]
+    Encode(SectionError),
 
     #[error("version label {label:?} is not of the form VerX.YY")]
     InvalidVersionLabel { label: String },
@@ -293,11 +299,8 @@ pub enum RebuildError {
     )]
     NonCanonicalRecordLayout,
 
-    #[error("rebuilt MAIN image of {len} bytes does not fit 24-bit S2 addresses")]
-    ImageTooLarge { len: usize },
-
-    #[error("rebuilt MAIN image of {len} bytes exceeds the growth limit of {limit} bytes")]
-    ImageGrowthTooLarge { len: usize, limit: usize },
+    #[error("rebuilt MAIN image of {len} bytes exceeds the {limit}-byte limit for this release")]
+    ImageTooLarge { len: usize, limit: usize },
 
     #[error("rebuilt update does not parse: {0}")]
     OutputUnparseable(UpdError),

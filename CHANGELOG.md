@@ -67,14 +67,17 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
     `VerX.YY` label;
   - it keeps every other document byte-identical and recomputes the CRCs and the length header.
 
-  The input must roundtrip byte-exactly, have a verified MAIN version and a valid section
-  followed only by padding, and follow the 32-byte record grid. The MAIN image may grow by at
-  most `xdj700::MAX_MAIN_GROWTH` (256 KiB) until the flash layout is confirmed. The output is
-  re-parsed and checked by `xdj700::verify_rebuild` before it is returned. `verify_rebuild`
-  checks any output against its input independently of how it was produced, and each failed
-  property has its own `RebuildCheck` variant. With the official v1.15 file, the rebuild reproduces the reference
-  alpha.2 MAIN image and update byte-for-byte (owner-input test `official_rebuild`). The no-op
-  rebuild (the stock application re-encoded) is pinned as the first hardware candidate.
+  The input must be a pinned official release (`xdj700::StockRelease`; `OFFICIAL_V115` is the
+  v1.15 file, by SHA-256). It must roundtrip byte-exactly, have a verified MAIN version and a
+  valid section followed only by padding, and follow the 32-byte record grid. A rebuild is
+  therefore never accepted as the next input. The MAIN image may be at most the release's bound:
+  the official image plus `xdj700::MAX_MAIN_GROWTH` (256 KiB) until the flash layout is
+  confirmed. The output is re-parsed and checked by `xdj700::verify_rebuild` before it is
+  returned. `verify_rebuild` checks any output against its input independently of how it was
+  produced, and each failed property has its own `RebuildCheck` variant. With the official v1.15
+  file, the rebuild reproduces the reference alpha.2 MAIN image and update byte-for-byte
+  (owner-input test `official_rebuild`). The no-op rebuild (the stock application re-encoded)
+  is pinned as the first hardware candidate.
 - Deterministic LZSS encoder (`patch_core::lzss::encode`, `encode_section_stream`). It is
   decision-identical to the reference encoder (see README, Acknowledgements). It was verified byte-identical on random,
   exhaustive and adversarial inputs and on the official v1.15 application. CI pins golden vectors

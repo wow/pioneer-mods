@@ -4,32 +4,46 @@
 mod common;
 
 use common::xdj700::{
-    Main, application, descriptor, incompressible_application, lines, loader, padded_application,
-    panel,
+    Main, SYNTHETIC_MAX_MAIN_IMAGE_LEN, application, descriptor, incompressible_application, lines,
+    loader, padded_application, panel, release, verify,
 };
 use common::{container, document_with_descriptor, panel_lines, record};
-use patch_core::xdj700::{MAX_MAIN_GROWTH, encode_section, verify_rebuild};
+use patch_core::sha256_hex;
+use patch_core::xdj700::{encode_section, verify_rebuild};
 use patch_core::{RebuildCheck, RebuildError, SectionError};
 
 struct Case {
     stock: Vec<u8>,
-    stock_image_len: usize,
     stock_main: Vec<u8>,
     decoded: Vec<u8>,
     image: Vec<u8>,
 }
 
 fn case() -> Case {
+    case_with_loader(loader())
+}
+
+/// Erased (`0xFF`) bytes written as an ordinary record at the end of a loader extent.
+const ERASED_RECORD: std::ops::Range<usize> = 0x1E0..0x200;
+
+/// A case whose loader extent `[0x100, 0x200)` ends in a record of erased bytes, so a moved or
+/// shortened record can leave the reconstructed image unchanged.
+fn erased_case() -> Case {
+    let mut loader = loader();
+    loader[ERASED_RECORD].fill(0xFF);
+    case_with_loader(loader)
+}
+
+fn case_with_loader(loader: Vec<u8>) -> Case {
     let stock_decoded = padded_application(7);
-    let mut stock_image = loader();
+    let mut stock_image = loader.clone();
     stock_image.extend(encode_section(&stock_decoded).expect("encode"));
     stock_image.resize(stock_image.len().next_multiple_of(32), 0xFF);
     let decoded = application(5000, 11);
-    let mut image = loader();
+    let mut image = loader;
     image.extend(encode_section(&decoded).expect("encode"));
     Case {
         stock: Main::new(&stock_image, "Ver1.15").update(),
-        stock_image_len: stock_image.len(),
         stock_main: Main::new(&stock_image, "Ver1.15").document(),
         decoded,
         image,
@@ -42,7 +56,7 @@ impl Case {
     }
 
     fn verify(&self, output: &[u8]) -> Result<(), RebuildError> {
-        verify_rebuild(&self.stock, output, &self.decoded, "Ver1.22")
+        verify(&self.stock, output, &self.decoded, "Ver1.22")
     }
 }
 
@@ -96,7 +110,7 @@ fn refuses_an_undeclared_version_label() {
     let case = case();
 
     assert_eq!(
-        verify_rebuild(&case.stock, &case.output(), &case.decoded, "Ver1.23"),
+        verify(&case.stock, &case.output(), &case.decoded, "Ver1.23"),
         failed(RebuildCheck::MainFraming)
     );
 }
@@ -202,7 +216,7 @@ fn refuses_a_different_application() {
     let case = case();
 
     assert_eq!(
-        verify_rebuild(
+        verify(
             &case.stock,
             &case.output(),
             &application(5000, 13),
@@ -237,7 +251,7 @@ fn refuses_a_malformed_declared_label() {
 
     for label in ["1.22", "Ver1.222", "Ver1.2"] {
         assert_eq!(
-            verify_rebuild(&case.stock, &case.output(), &case.decoded, label),
+            verify(&case.stock, &case.output(), &case.decoded, label),
             Err(RebuildError::InvalidVersionLabel {
                 label: label.to_owned()
             }),
@@ -262,14 +276,11 @@ fn refuses_a_changed_document_before_main() {
     ]);
 
     assert_eq!(
-        verify_rebuild(&stock, &output, &case.decoded, "Ver1.22"),
+        verify(&stock, &output, &case.decoded, "Ver1.22"),
         failed(RebuildCheck::UntouchedDocument { index: 0 })
     );
     let good = container(&[panel(), Main::new(&case.image, "Ver1.22").document()]);
-    assert_eq!(
-        verify_rebuild(&stock, &good, &case.decoded, "Ver1.22"),
-        Ok(())
-    );
+    assert_eq!(verify(&stock, &good, &case.decoded, "Ver1.22"), Ok(()));
 }
 
 #[test]
@@ -295,18 +306,80 @@ fn refuses_an_output_main_image_that_cannot_be_built() {
 }
 
 #[test]
-fn refuses_output_growth_beyond_the_limit() {
+fn refuses_output_beyond_the_release_bound() {
     let case = case();
-    let grown = incompressible_application(MAX_MAIN_GROWTH);
+    let grown = incompressible_application(64 * 1024);
     let mut image = loader();
     image.extend(encode_section(&grown).expect("encode"));
     let output = Main::new(&image, "Ver1.22").update();
 
     assert_eq!(
-        verify_rebuild(&case.stock, &output, &grown, "Ver1.22"),
-        Err(RebuildError::ImageGrowthTooLarge {
+        verify(&case.stock, &output, &grown, "Ver1.22"),
+        Err(RebuildError::ImageTooLarge {
             len: image.len(),
-            limit: case.stock_image_len + MAX_MAIN_GROWTH,
+            limit: SYNTHETIC_MAX_MAIN_IMAGE_LEN,
         })
     );
+}
+
+#[test]
+fn refuses_an_input_other_than_the_pinned_release() {
+    let case = case();
+    let output = case.output();
+    let output_sha256 = sha256_hex(&output);
+
+    assert_eq!(
+        verify_rebuild(
+            &case.stock,
+            &release(&output_sha256),
+            &output,
+            &case.decoded,
+            "Ver1.22"
+        ),
+        Err(RebuildError::UnpinnedInput {
+            sha256: sha256_hex(&case.stock)
+        })
+    );
+}
+
+/// The output's MAIN lines with the erased record replaced by `replacement`.
+fn erased_output(case: &Case, replacement: Vec<u8>) -> Vec<u8> {
+    let mut lines = lines(&Main::new(&case.image, "Ver1.22").document());
+    let erased = record(b'2', 3, ERASED_RECORD.start as u32, &[0xFF; 32]);
+    let position = lines
+        .iter()
+        .position(|line| *line == erased)
+        .expect("erased record");
+    lines[position] = replacement;
+    container(&[
+        document_with_descriptor(&descriptor("MAIN", "Ver1.22"), &lines),
+        panel(),
+    ])
+}
+
+#[test]
+fn refuses_a_record_moved_into_a_gap() {
+    // The reconstructed image is unchanged (gaps read as 0xFF), but the device would write into
+    // the gap at 0x200, which no official record touches.
+    let case = erased_case();
+    assert_eq!(case.verify(&case.output()), Ok(()));
+    let output = erased_output(
+        &case,
+        record(b'2', 3, ERASED_RECORD.end as u32, &[0xFF; 32]),
+    );
+
+    assert_eq!(case.verify(&output), failed(RebuildCheck::RecordLayout));
+}
+
+#[test]
+fn refuses_a_shortened_record() {
+    // Dropping the record's last erased byte leaves the image unchanged, but that byte would no
+    // longer be written.
+    let case = erased_case();
+    let output = erased_output(
+        &case,
+        record(b'2', 3, ERASED_RECORD.start as u32, &[0xFF; 31]),
+    );
+
+    assert_eq!(case.verify(&output), failed(RebuildCheck::RecordLayout));
 }

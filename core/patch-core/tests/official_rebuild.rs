@@ -16,9 +16,10 @@
 //! pins and contain no firmware bytes.
 
 use patch_core::xdj700::{
-    APPLICATION_SECTION_OFFSET, decode_application, rebuild_with_application, verify_rebuild,
+    APPLICATION_SECTION_OFFSET, OFFICIAL_V115, decode_application, rebuild_with_application,
+    verify_rebuild,
 };
-use patch_core::{parse_upd, read_firmware, read_regular_file, sha256_hex};
+use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex};
 use std::path::PathBuf;
 
 const UPD_ENV: &str = "PIONEER_XDJ700_V115_UPD";
@@ -59,8 +60,10 @@ fn noop_rebuild_of_official_v115_is_pinned_and_deterministic() {
     let official = official_upd();
     let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
 
-    let first = rebuild_with_application(&official, stock.decoded(), "Ver1.15").expect("rebuild");
-    let second = rebuild_with_application(&official, stock.decoded(), "Ver1.15").expect("rerun");
+    let first = rebuild_with_application(&official, &OFFICIAL_V115, stock.decoded(), "Ver1.15")
+        .expect("rebuild");
+    let second = rebuild_with_application(&official, &OFFICIAL_V115, stock.decoded(), "Ver1.15")
+        .expect("rerun");
 
     assert_eq!(first, second, "reruns must be byte-identical");
     assert_eq!(first.main_image_len(), NOOP_MAIN_LEN);
@@ -73,8 +76,22 @@ fn noop_rebuild_of_official_v115_is_pinned_and_deterministic() {
     assert_eq!(first.bytes().len(), NOOP_UPD_LEN);
     assert_eq!(first.sha256(), NOOP_UPD_SHA256);
     assert_eq!(
-        verify_rebuild(&official, first.bytes(), stock.decoded(), "Ver1.15"),
+        verify_rebuild(
+            &official,
+            &OFFICIAL_V115,
+            first.bytes(),
+            stock.decoded(),
+            "Ver1.15"
+        ),
         Ok(())
+    );
+    // A rebuild is never accepted as the next input, so chained rebuilds cannot grow MAIN past
+    // the release bound.
+    assert_eq!(
+        rebuild_with_application(first.bytes(), &OFFICIAL_V115, stock.decoded(), "Ver1.15"),
+        Err(RebuildError::UnpinnedInput {
+            sha256: NOOP_UPD_SHA256.to_owned()
+        })
     );
 }
 
@@ -88,7 +105,8 @@ fn rebuild_reproduces_the_reference_alpha2_pins() {
     assert_eq!(decoded.len(), ALPHA2_DECODED_LEN);
     assert_eq!(sha256_hex(&decoded), ALPHA2_DECODED_SHA256);
 
-    let rebuilt = rebuild_with_application(&official, &decoded, ALPHA2_LABEL).expect("rebuild");
+    let rebuilt = rebuild_with_application(&official, &OFFICIAL_V115, &decoded, ALPHA2_LABEL)
+        .expect("rebuild");
 
     assert_eq!(rebuilt.main_image_len(), ALPHA2_MAIN_LEN);
     assert_eq!(rebuilt.main_image_sha256(), ALPHA2_MAIN_SHA256);

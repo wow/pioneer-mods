@@ -2,7 +2,11 @@
 //! at `0x40000` produced by our own encoder, and a PANL document. No vendor bytes.
 
 use super::{container, document_with_descriptor, panel_lines, record};
-use patch_core::xdj700::{APPLICATION_SECTION_OFFSET, encode_section};
+use patch_core::xdj700::{
+    APPLICATION_SECTION_OFFSET, RebuiltUpdate, StockRelease, encode_section,
+    rebuild_with_application, verify_rebuild,
+};
+use patch_core::{RebuildError, sha256_hex};
 
 /// Loader extents written by the synthetic MAIN document. The last extent (the application)
 /// starts at the section offset and runs to the image end.
@@ -140,4 +144,32 @@ pub fn other_document() -> Vec<u8> {
         record(b'8', 3, 0, &[]),
     ];
     document_with_descriptor(&descriptor("PANL", "Ver1.01"), &lines)
+}
+
+/// Size bound for synthetic releases: the loader region plus 64 KiB.
+pub const SYNTHETIC_MAX_MAIN_IMAGE_LEN: usize = APPLICATION_SECTION_OFFSET + 64 * 1024;
+
+/// A synthetic release pinned to the stock file whose SHA-256 is `sha256`.
+pub fn release(sha256: &str) -> StockRelease<'_> {
+    StockRelease {
+        upd_sha256: sha256,
+        max_main_image_len: SYNTHETIC_MAX_MAIN_IMAGE_LEN,
+    }
+}
+
+/// Rebuilds `stock`, pinned as its own synthetic release.
+pub fn rebuild(stock: &[u8], decoded: &[u8], label: &str) -> Result<RebuiltUpdate, RebuildError> {
+    let sha256 = sha256_hex(stock);
+    rebuild_with_application(stock, &release(&sha256), decoded, label)
+}
+
+/// Verifies `output` against `stock`, pinned as its own synthetic release.
+pub fn verify(
+    stock: &[u8],
+    output: &[u8],
+    decoded: &[u8],
+    label: &str,
+) -> Result<(), RebuildError> {
+    let sha256 = sha256_hex(stock);
+    verify_rebuild(stock, &release(&sha256), output, decoded, label)
 }
