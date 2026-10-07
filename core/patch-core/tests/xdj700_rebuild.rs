@@ -1,10 +1,14 @@
 mod common;
 
 use common::xdj700::{
-    Main, application, loader, main_image, padded_application, panel, stock_update,
+    Main, application, descriptor, incompressible_application, lines, loader, main_image,
+    other_document, padded_application, panel, stock_update,
 };
 use common::{container, document_with_descriptor, record};
-use patch_core::xdj700::{decode_application, encode_section, rebuild_with_application};
+use patch_core::xdj700::{
+    APPLICATION_SECTION_OFFSET, MAX_MAIN_GROWTH, decode_application, encode_section,
+    rebuild_with_application,
+};
 use patch_core::{LzssError, RebuildError, SectionError, parse_upd, sha256_hex};
 
 #[test]
@@ -172,14 +176,11 @@ fn rebuild_refuses_a_stock_layout_with_an_extent_after_the_section() {
     let stock_document = Main::new(&image, "Ver1.15").document();
     let far = image.len() + 0x100;
     image.resize(far + 32, 0xFF);
-    let mut lines: Vec<Vec<u8>> = stock_document[32..stock_document.len() - 2]
-        .split_inclusive(|&byte| byte == b'\n')
-        .map(<[u8]>::to_vec)
-        .collect();
+    let mut lines = lines(&stock_document);
     let termination = lines.pop().expect("termination");
     lines.push(record(b'2', 3, far as u32, &[0xFF; 32]));
     lines.push(termination);
-    let main = document_with_descriptor(&common::xdj700::descriptor("MAIN", "Ver1.15"), &lines);
+    let main = document_with_descriptor(&descriptor("MAIN", "Ver1.15"), &lines);
     let stock = container(&[main, panel()]);
 
     let modified = application(60_000, 9);
@@ -202,7 +203,7 @@ fn rebuild_refuses_a_main_image_without_a_section() {
         record(b'2', 3, 0, &[0x5A; 32]),
         record(b'7', 4, 0xA000_0000, &[]),
     ];
-    let main = document_with_descriptor(&common::xdj700::descriptor("MAIN", "Ver1.15"), &lines);
+    let main = document_with_descriptor(&descriptor("MAIN", "Ver1.15"), &lines);
     let stock = container(&[main, panel()]);
 
     let result = rebuild_with_application(&stock, &application(300, 9), "Ver1.22");
@@ -233,14 +234,7 @@ fn rebuild_refuses_an_application_without_the_zero_seed() {
 #[test]
 fn rebuild_refuses_an_image_beyond_24_bit_addresses() {
     // Incompressible bytes: the section grows by 1/8, past the 16 MiB S2 address space.
-    let mut state = 0x2545_F491_4F6C_DD1D_u64;
-    let mut decoded = vec![0; 19];
-    decoded.extend((0..15 << 20).map(|_| {
-        state ^= state << 13;
-        state ^= state >> 7;
-        state ^= state << 17;
-        state as u8
-    }));
+    let decoded = incompressible_application(15 << 20);
     let stock = stock_update(&application(300, 7));
 
     let result = rebuild_with_application(&stock, &decoded, "Ver1.22");
@@ -249,4 +243,86 @@ fn rebuild_refuses_an_image_beyond_24_bit_addresses() {
         panic!("expected ImageTooLarge, got {result:?}");
     };
     assert!(len > 1 << 24, "{len}");
+}
+
+#[test]
+fn rebuild_refuses_growth_beyond_the_limit() {
+    let decoded = padded_application(7);
+    let stock_image = main_image(&decoded, true);
+    let stock = Main::new(&stock_image, "Ver1.15").update();
+    let grown = incompressible_application(MAX_MAIN_GROWTH);
+    let len = APPLICATION_SECTION_OFFSET + encode_section(&grown).expect("encode").len();
+
+    assert_eq!(
+        rebuild_with_application(&stock, &grown, "Ver1.22"),
+        Err(RebuildError::ImageGrowthTooLarge {
+            len,
+            limit: stock_image.len() + MAX_MAIN_GROWTH,
+        })
+    );
+}
+
+#[test]
+fn rebuild_keeps_documents_before_and_after_main() {
+    let stock_image = main_image(&padded_application(7), true);
+    let stock_main = Main::new(&stock_image, "Ver1.15").document();
+    let stock = container(&[panel(), stock_main, other_document()]);
+    let modified = application(5000, 11);
+
+    let rebuilt = rebuild_with_application(&stock, &modified, "Ver1.22").expect("rebuild");
+
+    let mut image = loader();
+    image.extend(encode_section(&modified).expect("encode"));
+    let main = Main::new(&image, "Ver1.22").document();
+    assert_eq!(
+        rebuilt.bytes(),
+        container(&[panel(), main, other_document()]).as_slice()
+    );
+}
+
+#[test]
+fn rebuild_refuses_two_main_documents() {
+    let main = Main::new(&main_image(&padded_application(7), true), "Ver1.15").document();
+    let stock = container(&[main.clone(), main, panel()]);
+
+    assert_eq!(
+        rebuild_with_application(&stock, &application(300, 9), "Ver1.22"),
+        Err(RebuildError::Section(SectionError::AmbiguousMainDocument {
+            count: 2
+        }))
+    );
+}
+
+#[test]
+fn rebuild_refuses_a_main_image_not_based_at_zero() {
+    let main = Main::new(&main_image(&padded_application(7), true), "Ver1.15").document();
+    let mut lines = lines(&main);
+    lines.remove(1);
+    let stock = container(&[
+        document_with_descriptor(&descriptor("MAIN", "Ver1.15"), &lines),
+        panel(),
+    ]);
+
+    assert_eq!(
+        rebuild_with_application(&stock, &application(300, 9), "Ver1.22"),
+        Err(RebuildError::Section(SectionError::ImageBase {
+            base: 0x20
+        }))
+    );
+}
+
+#[test]
+fn rebuild_refuses_a_stock_layout_with_non_s2_records() {
+    let image = main_image(&padded_application(7), true);
+    let mut lines = lines(&Main::new(&image, "Ver1.15").document());
+    lines[1] = record(b'3', 4, 0, &image[..32]);
+    let stock = container(&[
+        document_with_descriptor(&descriptor("MAIN", "Ver1.15"), &lines),
+        panel(),
+    ]);
+
+    assert_eq!(
+        rebuild_with_application(&stock, &application(300, 9), "Ver1.22"),
+        Err(RebuildError::NonCanonicalRecordLayout)
+    );
 }

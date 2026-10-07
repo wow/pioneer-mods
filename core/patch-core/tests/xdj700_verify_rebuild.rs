@@ -3,13 +3,18 @@
 
 mod common;
 
-use common::xdj700::{Main, application, descriptor, loader, padded_application, panel};
+use common::xdj700::{
+    Main, application, descriptor, incompressible_application, lines, loader, padded_application,
+    panel,
+};
 use common::{container, document_with_descriptor, panel_lines, record};
-use patch_core::xdj700::{encode_section, verify_rebuild};
+use patch_core::xdj700::{MAX_MAIN_GROWTH, encode_section, verify_rebuild};
 use patch_core::{RebuildCheck, RebuildError, SectionError};
 
 struct Case {
     stock: Vec<u8>,
+    stock_image_len: usize,
+    stock_main: Vec<u8>,
     decoded: Vec<u8>,
     image: Vec<u8>,
 }
@@ -24,6 +29,8 @@ fn case() -> Case {
     image.extend(encode_section(&decoded).expect("encode"));
     Case {
         stock: Main::new(&stock_image, "Ver1.15").update(),
+        stock_image_len: stock_image.len(),
+        stock_main: Main::new(&stock_image, "Ver1.15").document(),
         decoded,
         image,
     }
@@ -112,11 +119,7 @@ fn refuses_a_changed_s0_header() {
 #[test]
 fn refuses_a_changed_reserved_descriptor_field() {
     let case = case();
-    let main = Main::new(&case.image, "Ver1.22").document();
-    let lines: Vec<Vec<u8>> = main[32..main.len() - 2]
-        .split_inclusive(|&byte| byte == b'\n')
-        .map(<[u8]>::to_vec)
-        .collect();
+    let lines = lines(&Main::new(&case.image, "Ver1.22").document());
     let mut changed = descriptor("MAIN", "Ver1.22");
     changed[31] = b'1';
     let output = container(&[document_with_descriptor(&changed, &lines), panel()]);
@@ -241,4 +244,69 @@ fn refuses_a_malformed_declared_label() {
             "{label:?}"
         );
     }
+}
+
+#[test]
+fn refuses_a_changed_document_before_main() {
+    let case = case();
+    let stock_main = lines(&case.stock_main);
+    let stock = container(&[
+        panel(),
+        document_with_descriptor(&descriptor("MAIN", "Ver1.15"), &stock_main),
+    ]);
+    let mut panel_changed = panel_lines();
+    panel_changed[1] = record(b'2', 3, 0x0C0000, &[0x45; 3]);
+    let output = container(&[
+        document_with_descriptor(&descriptor("PANL", "Ver1.00"), &panel_changed),
+        Main::new(&case.image, "Ver1.22").document(),
+    ]);
+
+    assert_eq!(
+        verify_rebuild(&stock, &output, &case.decoded, "Ver1.22"),
+        failed(RebuildCheck::UntouchedDocument { index: 0 })
+    );
+    let good = container(&[panel(), Main::new(&case.image, "Ver1.22").document()]);
+    assert_eq!(
+        verify_rebuild(&stock, &good, &case.decoded, "Ver1.22"),
+        Ok(())
+    );
+}
+
+#[test]
+fn refuses_an_output_main_image_that_cannot_be_built() {
+    let case = case();
+    let lines = [
+        record(b'0', 2, 0, b"romobj  mot"),
+        record(b'3', 4, 0, &case.image[..32]),
+        record(b'3', 4, 0x1000_0000, &[0xFF; 32]),
+        record(b'7', 4, 0xA000_0000, &[]),
+    ];
+    let main = document_with_descriptor(&descriptor("MAIN", "Ver1.22"), &lines);
+
+    let result = case.verify(&container(&[main, panel()]));
+
+    assert!(
+        matches!(
+            result,
+            Err(RebuildError::OutputSection(SectionError::Image(_)))
+        ),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn refuses_output_growth_beyond_the_limit() {
+    let case = case();
+    let grown = incompressible_application(MAX_MAIN_GROWTH);
+    let mut image = loader();
+    image.extend(encode_section(&grown).expect("encode"));
+    let output = Main::new(&image, "Ver1.22").update();
+
+    assert_eq!(
+        verify_rebuild(&case.stock, &output, &grown, "Ver1.22"),
+        Err(RebuildError::ImageGrowthTooLarge {
+            len: image.len(),
+            limit: case.stock_image_len + MAX_MAIN_GROWTH,
+        })
+    );
 }

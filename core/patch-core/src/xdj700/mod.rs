@@ -12,7 +12,9 @@
 
 mod rebuild;
 
-pub use rebuild::{RECORD_DATA_LEN, RebuiltUpdate, rebuild_with_application, verify_rebuild};
+pub use rebuild::{
+    MAX_MAIN_GROWTH, RECORD_DATA_LEN, RebuiltUpdate, rebuild_with_application, verify_rebuild,
+};
 
 use crate::error::SectionError;
 use crate::identity::sha256_hex;

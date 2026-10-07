@@ -26,6 +26,11 @@ use std::ops::Range;
 
 /// Data bytes per MAIN S2 record, as in the official update.
 pub const RECORD_DATA_LEN: usize = 32;
+/// Most a rebuilt MAIN image may grow beyond the input's image. Where the device keeps its fallback
+/// updater, and how large the application flash region is, are unconfirmed (ambiguity A3), so
+/// growth is bounded. The hardware-tested reference alpha.2 build grows by 44,399 bytes. Raise
+/// this only with evidence about the flash layout.
+pub const MAX_MAIN_GROWTH: usize = 256 * 1024;
 /// S2 records carry 24-bit addresses.
 const S2_ADDRESS_SPACE: usize = 1 << 24;
 const SECTION_FRAMING_LEN: usize = 4 + 2;
@@ -39,23 +44,27 @@ pub struct RebuiltUpdate {
 }
 
 impl RebuiltUpdate {
+    /// The verified `.UPD` bytes.
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
 
+    /// The verified `.UPD` bytes, without copying.
     pub fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
 
+    /// SHA-256 of [`Self::bytes`], lowercase hex.
     pub fn sha256(&self) -> String {
         sha256_hex(&self.bytes)
     }
 
-    /// Length of the rebuilt MAIN image (loader plus section).
+    /// Length of the MAIN image (loader plus section), as re-parsed from the verified bytes.
     pub fn main_image_len(&self) -> usize {
         self.main_image_len
     }
 
+    /// SHA-256 of the MAIN image, as re-parsed from the verified bytes.
     pub fn main_image_sha256(&self) -> &str {
         &self.main_image_sha256
     }
@@ -71,7 +80,8 @@ impl RebuiltUpdate {
 ///   unverified version, invalid stock section), [`RebuildError::DataAfterSection`] or
 ///   [`RebuildError::NonCanonicalRecordLayout`].
 /// - [`RebuildError::Section`] with [`SectionError::Encode`] or a section self-check error if
-///   `decoded` cannot be encoded, or [`RebuildError::ImageTooLarge`].
+///   `decoded` cannot be encoded, [`RebuildError::ImageTooLarge`] beyond 24-bit addresses, or
+///   [`RebuildError::ImageGrowthTooLarge`] beyond [`MAX_MAIN_GROWTH`].
 /// - Any [`verify_rebuild`] error, which would indicate a defect in this library.
 pub fn rebuild_with_application(
     input: &[u8],
@@ -88,6 +98,7 @@ pub fn rebuild_with_application(
     if image.len() > S2_ADDRESS_SPACE {
         return Err(RebuildError::ImageTooLarge { len: image.len() });
     }
+    stock.check_growth(image.len())?;
     let records =
         grid_records(&image, &stock.extents).ok_or(RebuildError::NonCanonicalRecordLayout)?;
     let descriptor = main
@@ -114,11 +125,11 @@ pub fn rebuild_with_application(
         .collect();
     let bytes = upd::encode_parts(&parts);
 
-    stock.verify(input, &bytes, decoded, version)?;
+    let verified = stock.verify(input, &bytes, decoded, version)?;
     Ok(RebuiltUpdate {
         bytes,
-        main_image_len: image.len(),
-        main_image_sha256: sha256_hex(&image),
+        main_image_len: verified.len,
+        main_image_sha256: verified.sha256,
     })
 }
 
@@ -127,13 +138,14 @@ pub fn rebuild_with_application(
 ///
 /// Every document other than MAIN must be byte-identical to the input's. MAIN must keep the
 /// input's descriptor (except the version), S0 header, termination and loader region, follow the
-/// input's record grid, and end exactly at the end of a valid application section.
+/// input's record grid, grow by at most [`MAX_MAIN_GROWTH`], and end exactly at the end of a
+/// valid application section.
 ///
 /// # Errors
 ///
 /// The input refusals of [`rebuild_with_application`], [`RebuildError::OutputUnparseable`],
-/// [`RebuildError::Section`] with [`SectionError::Image`] if the output's MAIN image cannot be
-/// built, [`RebuildError::OutputSection`] if its section is invalid, or
+/// [`RebuildError::OutputSection`] if the output's MAIN image cannot be built
+/// ([`SectionError::Image`]) or its section is invalid, [`RebuildError::ImageGrowthTooLarge`], or
 /// [`RebuildError::Verification`] naming the failed property.
 pub fn verify_rebuild(
     input: &[u8],
@@ -142,7 +154,15 @@ pub fn verify_rebuild(
     version: &str,
 ) -> Result<(), RebuildError> {
     check_version_label(version)?;
-    StockMain::load(input)?.verify(input, output, decoded, version)
+    StockMain::load(input)?
+        .verify(input, output, decoded, version)
+        .map(|_| ())
+}
+
+/// Identity of a verified output's MAIN image.
+struct VerifiedMain {
+    len: usize,
+    sha256: String,
 }
 
 /// The verified input: its container, single MAIN document, image and record extents.
@@ -189,13 +209,21 @@ impl StockMain {
         &self.container.documents()[self.main_position]
     }
 
+    fn check_growth(&self, len: usize) -> Result<(), RebuildError> {
+        let limit = self.image.bytes().len() + MAX_MAIN_GROWTH;
+        if len > limit {
+            return Err(RebuildError::ImageGrowthTooLarge { len, limit });
+        }
+        Ok(())
+    }
+
     fn verify(
         &self,
         input: &[u8],
         output: &[u8],
         decoded: &[u8],
         version: &str,
-    ) -> Result<(), RebuildError> {
+    ) -> Result<VerifiedMain, RebuildError> {
         let failed = |check| Err(RebuildError::Verification(check));
         let rebuilt = parse_upd(output).map_err(RebuildError::OutputUnparseable)?;
         if rebuilt.documents().len() != self.container.documents().len() {
@@ -222,7 +250,9 @@ impl StockMain {
             return failed(RebuildCheck::MainFraming);
         }
 
-        let image = new.image().map_err(SectionError::Image)?;
+        let image = new
+            .image()
+            .map_err(|error| RebuildError::OutputSection(SectionError::Image(error)))?;
         // The grid comparison already implies base 0 (the input's first extent starts at 0); the
         // explicit check states the precondition for indexing the image by absolute address.
         let on_grid = image.base() == 0
@@ -234,6 +264,7 @@ impl StockMain {
         if image.bytes().get(loader) != Some(&self.image.bytes()[loader]) {
             return failed(RebuildCheck::Loader);
         }
+        self.check_growth(image.bytes().len())?;
         let section = decode_section(image.bytes(), APPLICATION_SECTION_OFFSET)
             .map_err(RebuildError::OutputSection)?;
         if image.bytes().len() != section_end(section.compressed_len()) {
@@ -242,7 +273,10 @@ impl StockMain {
         if section.decoded() != decoded {
             return failed(RebuildCheck::Application);
         }
-        Ok(())
+        Ok(VerifiedMain {
+            len: image.bytes().len(),
+            sha256: sha256_hex(image.bytes()),
+        })
     }
 }
 

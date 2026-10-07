@@ -287,16 +287,22 @@ pub enum RebuildError {
     )]
     DataAfterSection,
 
-    #[error("stock MAIN records do not follow the 32-byte record grid that a rebuild reproduces")]
+    #[error(
+        "stock MAIN records do not follow the layout a rebuild reproduces (32-byte S2 grid, \
+         section inside the last extent)"
+    )]
     NonCanonicalRecordLayout,
 
     #[error("rebuilt MAIN image of {len} bytes does not fit 24-bit S2 addresses")]
     ImageTooLarge { len: usize },
 
+    #[error("rebuilt MAIN image of {len} bytes exceeds the growth limit of {limit} bytes")]
+    ImageGrowthTooLarge { len: usize, limit: usize },
+
     #[error("rebuilt update does not parse: {0}")]
     OutputUnparseable(UpdError),
 
-    #[error("rebuilt application section is invalid: {0}")]
+    #[error("rebuilt MAIN image or application section is invalid: {0}")]
     OutputSection(SectionError),
 
     #[error("rebuilt update failed verification: {0}")]

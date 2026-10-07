@@ -9,8 +9,9 @@
 //! ```
 //!
 //! The second variable is needed only by `rebuild_reproduces_the_reference_alpha2_pins` (run
-//! the no-op test alone by name otherwise). It names the decoded alpha.2 application that the reference
-//! implementation's recipe produces from the official file (see the README's Acknowledgements).
+//! the no-op test alone by name otherwise). It names the decoded alpha.2 application that the
+//! reference implementation's recipe produces from the official file (see the README's
+//! Acknowledgements).
 //! Its identities, and those of the hardware-tested alpha.2 MAIN image and update, are public
 //! pins and contain no firmware bytes.
 

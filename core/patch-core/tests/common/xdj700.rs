@@ -109,3 +109,35 @@ pub fn padded_application(salt: u8) -> Vec<u8> {
         })
         .expect("some length needs padding")
 }
+
+/// The record lines of a document built by these helpers (descriptor and CRC removed).
+pub fn lines(document: &[u8]) -> Vec<Vec<u8>> {
+    document[32..document.len() - 2]
+        .split_inclusive(|&byte| byte == b'\n')
+        .map(<[u8]>::to_vec)
+        .collect()
+}
+
+/// A decoded application whose `len` bytes after the zero seed do not compress, so its section
+/// grows by about 1/8.
+pub fn incompressible_application(len: usize) -> Vec<u8> {
+    let mut state = 0x2545_F491_4F6C_DD1D_u64;
+    let mut decoded = vec![0; 19];
+    decoded.extend((0..len).map(|_| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state as u8
+    }));
+    decoded
+}
+
+/// A second panel-like document, so tests can tell documents apart.
+pub fn other_document() -> Vec<u8> {
+    let lines = [
+        record(b'0', 2, 0, &[]),
+        record(b'2', 3, 0x0D0000, &[0x46; 5]),
+        record(b'8', 3, 0, &[]),
+    ];
+    document_with_descriptor(&descriptor("PANL", "Ver1.01"), &lines)
+}
