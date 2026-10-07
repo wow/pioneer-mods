@@ -1,0 +1,29 @@
+# --- Vendor firmware: never commit (owner-input workflows only) ---
+*.[Uu][Pp][Dd]
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# --- Rust ---
+target/
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Local secrets ---
+.env
+.env.*
