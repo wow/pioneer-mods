@@ -1,3 +1,4 @@
+use patch_core::sha256_hex;
 use patch_core::upd::crc16_xmodem;
 use std::fs;
 use std::path::Path;
@@ -20,7 +21,11 @@ fn upd(lines: &[String]) -> Vec<u8> {
 }
 
 fn upd_for_model(model: &str, lines: &[String]) -> Vec<u8> {
-    let mut doc = format!("{model:<12}MAINVer9.99").into_bytes();
+    upd_for(model, "Ver9.99", lines)
+}
+
+fn upd_for(model: &str, version: &str, lines: &[String]) -> Vec<u8> {
+    let mut doc = format!("{model:<12}MAIN{version}").into_bytes();
     doc.extend_from_slice(b"\0       0");
     for line in lines {
         doc.extend_from_slice(line.as_bytes());
@@ -201,10 +206,25 @@ fn inspect_structure_reports_oversized_image_without_failing() {
     );
 }
 
-/// XDJ-700 MAIN container whose image holds a compressed section at 0x40000 that decodes to
-/// 19 zeros followed by 1..=8. `corrupt` flips one checksum bit.
+const XDJ700_STREAM: [u8; 13] = [0xFD, 0x00, 0xEE, 0xFF, 1, 2, 3, 4, 5, 6, 0x03, 7, 8];
+
+/// Additive checksum of the size field (13 as u32 LE) plus the stream bytes.
+fn xdj700_checksum() -> u16 {
+    13u16
+        + XDJ700_STREAM
+            .iter()
+            .map(|&byte| u16::from(byte))
+            .sum::<u16>()
+}
+
+/// XDJ-700 MAIN container (`version`) whose image holds a compressed section at 0x40000 that
+/// decodes to 19 zeros followed by 1..=8. `corrupt` flips one checksum bit.
 fn xdj700_upd(corrupt: bool) -> Vec<u8> {
-    let stream = [0xFD, 0x00, 0xEE, 0xFF, 1, 2, 3, 4, 5, 6, 0x03, 7, 8];
+    xdj700_upd_version("Ver1.15", corrupt)
+}
+
+fn xdj700_upd_version(version: &str, corrupt: bool) -> Vec<u8> {
+    let stream = XDJ700_STREAM;
     let mut section = (stream.len() as u32).to_le_bytes().to_vec();
     section.extend_from_slice(&stream);
     let mut checksum = section
@@ -222,7 +242,7 @@ fn xdj700_upd(corrupt: bool) -> Vec<u8> {
         lines.push(srec('2', 3, (index * 32) as u32, chunk));
     }
     lines.push(srec('7', 4, 0, &[]));
-    upd_for_model("XDJ-700", &lines)
+    upd_for("XDJ-700", version, &lines)
 }
 
 #[test]
@@ -243,6 +263,14 @@ fn inspect_structure_decodes_xdj700_application_section() {
     assert_eq!(application["status"], "decoded");
     assert_eq!(application["offset"], "0x40000");
     assert_eq!(application["decoded_len"], 27);
+    assert_eq!(application["compressed_len"], 13);
+    assert_eq!(
+        application["checksum"],
+        format!("0x{:04X}", xdj700_checksum())
+    );
+    let mut decoded = vec![0u8; 19];
+    decoded.extend(1..=8);
+    assert_eq!(application["decoded_sha256"], sha256_hex(&decoded));
 }
 
 #[test]
@@ -271,4 +299,20 @@ fn inspect_structure_omits_application_for_other_models() {
 
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("valid JSON");
     assert!(json.get("application").is_none(), "json: {json}");
+}
+
+#[test]
+fn inspect_structure_reports_unverified_main_version_as_unsupported() {
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+    let input = tempdir.path().join("XDJ700.UPD");
+    fs::write(&input, xdj700_upd_version("Ver1.16", false)).expect("write input");
+
+    let output = run_inspect(&input, &["--structure"]);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout: {stdout}");
+    assert!(
+        stdout.contains("application: unsupported (MAIN version Ver1.16 has no verified"),
+        "stdout: {stdout}"
+    );
 }

@@ -2,7 +2,8 @@ use anyhow::{Context, Result};
 use clap::ValueEnum;
 use patch_core::upd::{ImageReport, MAX_IMAGE_LEN, MAX_TOTAL_IMAGE_LEN, UpdSummary};
 use patch_core::{
-    FirmwareIdentity, UpdContainer, identify_firmware, parse_upd, read_firmware, xdj700,
+    FirmwareIdentity, SectionError, UpdContainer, identify_firmware, parse_upd, read_firmware,
+    xdj700,
 };
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -53,6 +54,8 @@ enum ApplicationReport {
         decoded_len: usize,
         decoded_sha256: String,
     },
+    /// The MAIN version's section layout has not been verified, so nothing was decoded.
+    Unsupported { reason: String },
     /// The section failed verification; reported rather than failing the structure report.
     Invalid { reason: String },
 }
@@ -69,6 +72,9 @@ impl ApplicationReport {
                 checksum: format!("0x{:04X}", section.checksum()),
                 decoded_len: section.decoded().len(),
                 decoded_sha256: section.decoded_sha256(),
+            },
+            Err(error @ SectionError::UnverifiedVersion { .. }) => Self::Unsupported {
+                reason: error.to_string(),
             },
             Err(error) => Self::Invalid {
                 reason: error.to_string(),
@@ -157,6 +163,9 @@ fn print_text(report: &InspectReport) {
             "application: offset={offset} compressed_len={compressed_len} checksum={checksum} (ok) \
              decoded_len={decoded_len} decoded_sha256={decoded_sha256}"
         ),
+        Some(ApplicationReport::Unsupported { reason }) => {
+            println!("application: unsupported ({reason})");
+        }
         Some(ApplicationReport::Invalid { reason }) => println!("application: invalid ({reason})"),
         None => {}
     }

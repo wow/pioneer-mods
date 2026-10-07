@@ -17,6 +17,10 @@ use crate::upd::{UpdContainer, UpdDocument};
 /// Offset of the compressed application section inside the MAIN image.
 pub const APPLICATION_SECTION_OFFSET: usize = 0x40000;
 
+/// MAIN versions whose application-section layout has been verified against an official file.
+/// Other versions are refused rather than decoded at a guessed offset.
+pub const VERIFIED_MAIN_VERSIONS: &[&str] = &["Ver1.15"];
+
 /// Start of the stock section stream (`01 00 EE FF`). The device decodes it as data: a literal
 /// `0x00` and a match that repeats it 18 times, i.e. a 19-byte zero prefix.
 ///
@@ -125,10 +129,17 @@ pub fn is_xdj700(container: &UpdContainer) -> bool {
 ///
 /// # Errors
 ///
-/// [`SectionError::NoMainDocument`] if the container is not an XDJ-700 update, an image error,
-/// or any [`decode_section`] error.
+/// [`SectionError::NoMainDocument`] if the container is not an XDJ-700 update,
+/// [`SectionError::UnverifiedVersion`] if the MAIN version is not in
+/// [`VERIFIED_MAIN_VERSIONS`], an image error, or any [`decode_section`] error.
 pub fn decode_application(container: &UpdContainer) -> Result<DecodedSection, SectionError> {
     let main = main_document(container).ok_or(SectionError::NoMainDocument)?;
+    let version = main.descriptor().version();
+    if !VERIFIED_MAIN_VERSIONS.contains(&version) {
+        return Err(SectionError::UnverifiedVersion {
+            version: version.to_owned(),
+        });
+    }
     let image = main.image().map_err(|_| SectionError::ImageUnavailable)?;
     if image.base() != 0 {
         return Err(SectionError::ImageUnavailable);

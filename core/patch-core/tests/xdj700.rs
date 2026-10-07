@@ -2,8 +2,8 @@ mod common;
 
 use common::*;
 use patch_core::xdj700::{
-    APPLICATION_SECTION_OFFSET, MAX_DECODED_LEN, SECTION_TAG, decode_application, decode_section,
-    is_xdj700,
+    APPLICATION_SECTION_OFFSET, MAX_DECODED_LEN, SECTION_TAG, VERIFIED_MAIN_VERSIONS,
+    decode_application, decode_section, is_xdj700,
 };
 use patch_core::{LzssError, SectionError, parse_upd};
 
@@ -37,17 +37,20 @@ fn image_with(prefix_len: usize, section_bytes: &[u8]) -> Vec<u8> {
     image
 }
 
-/// A one-document XDJ-700 MAIN container whose image (based at 0) is `image`.
+/// A one-document XDJ-700 MAIN Ver1.15 container whose image starts at `base`.
 fn xdj700_container(image: &[u8], base: u32) -> Vec<u8> {
+    xdj700_container_version(image, base, "Ver1.15")
+}
+
+fn xdj700_container_version(image: &[u8], base: u32, version: &str) -> Vec<u8> {
     let mut lines = vec![record(b'0', 2, 0, b"synthetic")];
     for (index, chunk) in image.chunks(32).enumerate() {
         lines.push(record(b'2', 3, base + (index * 32) as u32, chunk));
     }
     lines.push(record(b'7', 4, 0, &[]));
-    container(&[document_with_descriptor(
-        b"XDJ-700     MAINVer9.99\0       0",
-        &lines,
-    )])
+    let mut descriptor = format!("XDJ-700     MAIN{version}").into_bytes();
+    descriptor.extend_from_slice(b"\0       0");
+    container(&[document_with_descriptor(&descriptor, &lines)])
 }
 
 #[test]
@@ -103,6 +106,8 @@ fn rejects_missing_tag() {
         vec![0x01, 0x01, 0xEE, 0xFF],
         vec![0x01, 0x00, 0xEE, 0xFE],
         vec![0x01, 0x00],
+        vec![0x00, 0x00, 0xEE, 0xFF],
+        vec![0xFC, 0x00, 0xEE, 0xFF],
     ] {
         assert_eq!(
             decode_section(&section(&stream), 0),
@@ -215,5 +220,21 @@ fn application_requires_image_based_at_zero() {
     assert_eq!(
         decode_application(&parsed),
         Err(SectionError::ImageUnavailable)
+    );
+}
+
+#[test]
+fn application_requires_verified_main_version() {
+    let image = image_with(APPLICATION_SECTION_OFFSET, &section(&literal_stream()));
+    let parsed =
+        parse_upd(&xdj700_container_version(&image, 0, "Ver1.16")).expect("valid container");
+
+    assert!(is_xdj700(&parsed));
+    assert_eq!(VERIFIED_MAIN_VERSIONS, ["Ver1.15"]);
+    assert_eq!(
+        decode_application(&parsed),
+        Err(SectionError::UnverifiedVersion {
+            version: "Ver1.16".to_owned()
+        })
     );
 }

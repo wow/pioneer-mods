@@ -209,6 +209,9 @@ pub enum SectionError {
     #[error("container has no XDJ-700 MAIN document")]
     NoMainDocument,
 
+    #[error("MAIN version {version} has no verified application-section layout")]
+    UnverifiedVersion { version: String },
+
     #[error("MAIN image is not available (span over the cap, or not based at address 0)")]
     ImageUnavailable,
 

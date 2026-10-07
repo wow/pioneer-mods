@@ -102,3 +102,17 @@ fn output_limit_is_inclusive_and_enforced_for_literals_and_matches() {
         Err(LzssError::OutputLimitExceeded { limit: 17 })
     );
 }
+
+#[test]
+fn match_source_wraps_from_ring_end_to_start() {
+    // 18 literals fill ring 0xFEE..=0xFFF (values 1..=18); 19 and 20 land at ring 0 and 1.
+    let mut stream = vec![
+        0xFF, 1, 2, 3, 4, 5, 6, 7, 8, 0xFF, 9, 10, 11, 12, 13, 14, 15, 16,
+    ];
+    stream.extend_from_slice(&[0b0000_1111, 17, 18, 19, 20]);
+    stream.extend_from_slice(&token(0xFFE, 4));
+
+    let decoded = decode(&stream, LIMIT).expect("decode");
+
+    assert_eq!(&decoded[20..], &[17, 18, 19, 20]);
+}
