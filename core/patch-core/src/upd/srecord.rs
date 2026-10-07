@@ -59,12 +59,24 @@ impl fmt::Display for SRecordType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SRecord {
-    pub record_type: SRecordType,
-    pub address: u32,
-    pub data: Vec<u8>,
+    record_type: SRecordType,
+    address: u32,
+    data: Vec<u8>,
 }
 
 impl SRecord {
+    pub fn record_type(&self) -> SRecordType {
+        self.record_type
+    }
+
+    pub fn address(&self) -> u32 {
+        self.address
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
     /// Exclusive end address of this record's data, computed without overflow.
     pub fn end_address(&self) -> u64 {
         u64::from(self.address) + self.data.len() as u64
@@ -80,7 +92,13 @@ pub(crate) fn parse_record(line: &[u8]) -> Result<SRecord, RecordDefect> {
         return Err(RecordDefect::Syntax);
     };
     let record_type = SRecordType::from_digit(*type_digit).ok_or(RecordDefect::UnsupportedType)?;
-    let raw = decode_upper_hex(hex).ok_or(RecordDefect::Syntax)?;
+    if !hex
+        .iter()
+        .all(|byte| matches!(byte, b'0'..=b'9' | b'A'..=b'F'))
+    {
+        return Err(RecordDefect::Syntax);
+    }
+    let mut raw = hex::decode(hex).map_err(|_| RecordDefect::Syntax)?;
 
     let (&count, rest) = raw.split_first().ok_or(RecordDefect::Syntax)?;
     if usize::from(count) != rest.len() {
@@ -95,39 +113,21 @@ pub(crate) fn parse_record(line: &[u8]) -> Result<SRecord, RecordDefect> {
         return Err(RecordDefect::ChecksumMismatch);
     }
 
-    let (address_bytes, data_and_checksum) = rest.split_at(address_len);
-    let address = address_bytes
+    let address = rest[..address_len]
         .iter()
         .fold(0u32, |acc, &byte| (acc << 8) | u32::from(byte));
-    let data = data_and_checksum[..data_and_checksum.len() - 1].to_vec();
-
-    let address_space = 1u64 << (8 * address_len);
+    // Reuse the decoded buffer as the data payload: drop checksum, count and address bytes.
+    raw.pop();
+    raw.drain(..1 + address_len);
     let record = SRecord {
         record_type,
         address,
-        data,
+        data: raw,
     };
+
+    let address_space = 1u64 << (8 * address_len);
     if record_type.is_data() && record.end_address() > address_space {
         return Err(RecordDefect::AddressOverflow);
     }
     Ok(record)
-}
-
-fn decode_upper_hex(hex: &[u8]) -> Option<Vec<u8>> {
-    let (pairs, remainder) = hex.as_chunks::<2>();
-    if !remainder.is_empty() {
-        return None;
-    }
-    pairs
-        .iter()
-        .map(|&[high, low]| Some((upper_hex_value(high)? << 4) | upper_hex_value(low)?))
-        .collect()
-}
-
-fn upper_hex_value(digit: u8) -> Option<u8> {
-    match digit {
-        b'0'..=b'9' => Some(digit - b'0'),
-        b'A'..=b'F' => Some(digit - b'A' + 10),
-        _ => None,
-    }
 }

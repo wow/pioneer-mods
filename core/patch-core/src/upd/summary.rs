@@ -1,6 +1,6 @@
 //! Serializable structure report for `patch-cli inspect --structure`.
 
-use super::{UpdContainer, UpdDocument};
+use super::{SRecordType, UpdContainer, UpdDocument};
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -22,11 +22,11 @@ pub struct DocumentSummary {
     pub crc16: String,
     /// S0 header data with non-printable bytes escaped.
     pub header_text: String,
-    pub data_record_types: Vec<String>,
+    pub data_record_types: Vec<SRecordType>,
     pub data_records: usize,
     pub data_bytes: u64,
     pub extents: Vec<Extent>,
-    pub termination_type: String,
+    pub termination_type: SRecordType,
     /// Entry/start address from the termination record, formatted `0xNNNNNNNN`.
     pub entry_address: String,
 }
@@ -41,7 +41,7 @@ impl UpdContainer {
     pub fn summary(&self) -> UpdSummary {
         UpdSummary {
             documents: self
-                .documents
+                .documents()
                 .iter()
                 .enumerate()
                 .map(|(index, document)| document.summary(index))
@@ -52,28 +52,21 @@ impl UpdContainer {
 
 impl UpdDocument {
     fn summary(&self, index: usize) -> DocumentSummary {
+        let descriptor = self.descriptor();
         let data = self.data_records();
-        let header = self.records.first();
-        let termination = self.records.last();
         DocumentSummary {
             index,
-            offset: self.offset,
-            length: self.length,
-            model: self.descriptor.model.clone(),
-            kind: self.descriptor.kind.clone(),
-            version: self.descriptor.version.clone(),
-            reserved_hex: hex::encode(self.descriptor.reserved),
-            crc16: format!("0x{:04X}", self.crc16),
-            header_text: header
-                .map(|record| record.data.escape_ascii().to_string())
-                .unwrap_or_default(),
-            data_record_types: self
-                .data_record_types()
-                .iter()
-                .map(ToString::to_string)
-                .collect(),
+            offset: self.offset(),
+            length: self.length(),
+            model: descriptor.model().to_owned(),
+            kind: descriptor.kind().to_owned(),
+            version: descriptor.version().to_owned(),
+            reserved_hex: hex::encode(descriptor.reserved()),
+            crc16: format!("0x{:04X}", self.crc16()),
+            header_text: self.header().data().escape_ascii().to_string(),
+            data_record_types: self.data_record_types().into_iter().collect(),
             data_records: data.len(),
-            data_bytes: data.iter().map(|record| record.data.len() as u64).sum(),
+            data_bytes: data.iter().map(|record| record.data().len() as u64).sum(),
             extents: self
                 .data_extents()
                 .into_iter()
@@ -82,12 +75,8 @@ impl UpdDocument {
                     end: range.end,
                 })
                 .collect(),
-            termination_type: termination
-                .map(|record| record.record_type.to_string())
-                .unwrap_or_default(),
-            entry_address: termination
-                .map(|record| format!("0x{:08X}", record.address))
-                .unwrap_or_default(),
+            termination_type: self.termination().record_type(),
+            entry_address: format!("0x{:08X}", self.termination().address()),
         }
     }
 }

@@ -26,12 +26,14 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - Community health files: `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue templates, and pull request template.
 - Read-only `.UPD` container parser in `patch-core` (`patch_core::upd::parse_upd`): decimal
   document-length header, 32-byte document descriptors, CRC-16/XMODEM document trailers, and
-  Motorola S-record syntax, checksum and layout validation (fail-closed).
+  Motorola S-record syntax, checksum and layout validation (fail-closed). Parsed types have
+  private fields and can only be built by the parser.
 - `patch-cli inspect --structure` reports container documents, versions, CRCs, record counts and
   address extents in text or JSON. Without `--structure`, `inspect` output is unchanged.
-- `patch_core::read_firmware` reads an input once and returns its identity plus the hashed bytes.
-  It refuses non-regular files (directories, FIFOs, devices) before opening, and re-checks the
-  open handle.
+- `patch_core::read_firmware` reads an input once and returns its identity plus the hashed
+  bytes; `read_regular_file` reads without hashing. Both refuse non-regular files (directories,
+  FIFOs, devices): the path is checked first, the file is opened non-blocking on Unix so a path
+  swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
 - Local Python validation instructions now use the same entrypoint as CI (`scripts/run_python_quality.sh`).
@@ -42,8 +44,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - `patch-cli patch` now hashes in-memory input bytes (single-read flow), rejects overlapping destination
   ranges, verifies that all byte mutations stay within declared destination regions, and reports
   output SHA-256.
-- `patch-cli patch` reads input through `read_firmware`. A FIFO or device input is now refused
-  instead of blocking or being read without limit.
+- `patch-cli patch` reads input through `read_regular_file`. A FIFO or device input is now
+  refused instead of blocking or being read without limit. The input is hashed once, by the
+  engine.
 - The patch engine moved from `patch-cli` into `patch-core` as an I/O-free `apply_recipe` API
   (manifest validation, size + SHA-256 gating, bounds/overlap checks, bounded-diff verification,
   expected output hash) with typed `PatchEngineError` refusals. `patch-cli patch` now only reads

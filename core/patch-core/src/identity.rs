@@ -1,7 +1,7 @@
 use crate::error::PatchCoreError;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Read;
 use std::path::Path;
 
@@ -40,15 +40,23 @@ pub fn identify_firmware(path: &Path) -> Result<FirmwareIdentity, PatchCoreError
 
 /// Reads `path` once and returns its identity together with the exact bytes that were hashed.
 ///
-/// Refuses anything that is not a regular file (directories, FIFOs, devices), so callers never
-/// block on a pipe or read an unbounded device.
+/// Refuses anything that is not a regular file; see [`read_regular_file`].
 pub fn read_firmware(path: &Path) -> Result<(FirmwareIdentity, Vec<u8>), PatchCoreError> {
+    let bytes = read_regular_file(path)?;
+    let identity = identify_bytes(firmware_file_name(path), &bytes);
+    Ok((identity, bytes))
+}
+
+/// Reads a regular file completely, without hashing it.
+///
+/// Directories, FIFOs, sockets and devices are refused, so callers never block on a pipe or read
+/// an unbounded device.
+pub fn read_regular_file(path: &Path) -> Result<Vec<u8>, PatchCoreError> {
     let mut file = open_regular_file(path)?;
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes)
         .map_err(|source| read_error(path, source))?;
-    let identity = identify_bytes(firmware_file_name(path), &bytes);
-    Ok((identity, bytes))
+    Ok(bytes)
 }
 
 pub fn identify_bytes(file_name: String, input_bytes: &[u8]) -> FirmwareIdentity {
@@ -74,8 +82,10 @@ pub fn firmware_file_name(path: &Path) -> String {
 
 /// Opens `path` only if it is a regular file.
 ///
-/// The path is checked before opening (opening a FIFO would block) and the open handle is checked
-/// again, so a path swapped to a directory or device in between is still refused.
+/// The path is checked first so that devices are normally never opened. On Unix the file is then
+/// opened with `O_NONBLOCK`, so a path swapped to a FIFO after the check cannot block `open()`.
+/// The open handle is checked again before any read; `O_NONBLOCK` has no effect on reads from a
+/// regular file.
 fn open_regular_file(path: &Path) -> Result<File, PatchCoreError> {
     let not_a_file = || PatchCoreError::InputNotAFile {
         path: path.to_string_lossy().into_owned(),
@@ -84,12 +94,29 @@ fn open_regular_file(path: &Path) -> Result<File, PatchCoreError> {
     if !metadata.is_file() {
         return Err(not_a_file());
     }
-    let file = File::open(path).map_err(|source| read_error(path, source))?;
+    let file = open_options()
+        .open(path)
+        .map_err(|source| read_error(path, source))?;
     let handle_metadata = file.metadata().map_err(|source| read_error(path, source))?;
     if !handle_metadata.is_file() {
         return Err(not_a_file());
     }
     Ok(file)
+}
+
+#[cfg(unix)]
+fn open_options() -> OpenOptions {
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut options = OpenOptions::new();
+    options.read(true).custom_flags(libc::O_NONBLOCK);
+    options
+}
+
+#[cfg(not(unix))]
+fn open_options() -> OpenOptions {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    options
 }
 
 fn read_error(path: &Path, source: std::io::Error) -> PatchCoreError {

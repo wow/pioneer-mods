@@ -91,7 +91,11 @@ fn print_text(report: &InspectReport) {
         println!(
             "{prefix}.records: data={} types={} bytes={} termination={} entry={}",
             doc.data_records,
-            doc.data_record_types.join(","),
+            doc.data_record_types
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
             doc.data_bytes,
             doc.termination_type,
             doc.entry_address

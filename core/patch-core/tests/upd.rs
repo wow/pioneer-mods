@@ -16,21 +16,28 @@ fn parses_two_document_container() {
 
     let parsed = parse_upd(&bytes).expect("valid container");
 
-    assert_eq!(parsed.documents.len(), 2);
-    let main = &parsed.documents[0];
-    assert_eq!(main.descriptor.model, "SYN-100");
-    assert_eq!(main.descriptor.kind, "MAIN");
-    assert_eq!(main.descriptor.version, "Ver9.99");
-    assert_eq!(&main.descriptor.reserved, b"\0       0");
+    let [main, panel] = parsed.documents() else {
+        panic!("expected two documents");
+    };
+    assert_eq!(main.descriptor().model(), "SYN-100");
+    assert_eq!(main.descriptor().kind(), "MAIN");
+    assert_eq!(main.descriptor().version(), "Ver9.99");
+    assert_eq!(main.descriptor().reserved(), b"\0       0");
+    assert_eq!(main.header().data(), b"synthetic");
     assert_eq!(main.data_records().len(), 3);
+    assert_eq!(main.records().count(), 5);
     assert_eq!(main.data_extents(), vec![0..8, 0x10..0x12]);
-    assert_eq!(main.records.last().map(|r| r.address), Some(0xA000_0000));
-    assert!(main.offset < parsed.documents[1].offset);
+    assert_eq!(main.termination().record_type(), SRecordType::S7);
+    assert_eq!(main.termination().address(), 0xA000_0000);
+    assert_eq!(
+        main.crc16(),
+        crc16_xmodem(&bytes[main.offset()..main.offset() + main.length() - 2])
+    );
+    assert!(main.offset() < panel.offset());
 
-    let panel = &parsed.documents[1];
-    assert_eq!(panel.descriptor.kind, "PANL");
+    assert_eq!(panel.descriptor().kind(), "PANL");
     assert_eq!(panel.data_extents(), vec![0x0C0000..0x0C0003]);
-    assert_eq!(panel.offset + panel.length, bytes.len());
+    assert_eq!(panel.offset() + panel.length(), bytes.len());
 }
 
 #[test]
@@ -44,16 +51,13 @@ fn summary_reports_structure_deterministically() {
     let main = &summary.documents[0];
     assert_eq!(main.data_records, 3);
     assert_eq!(main.data_bytes, 10);
-    assert_eq!(main.data_record_types, vec!["S2".to_owned()]);
-    assert_eq!(main.termination_type, "S7");
+    assert_eq!(main.data_record_types, vec![SRecordType::S2]);
+    assert_eq!(main.termination_type, SRecordType::S7);
     assert_eq!(main.entry_address, "0xA0000000");
     assert_eq!(main.header_text, "synthetic");
     assert_eq!(main.reserved_hex, "002020202020202030");
     assert_eq!(main.extents.len(), 2);
-    assert_eq!(
-        SRecordType::S8.to_string(),
-        summary.documents[1].termination_type
-    );
+    assert_eq!(summary.documents[1].termination_type, SRecordType::S8);
 }
 
 #[test]
@@ -64,11 +68,39 @@ fn rejects_missing_length_header() {
 }
 
 #[test]
-fn rejects_length_header_with_leading_zero() {
-    let mut bytes = b"0".to_vec();
+fn rejects_zero_padded_length_line_as_malformed() {
+    let main = document("MAIN", &main_lines());
+    let panel = document("PANL", &panel_lines());
+    let mut bytes = format!("{}\r\n0{}\r\n", main.len(), panel.len()).into_bytes();
+    bytes.extend_from_slice(&main);
+    bytes.extend_from_slice(&panel);
+
+    assert_eq!(parse_upd(&bytes), Err(UpdError::MalformedLengthHeader));
+}
+
+#[test]
+fn rejects_zero_length_line_as_malformed() {
+    let mut bytes = b"0\r\n".to_vec();
     bytes.extend_from_slice(&valid_container());
 
-    assert_eq!(parse_upd(&bytes), Err(UpdError::MissingLengthHeader));
+    assert_eq!(parse_upd(&bytes), Err(UpdError::MalformedLengthHeader));
+}
+
+#[test]
+fn rejects_twenty_digit_length_line_as_malformed() {
+    let mut bytes = b"12345678901234567890\r\n".to_vec();
+    bytes.extend_from_slice(&document("MAIN", &main_lines()));
+
+    assert_eq!(parse_upd(&bytes), Err(UpdError::MalformedLengthHeader));
+}
+
+#[test]
+fn rejects_length_line_without_cr_as_malformed() {
+    let main = document("MAIN", &main_lines());
+    let mut bytes = format!("{}\n", main.len()).into_bytes();
+    bytes.extend_from_slice(&main);
+
+    assert_eq!(parse_upd(&bytes), Err(UpdError::MalformedLengthHeader));
 }
 
 #[test]

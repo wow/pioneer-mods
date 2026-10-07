@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use patch_core::{apply_recipe, read_firmware};
+use patch_core::{apply_recipe, firmware_file_name, read_regular_file};
 use patch_schema::RecipeManifest;
 use std::fs;
 use std::io::Write;
@@ -34,7 +34,8 @@ pub fn patch(args: PatchArgs) -> Result<()> {
         )
     })?;
 
-    let (input_identity, input_bytes) = read_firmware(&args.input)
+    // The engine hashes the bytes itself; reading without hashing avoids a second full pass.
+    let input_bytes = read_regular_file(&args.input)
         .with_context(|| format!("failed to read input firmware '{}'", args.input.display()))?;
     let outcome = apply_recipe(&manifest, &input_bytes).with_context(|| {
         format!(
@@ -52,7 +53,7 @@ pub fn patch(args: PatchArgs) -> Result<()> {
         "matched_target: {} {}",
         outcome.target.model, outcome.target.version
     );
-    println!("input_file: {}", input_identity.file_name);
+    println!("input_file: {}", firmware_file_name(&args.input));
     println!("input_sha256_hex: {}", outcome.input_sha256_hex);
     println!("output_file: {}", args.output.display());
     println!("output_sha256_hex: {}", outcome.output_sha256_hex);

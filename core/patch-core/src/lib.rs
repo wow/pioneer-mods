@@ -9,6 +9,6 @@ pub use error::{
 };
 pub use identity::{
     FirmwareIdentity, firmware_file_name, identify_bytes, identify_firmware, read_firmware,
-    sha256_hex,
+    read_regular_file, sha256_hex,
 };
 pub use upd::{UpdContainer, parse_upd};
