@@ -9,7 +9,7 @@
 //! The checksum is the 16-bit sum of the size field and every compressed byte. According to
 //! DeckVolve, the boot loader verifies it and falls back to a smaller updater section on mismatch.
 
-use crate::error::SectionError;
+use crate::error::{LzssError, SectionError};
 use crate::identity::sha256_hex;
 use crate::lzss;
 use crate::upd::{DocumentImage, UpdContainer, UpdDocument};
@@ -115,6 +115,37 @@ pub fn decode_section(image: &[u8], offset: usize) -> Result<DecodedSection, Sec
         checksum: stored,
         decoded,
     })
+}
+
+/// Encodes `decoded` into complete section bytes (`[u32 LE size][stream][u16 LE checksum]`).
+///
+/// Self-checked before returning: the bytes are verified and decoded with [`decode_section`],
+/// and must reproduce `decoded` exactly.
+///
+/// # Errors
+///
+/// [`SectionError::Encode`] if the input cannot be encoded (for example a missing 19-byte zero
+/// prefix), [`SectionError::SectionTooLarge`] if the stream does not fit the `u32` size field, or
+/// [`SectionError::EncodeSelfCheckFailed`] if the result does not decode back to `decoded`.
+pub fn encode_section(decoded: &[u8]) -> Result<Vec<u8>, SectionError> {
+    if decoded.len() > MAX_DECODED_LEN {
+        return Err(SectionError::Encode(LzssError::InputTooLarge {
+            len: decoded.len(),
+        }));
+    }
+    let stream = lzss::encode_section_stream(decoded).map_err(SectionError::Encode)?;
+    let size = u32::try_from(stream.len())
+        .map_err(|_| SectionError::SectionTooLarge { len: stream.len() })?;
+    let mut bytes = Vec::with_capacity(SIZE_FIELD_LEN + stream.len() + CHECKSUM_LEN);
+    bytes.extend_from_slice(&size.to_le_bytes());
+    bytes.extend_from_slice(&stream);
+    let checksum = section_checksum(&bytes);
+    bytes.extend_from_slice(&checksum.to_le_bytes());
+
+    match decode_section(&bytes, 0) {
+        Ok(section) if section.decoded() == decoded => Ok(bytes),
+        _ => Err(SectionError::EncodeSelfCheckFailed),
+    }
 }
 
 /// The section checksum: 16-bit wrapping sum of `size_field_and_stream` (the `u32` size field

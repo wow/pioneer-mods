@@ -201,6 +201,15 @@ pub enum LzssError {
 
     #[error("LZSS output would exceed the {limit}-byte limit")]
     OutputLimitExceeded { limit: usize },
+
+    #[error("section data must start with the 19 zero bytes the section tag decodes to")]
+    MissingSectionSeed,
+
+    #[error("LZSS encoder input of {len} bytes is too large")]
+    InputTooLarge { len: usize },
+
+    #[error("LZSS encoder self-check failed at data offset {position}")]
+    EncoderSelfCheck { position: usize },
 }
 
 /// Why a compressed firmware section was refused.
@@ -244,4 +253,13 @@ pub enum SectionError {
 
     #[error("section stream could not be decoded: {0}")]
     Decode(#[from] LzssError),
+
+    #[error("section could not be encoded: {0}")]
+    Encode(LzssError),
+
+    #[error("encoded section stream of {len} bytes does not fit the u32 size field")]
+    SectionTooLarge { len: usize },
+
+    #[error("encoded section does not decode back to its input")]
+    EncodeSelfCheckFailed,
 }

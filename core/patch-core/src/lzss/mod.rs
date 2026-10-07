@@ -14,6 +14,10 @@
 
 use crate::error::LzssError;
 
+mod encode;
+
+pub use encode::{encode, encode_section_stream};
+
 pub const WINDOW_SIZE: usize = 4096;
 const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 pub const MIN_MATCH: usize = 3;

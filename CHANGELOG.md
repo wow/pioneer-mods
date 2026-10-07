@@ -59,6 +59,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   A container with more than one XDJ-700 MAIN document is refused as ambiguous. The MAIN image
   is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
   section is reported with its reason instead of failing the whole report.
+- Deterministic LZSS encoder (`patch_core::lzss::encode`, `encode_section_stream`). It is
+  decision-identical to DeckVolve's reference encoder: verified byte-identical on 6,800 random
+  inputs and on the official v1.15 application, and pinned in CI by golden vectors.
+- `patch_core::xdj700::encode_section` builds complete section bytes (size field, stream,
+  checksum). It is self-checked: the result must decode back to the input through
+  `decode_section`.
 - `patch_core::read_firmware` reads an input once and returns its identity plus the hashed
   bytes; `read_regular_file` reads without hashing. Both refuse non-regular files (directories,
   FIFOs, devices): the path is checked first, the file is opened non-blocking on Unix so a path

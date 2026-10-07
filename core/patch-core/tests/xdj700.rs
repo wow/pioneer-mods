@@ -278,3 +278,31 @@ fn decode_main_image_uses_a_prebuilt_image() {
 
     assert_eq!(Ok(decoded), decode_application(&parsed));
 }
+
+#[test]
+fn encode_section_roundtrips_through_decode_section() {
+    let mut decoded = vec![0; 19];
+    decoded.extend(b"application bytes ".repeat(50));
+
+    let bytes = patch_core::xdj700::encode_section(&decoded).expect("encode");
+    let section = decode_section(&bytes, 0).expect("decode");
+
+    assert_eq!(section.decoded(), decoded.as_slice());
+    let data_end = bytes.len() - 2;
+    assert_eq!(
+        u16::from_le_bytes([bytes[data_end], bytes[data_end + 1]]),
+        section_checksum(&bytes[..data_end])
+    );
+    assert_eq!(
+        u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize,
+        bytes.len() - 6
+    );
+}
+
+#[test]
+fn encode_section_refuses_data_without_seed() {
+    assert_eq!(
+        patch_core::xdj700::encode_section(b"no zero prefix"),
+        Err(SectionError::Encode(LzssError::MissingSectionSeed))
+    );
+}
