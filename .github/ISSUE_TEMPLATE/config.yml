@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/wow/pioneer-mods/discussions
+    about: Ask questions or discuss ideas before opening an issue.
+  - name: Report a security vulnerability
+    url: https://github.com/wow/pioneer-mods/security/advisories/new
+    about: Report security or device-safety problems privately. Do not open a public issue.

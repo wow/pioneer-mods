@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest a new capability or improvement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: For larger ideas, consider starting a Discussion first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+  - type: textarea
+    id: risks
+    attributes:
+      label: Safety and compatibility considerations
+      description: Could this affect device safety, compatibility gates, or deterministic output?
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have not attached or pasted any vendor firmware.
+          required: true

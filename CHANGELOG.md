@@ -9,6 +9,7 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ### Added
 - Initial project documentation for versioning, releasing, and safety disclaimers.
 - Open-source baseline docs: `LICENSE` and `CONTRIBUTING.md`.
+- Community health files: `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue templates, and pull request template.
 
 ### Changed
 
