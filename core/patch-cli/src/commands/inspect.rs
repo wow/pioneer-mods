@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use patch_core::upd::UpdSummary;
+use patch_core::upd::{ImageReport, MAX_IMAGE_LEN, MAX_TOTAL_IMAGE_LEN, UpdSummary};
 use patch_core::{FirmwareIdentity, identify_firmware, parse_upd, read_firmware};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -32,6 +32,10 @@ struct InspectReport {
     identity: FirmwareIdentity,
     #[serde(skip_serializing_if = "Option::is_none")]
     container: Option<UpdSummary>,
+    /// `true` once re-serializing the parsed container reproduced the input byte-for-byte
+    /// (present only with `--structure`; a failed roundtrip aborts the command).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    roundtrip_verified: Option<bool>,
 }
 
 pub fn inspect(args: InspectArgs) -> Result<()> {
@@ -47,6 +51,7 @@ pub fn inspect(args: InspectArgs) -> Result<()> {
         InspectReport {
             identity,
             container: None,
+            roundtrip_verified: None,
         }
     };
 
@@ -68,9 +73,24 @@ fn inspect_structure(input: &Path) -> Result<InspectReport> {
         .with_context(|| format!("failed to read input firmware '{}'", input.display()))?;
     let container = parse_upd(&bytes)
         .with_context(|| format!("input '{}' is not a valid .UPD container", input.display()))?;
+    // From here on the input is valid; any failure is a defect in patch-core, not in the file.
+    container.verify_reproduces(&bytes).with_context(|| {
+        format!(
+            "internal error: re-serializing '{}' did not reproduce it byte-for-byte; \
+             please report this as a patch-cli bug",
+            input.display()
+        )
+    })?;
+    let summary = container.summary().with_context(|| {
+        format!(
+            "internal error: failed to summarize '{}'; please report this as a patch-cli bug",
+            input.display()
+        )
+    })?;
     Ok(InspectReport {
         identity,
-        container: Some(container.summary()),
+        container: Some(summary),
+        roundtrip_verified: Some(true),
     })
 }
 
@@ -82,6 +102,9 @@ fn print_text(report: &InspectReport) {
         return;
     };
     println!("documents: {}", container.documents.len());
+    if report.roundtrip_verified == Some(true) {
+        println!("roundtrip: byte-identical");
+    }
     for doc in &container.documents {
         let prefix = format!("document[{}]", doc.index);
         println!(
@@ -106,6 +129,20 @@ fn print_text(report: &InspectReport) {
             .map(|extent| format!("0x{:06X}..0x{:06X}", extent.start, extent.end))
             .collect();
         println!("{prefix}.extents: {}", extents.join(" "));
+        match &doc.image {
+            ImageReport::Reconstructed { base, len, sha256 } => {
+                println!("{prefix}.image: base={base} len={len} sha256={sha256}");
+            }
+            ImageReport::SpanExceedsCap => println!(
+                "{prefix}.image: not reconstructed (span {} bytes exceeds the {MAX_IMAGE_LEN}-byte cap)",
+                doc.image_span
+            ),
+            ImageReport::BudgetExhausted => println!(
+                "{prefix}.image: not reconstructed (span {} bytes; the {MAX_TOTAL_IMAGE_LEN}-byte \
+                 total image budget is used up)",
+                doc.image_span
+            ),
+        }
         println!(
             "{prefix}.descriptor: reserved_hex={} header=\"{}\"",
             doc.reserved_hex, doc.header_text

@@ -1,6 +1,8 @@
 //! Serializable structure report for `patch-cli inspect --structure`.
 
-use super::{SRecordType, UpdContainer, UpdDocument};
+use super::{MAX_TOTAL_IMAGE_LEN, SRecordType, UpdContainer, UpdDocument};
+use crate::error::UpdError;
+use crate::identity::sha256_hex;
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -29,6 +31,10 @@ pub struct DocumentSummary {
     pub termination_type: SRecordType,
     /// Entry/start address from the termination record, formatted `0xNNNNNNNN`.
     pub entry_address: String,
+    /// Bytes from the first data byte to the end of the last data record.
+    pub image_span: u64,
+    /// Reconstructed image identity, or why it was not reconstructed.
+    pub image: ImageReport,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -37,25 +43,52 @@ pub struct Extent {
     pub end: u64,
 }
 
+/// Image reconstruction outcome for one document.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ImageReport {
+    /// Identity of the reconstructed memory image (gaps filled with `0xFF`).
+    Reconstructed {
+        /// Start address, formatted `0xNNNNNNNN`.
+        base: String,
+        len: u64,
+        sha256: String,
+    },
+    /// The span exceeds the per-document cap [`super::MAX_IMAGE_LEN`].
+    SpanExceedsCap,
+    /// Earlier documents used up the container-wide budget [`MAX_TOTAL_IMAGE_LEN`].
+    BudgetExhausted,
+}
+
 impl UpdContainer {
-    pub fn summary(&self) -> UpdSummary {
-        UpdSummary {
-            documents: self
-                .documents()
-                .iter()
-                .enumerate()
-                .map(|(index, document)| document.summary(index))
-                .collect(),
-        }
+    /// Summarizes every document, reconstructing and hashing images within the container-wide
+    /// budget [`MAX_TOTAL_IMAGE_LEN`]. Images over the per-document cap or the remaining budget are
+    /// reported with the reason, so they never hide the rest of the structure report.
+    ///
+    /// # Errors
+    ///
+    /// Any image error other than the per-document cap (none exist today); such errors are
+    /// propagated rather than reported as a skipped image.
+    pub fn summary(&self) -> Result<UpdSummary, UpdError> {
+        let mut budget = MAX_TOTAL_IMAGE_LEN;
+        let documents = self
+            .documents()
+            .iter()
+            .map(|document| document.summary(&mut budget))
+            .collect::<Result<_, _>>()?;
+        Ok(UpdSummary { documents })
     }
 }
 
 impl UpdDocument {
-    fn summary(&self, index: usize) -> DocumentSummary {
+    fn summary(&self, budget: &mut u64) -> Result<DocumentSummary, UpdError> {
         let descriptor = self.descriptor();
         let data = self.data_records();
-        DocumentSummary {
-            index,
+        let span = self.image_span();
+        let image_span = span.end - span.start;
+        let image = self.image_report(image_span, budget)?;
+        Ok(DocumentSummary {
+            index: self.index(),
             offset: self.offset(),
             length: self.length(),
             model: descriptor.model().to_owned(),
@@ -77,6 +110,27 @@ impl UpdDocument {
                 .collect(),
             termination_type: self.termination().record_type(),
             entry_address: format!("0x{:08X}", self.termination().address()),
+            image_span,
+            image,
+        })
+    }
+
+    /// The budget is checked before allocating; the per-document cap is enforced by `image()`.
+    fn image_report(&self, image_span: u64, budget: &mut u64) -> Result<ImageReport, UpdError> {
+        if image_span > *budget {
+            return Ok(ImageReport::BudgetExhausted);
+        }
+        match self.image() {
+            Ok(image) => {
+                *budget -= image_span;
+                Ok(ImageReport::Reconstructed {
+                    base: format!("0x{:08X}", image.base()),
+                    len: image.bytes().len() as u64,
+                    sha256: sha256_hex(image.bytes()),
+                })
+            }
+            Err(UpdError::ImageTooLarge { .. }) => Ok(ImageReport::SpanExceedsCap),
+            Err(error) => Err(error),
         }
     }
 }

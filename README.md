@@ -27,6 +27,8 @@ This repository currently includes:
   (I/O-free engine in `patch-core` via `apply_recipe`; `patch-cli` handles files only)
 - CI checks for format/lint/test
 - Read-only `.UPD` container parser (`inspect --structure`)
+- Canonical `.UPD` serializer with self-check, byte-exact no-op roundtrip, and memory image
+  reconstruction
 
 Container-aware section codecs/repacking are still in progress.
 
@@ -50,10 +52,20 @@ cargo run -p patch-cli -- inspect --input /path/to/XDJ700.UPD --format json
 ```
 
 Inspect the `.UPD` container structure (documents, CRC-16 trailers, S-record layout, address
-extents). This is read-only and refuses malformed containers:
+extents, reconstructed image identities). This is read-only and refuses malformed containers.
+It also proves that re-serializing the parsed container reproduces the input byte-for-byte
+(`roundtrip: byte-identical`):
 
 ```bash
 cargo run -p patch-cli -- inspect --input /path/to/XDJ700.UPD --structure
+```
+
+Validate the parser and serializer against your own official XDJ-700 v1.15 update (local only;
+never commit firmware):
+
+```bash
+PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD \
+  cargo test -p patch-core --test official_firmware -- --ignored
 ```
 
 Apply a compatibility-gated recipe manifest:

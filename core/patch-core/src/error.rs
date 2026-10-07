@@ -143,6 +143,18 @@ pub enum UpdError {
         record_index: usize,
         violation: LayoutViolation,
     },
+
+    #[error("serializer self-check failed: output does not re-parse to the same container")]
+    SerializerSelfCheckFailed,
+
+    #[error("serializer self-check failed: output does not parse: {0}")]
+    SerializerOutputUnparseable(Box<UpdError>),
+
+    #[error("round trip is not byte-identical: first difference at byte offset {offset}")]
+    RoundTripMismatch { offset: usize },
+
+    #[error("document[{document_index}] image span of {span} bytes exceeds the supported maximum")]
+    ImageTooLarge { document_index: usize, span: u64 },
 }
 
 /// Why a single S-record line was rejected.
