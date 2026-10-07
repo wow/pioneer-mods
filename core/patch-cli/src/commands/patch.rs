@@ -272,7 +272,10 @@ fn resolve_for_comparison(path: &Path) -> Result<PathBuf> {
 }
 
 fn write_output_atomically(output_path: &Path, bytes: &[u8], force: bool) -> Result<()> {
-    let output_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
+    let output_dir = match output_path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir,
+        _ => Path::new("."),
+    };
     let mut temp_file = NamedTempFile::new_in(output_dir).with_context(|| {
         format!(
             "failed to create temporary output file in '{}'",
