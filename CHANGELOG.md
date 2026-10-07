@@ -60,11 +60,14 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
   section is reported with its reason instead of failing the whole report.
 - Deterministic LZSS encoder (`patch_core::lzss::encode`, `encode_section_stream`). It is
-  decision-identical to DeckVolve's reference encoder: verified byte-identical on 6,800 random
-  inputs and on the official v1.15 application, and pinned in CI by golden vectors.
+  decision-identical to DeckVolve's reference encoder. It was verified byte-identical on random,
+  exhaustive and adversarial inputs and on the official v1.15 application. CI pins golden vectors
+  for each search decision: history insertion order, probe order, the 4096 window edge, a binding
+  candidate cap, and the early exit.
 - `patch_core::xdj700::encode_section` builds complete section bytes (size field, stream,
   checksum). It is self-checked: the result must decode back to the input through
-  `decode_section`.
+  `decode_section`, and on failure it reports the decode error or the mismatch. Inputs larger
+  than the 64 MiB decode cap are refused up front.
 - `patch_core::read_firmware` reads an input once and returns its identity plus the hashed
   bytes; `read_regular_file` reads without hashing. Both refuse non-regular files (directories,
   FIFOs, devices): the path is checked first, the file is opened non-blocking on Unix so a path

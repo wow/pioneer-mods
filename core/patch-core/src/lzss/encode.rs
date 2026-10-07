@@ -13,14 +13,15 @@
 //!
 //! This is not claimed to be the stock packer's heuristic; stock sections compress differently.
 
-use super::{INITIAL_WRITE_INDEX, MAX_MATCH, MIN_MATCH, RING_FILL, WINDOW_SIZE};
+use super::{INITIAL_WRITE_INDEX, MAX_MATCH, MIN_MATCH, RING_FILL, SECTION_TAG, WINDOW_SIZE};
 use crate::error::LzssError;
 use std::collections::HashMap;
 
 const WINDOW_MASK: usize = WINDOW_SIZE - 1;
+/// The reference scans at most this many newest candidates. The cap never binds: in-window
+/// sources lie in `current-4096..=current-3` (at most 4094 of them), and the only entries that
+/// can be newer than an in-window one while outside the window are `-2` and `-1`.
 const MAX_CANDIDATES: usize = 4096;
-/// Stock section tag, consumed as stream data: a literal `0x00` and an 18-byte match of it.
-const SECTION_TAG: [u8; 4] = [0x01, 0x00, 0xEE, 0xFF];
 /// Decoded bytes produced by [`SECTION_TAG`].
 const SECTION_SEED_LEN: usize = 19;
 
@@ -221,6 +222,12 @@ impl<'a> CandidateIndex<'a> {
         if let Some(candidates) = self.buckets.get(&key) {
             for &source in candidates.iter().rev().take(MAX_CANDIDATES) {
                 let source = i64::from(source);
+                if source >= 0 && source < lower_bound {
+                    // Data sources are indexed in ascending order, so every older entry is out of
+                    // the window too; negative history entries are then also out (current > 4096).
+                    // Not applied to `-2`/`-1`, which can precede in-window data positions.
+                    break;
+                }
                 if source < lower_bound || source >= current {
                     continue;
                 }

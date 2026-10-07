@@ -306,3 +306,27 @@ fn encode_section_refuses_data_without_seed() {
         Err(SectionError::Encode(LzssError::MissingSectionSeed))
     );
 }
+
+#[test]
+fn encode_section_refuses_input_above_decode_cap() {
+    let decoded = vec![0; MAX_DECODED_LEN + 1];
+
+    assert_eq!(
+        patch_core::xdj700::encode_section(&decoded),
+        Err(SectionError::Encode(LzssError::InputTooLarge {
+            len: MAX_DECODED_LEN + 1
+        }))
+    );
+}
+
+#[test]
+fn encode_section_accepts_input_at_decode_cap() {
+    let decoded = vec![0; MAX_DECODED_LEN];
+
+    let bytes = patch_core::xdj700::encode_section(&decoded).expect("at the cap");
+
+    assert_eq!(
+        decode_section(&bytes, 0).map(|section| section.decoded().len()),
+        Ok(MAX_DECODED_LEN)
+    );
+}

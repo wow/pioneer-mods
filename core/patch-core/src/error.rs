@@ -260,6 +260,9 @@ pub enum SectionError {
     #[error("encoded section stream of {len} bytes does not fit the u32 size field")]
     SectionTooLarge { len: usize },
 
-    #[error("encoded section does not decode back to its input")]
-    EncodeSelfCheckFailed,
+    #[error("encoded section failed its self-check: it does not decode: {0}")]
+    EncodeSelfCheckDecode(Box<SectionError>),
+
+    #[error("encoded section failed its self-check: it decodes to different bytes")]
+    EncodeSelfCheckMismatch,
 }

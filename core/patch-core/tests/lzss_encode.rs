@@ -1,8 +1,8 @@
 //! Encoder tests. Golden vectors were produced by DeckVolve's `lzss_pioneer.py` encoder (MIT);
 //! matching them byte-for-byte keeps our encoder decision-identical to that reference.
 
-use patch_core::LzssError;
 use patch_core::lzss::{decode, encode, encode_section_stream};
+use patch_core::{LzssError, sha256_hex};
 
 fn unhex(text: &str) -> Vec<u8> {
     (0..text.len())
@@ -154,5 +154,97 @@ fn reference_vectors_pin_search_decisions() {
     for (input, expected) in cases {
         let input = unhex(&input.replace(' ', ""));
         assert_eq!(encode(&input), Ok(unhex(&expected.replace(' ', ""))));
+    }
+}
+
+#[test]
+fn reference_vectors_pin_history_insertion_and_probe_order() {
+    // `-2` is indexed before `-1`; swapping them changes which history source wins.
+    assert_eq!(encode(&unhex("20202000202020")), Ok(unhex("02ebf000edf0")));
+    // Distance 1 is probed before distance 2; the first strictly longer match wins.
+    assert_eq!(
+        encode(&unhex("4141204141414141")),
+        Ok(unhex("034141edf0f2f0"))
+    );
+}
+
+/// A 40-byte block repeated at distance exactly 4096 (the window edge).
+fn window_edge_input() -> Vec<u8> {
+    let block: Vec<u8> = (0..40u32).map(|i| ((i * 37 + 11) & 0xFF) as u8).collect();
+    let mut data = block.clone();
+    data.extend((0..4096 - 40u32).map(|i| ((i * i * 7 + i * 13 + 5) & 0xFF) as u8));
+    data.extend(block);
+    data
+}
+
+/// 6000 bytes with the same 3-byte key every 4 bytes (dense candidate lists).
+fn dense_key_input() -> Vec<u8> {
+    (0..1500u32)
+        .flat_map(|i| [b'a', b'b', b'c', b"xyz"[((i * i + 3 * i) % 3) as usize]])
+        .collect()
+}
+
+/// A long match that is older than 1300 newer same-key candidates (each matching 3 bytes), all
+/// inside the window, so any candidate cap of 1300 or less changes the chosen match.
+fn cap_binding_input() -> Vec<u8> {
+    let block: Vec<u8> = b"abc".iter().copied().chain(0xA0..0xA0 + 18).collect();
+    let mut data = block.clone();
+    data.extend(b"abc".repeat(1300));
+    // Separator: stops a period-3 match running into the block, forcing a fresh search there.
+    data.extend([0x01, 0x02]);
+    data.extend(block);
+    data
+}
+
+/// Starts with three spaces, so history sources `-2`/`-1` share its key's bucket; the repeat at
+/// distance 4096 is reachable only by scanning past those (then out-of-window) history entries.
+fn history_break_input() -> Vec<u8> {
+    let unique: Vec<u8> = (0xC0..0xC0 + 17).collect();
+    let filler = (0..4096 - 20u32).map(|i| match ((i * i * 7 + i * 13 + 5) & 0xFF) as u8 {
+        0x20 => 0x21,
+        byte => byte,
+    });
+    let mut data = b"   ".to_vec();
+    data.extend(&unique);
+    data.extend(filler);
+    data.extend(b"   ");
+    data.extend(unique);
+    data
+}
+
+#[test]
+fn reference_vectors_pin_window_edge_and_dense_candidates() {
+    // Expected streams come from the reference encoder; pinned by length and SHA-256.
+    let cases = [
+        (
+            window_edge_input(),
+            "ed105fe9b812be12cd79c4427bf6c412cf5765f6a57561a8037452a5b1eabbf3",
+            790,
+            "38b0fde92e00cec219876106cb81985852650397eb057785fc9e71cf65411c99",
+        ),
+        (
+            dense_key_input(),
+            "966c4de7a220a1cc54d72a16b622f3a5ef68cb36c19a214c181090930f2d0703",
+            718,
+            "4b71deefd511641f8aadd7db558ad3963318206c53bb836aec517d541e435891",
+        ),
+        (
+            cap_binding_input(),
+            "bcb603883319b4a5123ab0c4a94953d23517385ee49d8f2b4adfa2959d046ca9",
+            494,
+            "23bfe931d726984700b912249ce8619fe150498528197b39f1185188720dd0e1",
+        ),
+        (
+            history_break_input(),
+            "b533763870124e069f72b47aa570cb2d7490dc9d5c3eb84fa029d3d76ad9a272",
+            767,
+            "1925eec9d335a40e0e0da106a977c1d1df5d74f5178e419e38f4124d76202a03",
+        ),
+    ];
+    for (input, input_sha, stream_len, stream_sha) in cases {
+        assert_eq!(sha256_hex(&input), input_sha, "fixture input drifted");
+        let stream = encode(&input).expect("encode");
+        assert_eq!(stream.len(), stream_len);
+        assert_eq!(sha256_hex(&stream), stream_sha);
     }
 }
