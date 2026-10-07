@@ -251,6 +251,7 @@ version = "0.1.0-alpha.0"
 dependencies = [
  "anyhow",
  "clap",
+ "libc",
  "patch-core",
  "patch-schema",
  "serde",

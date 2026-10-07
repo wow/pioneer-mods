@@ -33,10 +33,11 @@ This repository currently includes:
   encoding (byte-identical to the reference encoder)
 - XDJ-700 `.UPD` rebuild around a modified application (`xdj700::rebuild_with_application`),
   verified against its input by `xdj700::verify_rebuild`. It reproduces the reference alpha.2
-  update byte-for-byte. Library only for now.
+  update byte-for-byte.
+- `rebuild` command: writes a verified no-op rebuild of the official v1.15 update (stock
+  application re-encoded) under a declared version label
 
-A CLI command that writes rebuilt updates, and recipes that target the decoded application,
-are still in progress.
+Recipes that target the decoded application are still in progress.
 
 ## Quick start (developer)
 
@@ -90,6 +91,31 @@ Notes:
 - `patch` currently writes byte spans to the raw input file. It does not yet rebuild `.UPD`
   CRCs, S-record checksums, or compressed-section checksums, so it cannot produce an installable
   update yet. Do not flash its output.
+
+Rebuild the official XDJ-700 v1.15 update around its own, unchanged application (a no-op
+rebuild, the first hardware test candidate):
+
+```bash
+cargo run --release -p patch-cli -- rebuild \
+  --input /path/to/XDJ700.UPD \
+  --application stock \
+  --label Ver1.15 \
+  --output /path/to/new-dir/XDJ700.UPD
+```
+
+Notes:
+- Only the official v1.15 file is accepted (checked by SHA-256). A rebuilt file is never
+  accepted as input.
+- `--label` is required. Which labels the device's updater accepts is not yet confirmed.
+- The output must not exist; it is never overwritten. The rebuild is verified against the input
+  before it is written. It is then written atomically, after its temporary file has been read
+  back through the file system. Write to a local disk, then copy the file to a FAT32 stick
+  (on macOS the writer refuses exFAT).
+- With `--label Ver1.15` the output is always 17,368,545 bytes with SHA-256
+  `f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c`.
+- Flashing any rebuilt file is at your own risk. Read
+  [docs/xdj700-flashing.md](./docs/xdj700-flashing.md) first: it covers the stages, how to check
+  the file on the USB stick itself, and recovery.
 
 ## Code quality baseline
 

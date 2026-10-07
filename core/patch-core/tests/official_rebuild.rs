@@ -17,7 +17,7 @@
 
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115, decode_application, rebuild_with_application,
-    verify_rebuild,
+    rebuild_with_stock_application, verify_rebuild,
 };
 use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex};
 use std::path::PathBuf;
@@ -66,6 +66,10 @@ fn noop_rebuild_of_official_v115_is_pinned_and_deterministic() {
         .expect("rerun");
 
     assert_eq!(first, second, "reruns must be byte-identical");
+    let from_stock =
+        rebuild_with_stock_application(&official, &OFFICIAL_V115, "Ver1.15").expect("stock");
+    assert_eq!(from_stock, first);
+    assert_eq!(from_stock.application_sha256(), stock.decoded_sha256());
     assert_eq!(first.main_image_len(), NOOP_MAIN_LEN);
     assert_eq!(
         first.main_image_len() - APPLICATION_SECTION_OFFSET,

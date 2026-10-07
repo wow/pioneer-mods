@@ -59,6 +59,25 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   A container with more than one XDJ-700 MAIN document is refused as ambiguous. The MAIN image
   is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
   section is reported with its reason instead of failing the whole report.
+- `patch-cli rebuild --input <official .UPD> --application stock --label <VerX.YY> --output
+  <new file>` writes a no-op rebuild of the official XDJ-700 v1.15 update: the stock
+  application re-encoded under the declared label.
+  - It refuses any input other than the pinned official file: the length is checked on the
+    open handle before anything is read, then the library checks the hash. A malformed label,
+    a missing output directory, or an existing output (including a dangling symlink) is refused
+    before the input is read.
+  - The output is never overwritten. It is written atomically: the temporary file is
+    fsynced and read back (streamed, in chunks) before a no-clobber rename, so only verified
+    bytes ever appear under the output name. Then the directory is synced. If that fails, the
+    verified file is kept and the error says durability is not confirmed.
+  - A file system that may lack a no-clobber rename (ENOTSUP/EOPNOTSUPP, or EPERM from the
+    Linux hard-link fallback) gets a hint to write to a local disk.
+  - `xdj700::rebuild_with_stock_application` rebuilds with the input's own application, parsing
+    the input once. `StockRelease` also pins `upd_len`. `RebuiltUpdate` reports the decoded
+    application's SHA-256. `patch_core::open_regular_file` is public.
+  - It reports input, application, MAIN image and output identities.
+  - `patch_core::xdj700::validate_version_label` is now public.
+  - Owner guide for flashing rebuilt files: `docs/xdj700-flashing.md`.
 - `patch_core::xdj700::rebuild_with_application` rebuilds a complete XDJ-700 `.UPD` around a
   new decoded application:
   - it encodes the section and places it after the input's unchanged loader region, dropping
@@ -96,6 +115,10 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
+- `patch-cli` output-file safety (input-path check, no-clobber atomic write) moved to a
+  library module, `patch_cli::output`, used by `patch` and `rebuild` and tested directly.
+  `patch` output is now also read back before it is renamed into place. The overwrite refusal
+  names the fix that applies to each command: `--force` for `patch`, a new path for `rebuild`.
 - `patch-core` builds with `opt-level = 1` in the dev/test profile, so codec tests on 64 MiB
   inputs stay fast. Debug assertions and overflow checks remain enabled.
 - Local Python validation instructions now use the same entrypoint as CI (`scripts/run_python_quality.sh`).

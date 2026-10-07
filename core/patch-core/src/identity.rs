@@ -86,7 +86,7 @@ pub fn firmware_file_name(path: &Path) -> String {
 /// opened with `O_NONBLOCK`, so a path swapped to a FIFO after the check cannot block `open()`.
 /// The open handle is checked again before any read; `O_NONBLOCK` has no effect on reads from a
 /// regular file.
-fn open_regular_file(path: &Path) -> Result<File, PatchCoreError> {
+pub fn open_regular_file(path: &Path) -> Result<File, PatchCoreError> {
     let not_a_file = || PatchCoreError::InputNotAFile {
         path: path.to_string_lossy().into_owned(),
     };

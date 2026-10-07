@@ -149,9 +149,10 @@ pub fn other_document() -> Vec<u8> {
 /// Size bound for synthetic releases: the loader region plus 64 KiB.
 pub const SYNTHETIC_MAX_MAIN_IMAGE_LEN: usize = APPLICATION_SECTION_OFFSET + 64 * 1024;
 
-/// A synthetic release pinned to the stock file whose SHA-256 is `sha256`.
-pub fn release(sha256: &str) -> StockRelease<'_> {
+/// A synthetic release pinned to the stock file of `len` bytes whose SHA-256 is `sha256`.
+pub fn release(len: usize, sha256: &str) -> StockRelease<'_> {
     StockRelease {
+        upd_len: len,
         upd_sha256: sha256,
         max_main_image_len: SYNTHETIC_MAX_MAIN_IMAGE_LEN,
     }
@@ -160,7 +161,7 @@ pub fn release(sha256: &str) -> StockRelease<'_> {
 /// Rebuilds `stock`, pinned as its own synthetic release.
 pub fn rebuild(stock: &[u8], decoded: &[u8], label: &str) -> Result<RebuiltUpdate, RebuildError> {
     let sha256 = sha256_hex(stock);
-    rebuild_with_application(stock, &release(&sha256), decoded, label)
+    rebuild_with_application(stock, &release(stock.len(), &sha256), decoded, label)
 }
 
 /// Verifies `output` against `stock`, pinned as its own synthetic release.
@@ -171,5 +172,11 @@ pub fn verify(
     label: &str,
 ) -> Result<(), RebuildError> {
     let sha256 = sha256_hex(stock);
-    verify_rebuild(stock, &release(&sha256), output, decoded, label)
+    verify_rebuild(
+        stock,
+        &release(stock.len(), &sha256),
+        output,
+        decoded,
+        label,
+    )
 }

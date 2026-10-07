@@ -42,6 +42,9 @@ pub const MAX_MAIN_GROWTH: usize = 256 * 1024;
 /// Production code, including the CLI, must never construct a release from user input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StockRelease<'a> {
+    /// Length of the complete official `.UPD`, checked before its hash (and before reading, by
+    /// callers that can).
+    pub upd_len: usize,
     /// SHA-256 of the complete official `.UPD` (lowercase hex). Only this exact file is accepted
     /// as input, so the loader, PANL and framing a rebuild keeps are the vendor's own.
     pub upd_sha256: &'a str,
@@ -51,6 +54,7 @@ pub struct StockRelease<'a> {
 
 /// Official XDJ-700 v1.15 (`XDJ700.UPD`, 17,371,335 bytes; MAIN image 7,251,904 bytes).
 pub const OFFICIAL_V115: StockRelease<'static> = StockRelease {
+    upd_len: 17_371_335,
     upd_sha256: "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
     max_main_image_len: 0x6E_A7C0 + MAX_MAIN_GROWTH,
 };
@@ -64,6 +68,7 @@ pub struct RebuiltUpdate {
     sha256: String,
     main_image_len: usize,
     main_image_sha256: String,
+    application_sha256: String,
 }
 
 impl RebuiltUpdate {
@@ -91,6 +96,11 @@ impl RebuiltUpdate {
     pub fn main_image_sha256(&self) -> &str {
         &self.main_image_sha256
     }
+
+    /// SHA-256 of the decoded application, as decoded from the verified bytes.
+    pub fn application_sha256(&self) -> &str {
+        &self.application_sha256
+    }
 }
 
 /// Rebuilds `input`, which must be the `release` file, so that its application decodes to
@@ -111,8 +121,36 @@ pub fn rebuild_with_application(
     decoded: &[u8],
     version: &str,
 ) -> Result<RebuiltUpdate, RebuildError> {
-    check_version_label(version)?;
+    validate_version_label(version)?;
     let stock = StockMain::load(input, release)?;
+    rebuild_from(&stock, input, decoded, version)
+}
+
+/// [`rebuild_with_application`] with the input's own application, unchanged: a no-op rebuild
+/// that only re-encodes it. The input is parsed once.
+///
+/// # Errors
+///
+/// As [`rebuild_with_application`], plus [`RebuildError::InputSection`] if the stock application
+/// cannot be decoded.
+pub fn rebuild_with_stock_application(
+    input: &[u8],
+    release: &StockRelease<'_>,
+    version: &str,
+) -> Result<RebuiltUpdate, RebuildError> {
+    validate_version_label(version)?;
+    let stock = StockMain::load(input, release)?;
+    let application = decode_section(stock.image.bytes(), APPLICATION_SECTION_OFFSET)
+        .map_err(RebuildError::InputSection)?;
+    rebuild_from(&stock, input, application.decoded(), version)
+}
+
+fn rebuild_from(
+    stock: &StockMain,
+    input: &[u8],
+    decoded: &[u8],
+    version: &str,
+) -> Result<RebuiltUpdate, RebuildError> {
     let main = stock.main();
 
     let section = encode_section(decoded).map_err(RebuildError::Encode)?;
@@ -126,7 +164,7 @@ pub fn rebuild_with_application(
     let descriptor = main
         .descriptor()
         .with_version(version)
-        .expect("check_version_label guarantees a 7-byte printable label");
+        .expect("validate_version_label guarantees a 7-byte printable label");
 
     let parts: Vec<DocumentParts<'_>> = stock
         .container
@@ -153,6 +191,7 @@ pub fn rebuild_with_application(
         bytes,
         main_image_len: verified.len,
         main_image_sha256: verified.sha256,
+        application_sha256: verified.application_sha256,
     })
 }
 
@@ -178,7 +217,7 @@ pub fn verify_rebuild(
     decoded: &[u8],
     version: &str,
 ) -> Result<(), RebuildError> {
-    check_version_label(version)?;
+    validate_version_label(version)?;
     StockMain::load(input, release)?
         .verify(input, output, decoded, version)
         .map(|_| ())
@@ -188,6 +227,7 @@ pub fn verify_rebuild(
 struct VerifiedMain {
     len: usize,
     sha256: String,
+    application_sha256: String,
 }
 
 /// The verified input: its container, single MAIN document, image, extents and size bound.
@@ -202,7 +242,7 @@ struct StockMain {
 impl StockMain {
     fn load(input: &[u8], release: &StockRelease<'_>) -> Result<Self, RebuildError> {
         let sha256 = sha256_hex(input);
-        if sha256 != release.upd_sha256 {
+        if input.len() != release.upd_len || sha256 != release.upd_sha256 {
             return Err(RebuildError::UnpinnedInput { sha256 });
         }
         let container = verify_roundtrip(input).map_err(RebuildError::Input)?;
@@ -314,6 +354,7 @@ impl StockMain {
         Ok(VerifiedMain {
             len: image.bytes().len(),
             sha256: sha256_hex(image.bytes()),
+            application_sha256: section.decoded_sha256(),
         })
     }
 }
@@ -326,8 +367,13 @@ fn document_bytes<'a>(container_bytes: &'a [u8], document: &UpdDocument) -> &'a 
     &container_bytes[document.offset()..document.offset() + document.length()]
 }
 
-/// XDJ-700 MAIN labels have the form `VerX.YY`.
-fn check_version_label(version: &str) -> Result<(), RebuildError> {
+/// Checks that `version` is an XDJ-700 MAIN label of the form `VerX.YY`, as every rebuild
+/// requires.
+///
+/// # Errors
+///
+/// [`RebuildError::InvalidVersionLabel`] otherwise.
+pub fn validate_version_label(version: &str) -> Result<(), RebuildError> {
     let bytes = version.as_bytes();
     let valid = matches!(bytes, [b'V', b'e', b'r', major, b'.', minor @ ..]
         if major.is_ascii_digit() && minor.len() == 2 && minor.iter().all(u8::is_ascii_digit));

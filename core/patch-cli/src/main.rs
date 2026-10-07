@@ -2,7 +2,7 @@ mod commands;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use commands::{InspectArgs, PatchArgs, inspect, patch};
+use commands::{InspectArgs, PatchArgs, RebuildArgs, inspect, patch, rebuild};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -21,6 +21,9 @@ enum Commands {
     Inspect(InspectArgs),
     /// Apply a patch recipe to a compatible firmware input.
     Patch(PatchArgs),
+    /// Rebuild the official XDJ-700 v1.15 update around an application (verified, never
+    /// overwrites).
+    Rebuild(RebuildArgs),
 }
 
 fn main() -> Result<()> {
@@ -32,5 +35,6 @@ fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Commands::Inspect(args) => inspect(args),
         Commands::Patch(args) => patch(args),
+        Commands::Rebuild(args) => rebuild(args),
     }
 }

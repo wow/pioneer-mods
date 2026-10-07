@@ -1,3 +1,6 @@
+// Each test crate uses a different subset of these helpers.
+#![allow(dead_code)]
+
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
