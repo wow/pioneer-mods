@@ -110,8 +110,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ### Changed
 - `patch-cli` output-file safety (input-path check, no-clobber atomic write) moved to a
   library module, `patch_cli::output`, used by `patch` and `rebuild` and tested directly.
-  `patch` output is now also read back before it is renamed into place. The overwrite refusal names the fix that applies to each
-  command: `--force` for `patch`, a new path for `rebuild`.
+  `patch` output is now also read back before it is renamed into place. The overwrite refusal
+  names the fix that applies to each command: `--force` for `patch`, a new path for `rebuild`.
 - `patch-core` builds with `opt-level = 1` in the dev/test profile, so codec tests on 64 MiB
   inputs stay fast. Debug assertions and overflow checks remain enabled.
 - Local Python validation instructions now use the same entrypoint as CI (`scripts/run_python_quality.sh`).

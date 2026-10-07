@@ -139,11 +139,13 @@ pub fn write_output_atomically(
         temp_file.persist_noclobber(output_path)
     };
     persist_result.map_err(|error| match error.error.kind() {
-        ErrorKind::AlreadyExists if overwrite != Overwrite::Forced => overwrite.refusal(output_path),
+        ErrorKind::AlreadyExists if overwrite != Overwrite::Forced => {
+            overwrite.refusal(output_path)
+        }
         _ if no_clobber_unsupported(&error.error) => anyhow::anyhow!(
             "failed to atomically persist output firmware '{}': {}; the output file system does \
-             not support a no-clobber rename (for example exFAT). Write to a local disk first, then \
-             copy the file to a FAT32 USB stick and check its SHA-256 there",
+             not support a no-clobber rename (for example exFAT). Write to a local disk first, \
+             then copy the file to a FAT32 USB stick and check its SHA-256 there",
             output_path.display(),
             error.error
         ),
@@ -173,7 +175,10 @@ pub fn write_output_atomically(
 /// `ENOTSUP`, 45), so the raw codes are checked too.
 fn no_clobber_unsupported(error: &std::io::Error) -> bool {
     #[cfg(unix)]
-    let raw = matches!(error.raw_os_error(), Some(code) if code == libc::ENOTSUP || code == libc::EOPNOTSUPP);
+    let raw = {
+        let code = error.raw_os_error();
+        code == Some(libc::ENOTSUP) || code == Some(libc::EOPNOTSUPP)
+    };
     #[cfg(not(unix))]
     let raw = false;
     raw || error.kind() == ErrorKind::Unsupported

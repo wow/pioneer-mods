@@ -109,7 +109,8 @@ Notes:
 - `--label` is required. Which labels the device's updater accepts is not yet confirmed.
 - The output must not exist; it is never overwritten. The rebuild is verified against the input
   before it is written. It is then written atomically, after its temporary file has been read
-  back through the file system. Write to a local disk; exFAT is refused.
+  back through the file system. Write to a local disk, then copy the file to a FAT32 stick
+  (on macOS the writer refuses exFAT).
 - With `--label Ver1.15` the output is always 17,368,545 bytes with SHA-256
   `f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c`.
 - Flashing any rebuilt file is at your own risk. Read

@@ -31,17 +31,20 @@ refused too. A refusal is harmless. Do not try other labels without a plan.
 ## 2. Before every flash
 
 1. **Power:** mains power. Never power off or pull the USB stick during an update.
-2. **Write the file to a local disk first**, not straight to the stick:
+2. **Write the file to a local disk first**, not straight to the stick. From the repository
+   root (the output directory must exist):
 
    ```bash
-   patch-cli rebuild --input XDJ700.UPD --application stock --label Ver1.15 \
-     --output ~/xdj700-stage1/XDJ700.UPD
+   mkdir -p ~/xdj700-stage1
+   cargo run --release -p patch-cli -- rebuild --input /path/to/XDJ700.UPD \
+     --application stock --label Ver1.15 --output ~/xdj700-stage1/XDJ700.UPD
    ```
 
    The command checks the rebuild against the official file, writes atomically, reads the file
    back, and prints `output_sha256_hex`. It never overwrites an existing file.
 3. **USB stick:**
-   - use a stick formatted **FAT32** (exFAT is refused by the writer);
+   - use a stick formatted **FAT32**. On macOS the writer refuses exFAT; copying a finished file
+     onto a FAT32 stick is the supported path everywhere;
    - copy only `XDJ700.UPD` to its root, under the name the official update instructions give;
    - on macOS, also delete the hidden `._XDJ700.UPD` file that macOS creates (for example with
      `dot_clean -m /Volumes/<stick>`). Whether the updater ignores it is not known.
