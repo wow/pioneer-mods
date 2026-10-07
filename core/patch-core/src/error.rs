@@ -147,6 +147,9 @@ pub enum UpdError {
     #[error("serializer self-check failed: output does not re-parse to the same container")]
     SerializerSelfCheckFailed,
 
+    #[error("serializer self-check failed: output does not parse: {0}")]
+    SerializerOutputUnparseable(Box<UpdError>),
+
     #[error("round trip is not byte-identical: first difference at byte offset {offset}")]
     RoundTripMismatch { offset: usize },
 

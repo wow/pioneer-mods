@@ -65,7 +65,7 @@ fn inspect_structure_reports_documents_as_text() {
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("document[0].image: base=0x000000 len=19 sha256="),
+        stdout.contains("document[0].image: base=0x00000000 len=19 sha256="),
         "stdout: {stdout}"
     );
 }
@@ -88,7 +88,7 @@ fn inspect_structure_reports_json_with_identity_fields() {
     assert_eq!(json["container"]["documents"][0]["kind"], "MAIN");
     assert_eq!(json["container"]["documents"][0]["data_records"], 2);
     assert_eq!(json["roundtrip"], "byte-identical");
-    assert_eq!(json["container"]["documents"][0]["image_len"], 19);
+    assert_eq!(json["container"]["documents"][0]["image"]["len"], 19);
 }
 
 #[test]
@@ -141,5 +141,56 @@ fn inspect_structure_refuses_directory_input() {
     assert!(
         stderr.contains("does not point to a regular file"),
         "stderr: {stderr}"
+    );
+}
+
+/// One document with two 1-byte S3 records `span` bytes apart (no vendor bytes).
+fn sparse_upd(far: u32) -> Vec<u8> {
+    let mut doc = b"SYN-100     MAINVer9.99\0       0".to_vec();
+    let s3 = |address: u32, value: u8| {
+        let mut raw = vec![6u8];
+        raw.extend_from_slice(&address.to_be_bytes());
+        raw.push(value);
+        let checksum = !raw.iter().fold(0u8, |sum, &b| sum.wrapping_add(b));
+        raw.push(checksum);
+        let hex: String = raw.iter().map(|b| format!("{b:02X}")).collect();
+        format!("S3{hex}\r\n")
+    };
+    for line in [
+        "S0030000FC\r\n".to_owned(),
+        s3(0, 1),
+        s3(far, 2),
+        "S70500000000FA\r\n".to_owned(),
+    ] {
+        doc.extend_from_slice(line.as_bytes());
+    }
+    let crc = crc16_xmodem(&doc);
+    doc.extend_from_slice(&crc.to_le_bytes());
+    let mut bytes = format!("{}\r\n", doc.len()).into_bytes();
+    bytes.extend_from_slice(&doc);
+    bytes
+}
+
+#[test]
+fn inspect_structure_reports_oversized_image_without_failing() {
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+    let input = tempdir.path().join("SPARSE.UPD");
+    fs::write(&input, sparse_upd(64 << 20)).expect("write input");
+
+    let output = run_inspect(&input, &["--structure"]);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("roundtrip: byte-identical"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("document[0].image: not reconstructed (span 67108865 bytes exceeds"),
+        "stdout: {stdout}"
     );
 }

@@ -2,7 +2,12 @@ mod common;
 
 use common::*;
 use patch_core::upd::{GAP_FILL, MAX_IMAGE_LEN};
-use patch_core::{UpdError, parse_upd, verify_roundtrip};
+use patch_core::{UpdError, parse_upd, sha256_hex, verify_roundtrip};
+
+/// Length of the decimal document-length header (everything before the first model byte).
+fn header_len(bytes: &[u8]) -> usize {
+    bytes.iter().position(|&b| b == b'S').expect("model byte")
+}
 
 #[test]
 fn roundtrip_reproduces_two_document_container() {
@@ -76,8 +81,8 @@ fn image_fills_gaps_and_starts_at_first_record() {
         panic!("expected two documents");
     };
 
-    let main_image = main.image(0).expect("main image");
-    let panel_image = panel.image(1).expect("panel image");
+    let main_image = main.image().expect("main image");
+    let panel_image = panel.image().expect("panel image");
 
     assert_eq!(main_image.base(), 0);
     let mut expected = vec![0x11; 4];
@@ -89,9 +94,7 @@ fn image_fills_gaps_and_starts_at_first_record() {
     assert_eq!(panel_image.bytes(), &[0x44; 3]);
 }
 
-#[test]
-fn image_refuses_span_above_limit() {
-    let far = u32::try_from(MAX_IMAGE_LEN).expect("limit fits u32");
+fn sparse_s3_container(far: u32) -> Vec<u8> {
     let doc = document(
         "MAIN",
         &[
@@ -101,10 +104,35 @@ fn image_refuses_span_above_limit() {
             record(b'7', 4, 0, &[]),
         ],
     );
-    let bytes = container(&[doc]);
-    let parsed = parse_upd(&bytes).expect("structurally valid");
+    container(&[doc])
+}
 
-    let error = parsed.documents()[0].image(0).expect_err("span too large");
+#[test]
+fn image_cap_is_64_mib() {
+    assert_eq!(MAX_IMAGE_LEN, 64 << 20);
+}
+
+#[test]
+fn image_accepts_span_exactly_at_limit() {
+    let far = u32::try_from(MAX_IMAGE_LEN - 1).expect("limit fits u32");
+    let parsed = parse_upd(&sparse_s3_container(far)).expect("structurally valid");
+
+    let image = parsed.documents()[0]
+        .image()
+        .expect("span at the cap is allowed");
+
+    assert_eq!(image.bytes().len() as u64, MAX_IMAGE_LEN);
+    assert_eq!(image.bytes()[0], 0x01);
+    assert_eq!(image.bytes()[image.bytes().len() - 1], 0x02);
+}
+
+#[test]
+fn image_refuses_span_above_limit_but_summary_still_reports() {
+    let far = u32::try_from(MAX_IMAGE_LEN).expect("limit fits u32");
+    let parsed = parse_upd(&sparse_s3_container(far)).expect("structurally valid");
+
+    let error = parsed.documents()[0].image().expect_err("span too large");
+    let summary = parsed.summary();
 
     assert_eq!(
         error,
@@ -113,22 +141,31 @@ fn image_refuses_span_above_limit() {
             span: MAX_IMAGE_LEN + 1,
         }
     );
-    assert!(parsed.summary().is_err(), "summary must refuse too");
+    assert_eq!(summary.documents[0].image_span, MAX_IMAGE_LEN + 1);
+    assert_eq!(summary.documents[0].image, None);
+    assert_eq!(summary.documents[0].data_records, 2);
 }
 
 #[test]
 fn summary_reports_image_identity() {
     let bytes = valid_container();
-    let summary = parse_upd(&bytes)
-        .expect("valid container")
-        .summary()
-        .expect("summary");
+    let container = parse_upd(&bytes).expect("valid container");
 
-    let main = &summary.documents[0];
-    assert_eq!(main.image_base, "0x000000");
-    assert_eq!(main.image_len, 0x12);
-    assert_eq!(main.image_sha256.len(), 64);
-    assert_eq!(summary.documents[1].image_base, "0x0C0000");
+    let summary = container.summary();
+
+    let main = summary.documents[0].image.as_ref().expect("main image");
+    let main_bytes = container.documents()[0].image().expect("image");
+    assert_eq!(main.base, "0x00000000");
+    assert_eq!(main.len, 0x12);
+    assert_eq!(main.sha256, sha256_hex(main_bytes.bytes()));
+    let mut expected = vec![0x11; 4];
+    expected.extend_from_slice(&[0x22; 4]);
+    expected.extend_from_slice(&[0xFF; 8]);
+    expected.extend_from_slice(&[0x33; 2]);
+    assert_eq!(main.sha256, sha256_hex(&expected));
+    let panel = summary.documents[1].image.as_ref().expect("panel image");
+    assert_eq!(panel.base, "0x000C0000");
+    assert_eq!(panel.sha256, sha256_hex(&[0x44; 3]));
 }
 
 #[test]
@@ -148,7 +185,12 @@ fn verify_serialized_refuses_bytes_of_a_different_container() {
     );
     assert_eq!(
         container.verify_serialized(&bytes[..bytes.len() - 1]),
-        Err(UpdError::SerializerSelfCheckFailed)
+        Err(UpdError::SerializerOutputUnparseable(Box::new(
+            UpdError::LengthHeaderMismatch {
+                declared: (bytes.len() - header_len(&bytes)) as u64,
+                available: bytes.len() - 1 - header_len(&bytes),
+            }
+        )))
     );
     assert_eq!(container.verify_serialized(&bytes), Ok(()));
 }

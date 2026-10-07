@@ -1,7 +1,6 @@
 //! Serializable structure report for `patch-cli inspect --structure`.
 
-use super::{SRecordType, UpdContainer, UpdDocument};
-use crate::error::UpdError;
+use super::{MAX_IMAGE_LEN, SRecordType, UpdContainer, UpdDocument};
 use crate::identity::sha256_hex;
 use serde::Serialize;
 
@@ -31,10 +30,10 @@ pub struct DocumentSummary {
     pub termination_type: SRecordType,
     /// Entry/start address from the termination record, formatted `0xNNNNNNNN`.
     pub entry_address: String,
-    /// Reconstructed memory image (gaps filled with `0xFF`): start address, length, SHA-256.
-    pub image_base: String,
-    pub image_len: u64,
-    pub image_sha256: String,
+    /// Bytes from the first data byte to the end of the last data record.
+    pub image_span: u64,
+    /// Reconstructed image identity; `None` when `image_span` exceeds [`MAX_IMAGE_LEN`].
+    pub image: Option<ImageSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -43,31 +42,41 @@ pub struct Extent {
     pub end: u64,
 }
 
+/// Identity of a reconstructed memory image (gaps filled with `0xFF`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ImageSummary {
+    /// Start address, formatted `0xNNNNNNNN`.
+    pub base: String,
+    pub len: u64,
+    pub sha256: String,
+}
+
 impl UpdContainer {
-    /// Summarizes every document, including its reconstructed image identity.
-    ///
-    /// # Errors
-    ///
-    /// [`UpdError::ImageTooLarge`] if a document's image span exceeds the supported maximum.
-    pub fn summary(&self) -> Result<UpdSummary, UpdError> {
-        Ok(UpdSummary {
-            documents: self
-                .documents()
-                .iter()
-                .enumerate()
-                .map(|(index, document)| document.summary(index))
-                .collect::<Result<_, _>>()?,
-        })
+    /// Summarizes every document. Images larger than [`MAX_IMAGE_LEN`] are reported by span only,
+    /// so oversized documents never hide the rest of the structure report.
+    pub fn summary(&self) -> UpdSummary {
+        UpdSummary {
+            documents: self.documents().iter().map(UpdDocument::summary).collect(),
+        }
     }
 }
 
 impl UpdDocument {
-    fn summary(&self, index: usize) -> Result<DocumentSummary, UpdError> {
+    fn summary(&self) -> DocumentSummary {
         let descriptor = self.descriptor();
         let data = self.data_records();
-        let image = self.image(index)?;
-        Ok(DocumentSummary {
-            index,
+        let span = self.image_span();
+        let image_span = span.end - span.start;
+        let image = (image_span <= MAX_IMAGE_LEN)
+            .then(|| self.image().ok())
+            .flatten()
+            .map(|image| ImageSummary {
+                base: format!("0x{:08X}", image.base()),
+                len: image.bytes().len() as u64,
+                sha256: sha256_hex(image.bytes()),
+            });
+        DocumentSummary {
+            index: self.index(),
             offset: self.offset(),
             length: self.length(),
             model: descriptor.model().to_owned(),
@@ -89,9 +98,8 @@ impl UpdDocument {
                 .collect(),
             termination_type: self.termination().record_type(),
             entry_address: format!("0x{:08X}", self.termination().address()),
-            image_base: format!("0x{:06X}", image.base()),
-            image_len: image.bytes().len() as u64,
-            image_sha256: sha256_hex(image.bytes()),
-        })
+            image_span,
+            image,
+        }
     }
 }

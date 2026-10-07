@@ -2,6 +2,7 @@
 
 use super::UpdDocument;
 use crate::error::UpdError;
+use std::ops::Range;
 
 /// Largest image span [`UpdDocument::image`] will allocate (the XDJ-700 MAIN image is ~7 MiB).
 pub const MAX_IMAGE_LEN: u64 = 64 * 1024 * 1024;
@@ -28,26 +29,34 @@ impl DocumentImage {
 }
 
 impl UpdDocument {
+    /// Address range from the first data byte to the end of the last data record.
+    ///
+    /// Computed without allocating; parsing guarantees at least one data record, in ascending
+    /// order, so `start <= end`.
+    pub fn image_span(&self) -> Range<u64> {
+        let data = self.data_records();
+        let start = data.first().map_or(0, |record| u64::from(record.address()));
+        let end = data.last().map_or(start, |record| record.end_address());
+        start..end
+    }
+
     /// Reconstructs the contiguous memory image covered by this document's data records.
     ///
     /// # Errors
     ///
     /// [`UpdError::ImageTooLarge`] if the span exceeds [`MAX_IMAGE_LEN`].
-    pub fn image(&self, document_index: usize) -> Result<DocumentImage, UpdError> {
-        let data = self.data_records();
-        // Parsing guarantees at least one data record, in ascending order.
-        let base = data.first().map_or(0, |record| u64::from(record.address()));
-        let end = data.last().map_or(base, |record| record.end_address());
+    pub fn image(&self) -> Result<DocumentImage, UpdError> {
+        let Range { start: base, end } = self.image_span();
         let span = end - base;
         if span > MAX_IMAGE_LEN {
             return Err(UpdError::ImageTooLarge {
-                document_index,
+                document_index: self.index(),
                 span,
             });
         }
 
         let mut bytes = vec![GAP_FILL; span as usize];
-        for record in data {
+        for record in self.data_records() {
             let start = (u64::from(record.address()) - base) as usize;
             bytes[start..start + record.data().len()].copy_from_slice(record.data());
         }

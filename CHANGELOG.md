@@ -31,12 +31,14 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - `patch-cli inspect --structure` reports container documents, versions, CRCs, record counts and
   address extents in text or JSON. Without `--structure`, `inspect` output is unchanged.
 - Canonical `.UPD` serializer (`UpdContainer::to_bytes`). It re-parses its own output and refuses
-  unless the result equals the source container (`verify_serialized`). `verify_roundtrip` is the
+  unless the result equals the source container (`verify_serialized`). If the output does not
+  parse, the error keeps the underlying parse error. `verify_roundtrip` is the
   Phase 1 no-op gate: parse, serialize, and require a byte-identical result.
 - Memory image reconstruction per document (`UpdDocument::image`): spans from the first to the last
   data byte, gaps filled with `0xFF`, capped at 64 MiB.
-- `inspect --structure` now verifies the byte-exact roundtrip and reports each document's image
-  base, length and SHA-256.
+- `inspect --structure` now verifies the byte-exact roundtrip and reports each document's
+  `image_span` and `image` (8-digit base, length, SHA-256). An image larger than the cap is
+  reported as not reconstructed (`image: null`) instead of failing the whole report.
 - Ignored-by-default owner-input test (`official_firmware`) that checks an official XDJ-700 v1.15
   update against public pinned identities when `PIONEER_XDJ700_V115_UPD` is set.
 - `patch_core::read_firmware` reads an input once and returns its identity plus the hashed

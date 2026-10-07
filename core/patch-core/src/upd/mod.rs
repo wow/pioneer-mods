@@ -21,7 +21,7 @@ mod write;
 pub use crc::crc16_xmodem;
 pub use image::{DocumentImage, GAP_FILL, MAX_IMAGE_LEN};
 pub use srecord::{SRecord, SRecordType};
-pub use summary::{DocumentSummary, Extent, UpdSummary};
+pub use summary::{DocumentSummary, Extent, ImageSummary, UpdSummary};
 pub use write::verify_roundtrip;
 
 use crate::error::{LayoutViolation, UpdError};
@@ -50,6 +50,7 @@ impl UpdContainer {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdDocument {
+    index: usize,
     offset: usize,
     length: usize,
     descriptor: Descriptor,
@@ -188,6 +189,7 @@ fn parse_document(index: usize, offset: usize, doc: &[u8]) -> Result<UpdDocument
     let (header, data, termination) = split_layout(index, parse_records(index, body)?)?;
 
     Ok(UpdDocument {
+        index,
         offset,
         length: doc.len(),
         descriptor,
@@ -311,6 +313,11 @@ fn split_layout(
 }
 
 impl UpdDocument {
+    /// Position of this document in the container (0-based).
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
     /// Byte offset of the document inside the container.
     pub fn offset(&self) -> usize {
         self.offset

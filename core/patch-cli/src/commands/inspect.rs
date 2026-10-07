@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use patch_core::upd::UpdSummary;
+use patch_core::upd::{MAX_IMAGE_LEN, UpdSummary};
 use patch_core::{FirmwareIdentity, identify_firmware, read_firmware, verify_roundtrip};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -72,12 +72,9 @@ fn inspect_structure(input: &Path) -> Result<InspectReport> {
         .with_context(|| format!("failed to read input firmware '{}'", input.display()))?;
     let container = verify_roundtrip(&bytes)
         .with_context(|| format!("input '{}' is not a valid .UPD container", input.display()))?;
-    let summary = container
-        .summary()
-        .with_context(|| format!("failed to summarize .UPD container '{}'", input.display()))?;
     Ok(InspectReport {
         identity,
-        container: Some(summary),
+        container: Some(container.summary()),
         roundtrip: Some("byte-identical"),
     })
 }
@@ -117,10 +114,16 @@ fn print_text(report: &InspectReport) {
             .map(|extent| format!("0x{:06X}..0x{:06X}", extent.start, extent.end))
             .collect();
         println!("{prefix}.extents: {}", extents.join(" "));
-        println!(
-            "{prefix}.image: base={} len={} sha256={}",
-            doc.image_base, doc.image_len, doc.image_sha256
-        );
+        match &doc.image {
+            Some(image) => println!(
+                "{prefix}.image: base={} len={} sha256={}",
+                image.base, image.len, image.sha256
+            ),
+            None => println!(
+                "{prefix}.image: not reconstructed (span {} bytes exceeds the {MAX_IMAGE_LEN}-byte cap)",
+                doc.image_span
+            ),
+        }
         println!(
             "{prefix}.descriptor: reserved_hex={} header=\"{}\"",
             doc.reserved_hex, doc.header_text

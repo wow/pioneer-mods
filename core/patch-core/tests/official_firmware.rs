@@ -46,13 +46,22 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
     assert_eq!(panel.descriptor().version(), "Ver1.00");
     assert_eq!(panel.data_records().len(), 207);
 
-    let main_image = main.image(0).expect("MAIN image");
+    let main_image = main.image().expect("MAIN image");
     assert_eq!(main_image.base(), 0);
     assert_eq!(main_image.bytes().len(), 0x6E_A7C0);
     assert_eq!(sha256_hex(main_image.bytes()), MAIN_IMAGE_SHA256);
 
-    let panel_image = panel.image(1).expect("PANL image");
+    let panel_image = panel.image().expect("PANL image");
     assert_eq!(panel_image.base(), 0x0C_0000);
     assert_eq!(panel_image.bytes().len(), 0x4_0000);
     assert_eq!(sha256_hex(panel_image.bytes()), PANL_IMAGE_SHA256);
+
+    // The structure report must show the same identities that users compare with the pins.
+    let summary = container.summary();
+    let reported: Vec<_> = summary
+        .documents
+        .iter()
+        .map(|doc| doc.image.as_ref().map(|image| image.sha256.as_str()))
+        .collect();
+    assert_eq!(reported, [Some(MAIN_IMAGE_SHA256), Some(PANL_IMAGE_SHA256)]);
 }

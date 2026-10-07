@@ -4,6 +4,10 @@ use super::{DESCRIPTOR_LEN, Descriptor, MODEL_LEN, UpdContainer, UpdDocument, cr
 use crate::error::UpdError;
 
 /// Serialized bytes that passed [`UpdContainer::verify_serialized`].
+///
+/// `encode` is private, so `to_bytes` is the only public way to obtain serialized bytes. Routing
+/// it through this type means a bypass leaves `self_checked` unused, which CI's
+/// `clippy -D warnings` rejects.
 struct SelfChecked(Vec<u8>);
 
 impl UpdContainer {
@@ -14,7 +18,8 @@ impl UpdContainer {
     ///
     /// # Errors
     ///
-    /// [`UpdError::SerializerSelfCheckFailed`] if the output does not re-parse to `self`.
+    /// [`UpdError::SerializerOutputUnparseable`] or [`UpdError::SerializerSelfCheckFailed`] if
+    /// the output does not re-parse to `self`.
     pub fn to_bytes(&self) -> Result<Vec<u8>, UpdError> {
         let SelfChecked(bytes) = self.self_checked(self.encode())?;
         Ok(bytes)
@@ -24,16 +29,18 @@ impl UpdContainer {
     ///
     /// # Errors
     ///
-    /// [`UpdError::SerializerSelfCheckFailed`] if `bytes` do not parse, or parse to a different
-    /// container.
+    /// [`UpdError::SerializerOutputUnparseable`] (carrying the parse error) if `bytes` do not
+    /// parse, or [`UpdError::SerializerSelfCheckFailed`] if they parse to a different container.
     pub fn verify_serialized(&self, bytes: &[u8]) -> Result<(), UpdError> {
-        match super::parse_upd(bytes) {
-            Ok(reparsed) if reparsed == *self => Ok(()),
-            _ => Err(UpdError::SerializerSelfCheckFailed),
+        let reparsed = super::parse_upd(bytes)
+            .map_err(|error| UpdError::SerializerOutputUnparseable(Box::new(error)))?;
+        if reparsed != *self {
+            return Err(UpdError::SerializerSelfCheckFailed);
         }
+        Ok(())
     }
 
-    /// The only constructor of [`SelfChecked`], so `to_bytes` cannot skip the check.
+    /// Wraps `bytes` in [`SelfChecked`] after [`Self::verify_serialized`] accepts them.
     fn self_checked(&self, bytes: Vec<u8>) -> Result<SelfChecked, UpdError> {
         self.verify_serialized(&bytes)?;
         Ok(SelfChecked(bytes))
