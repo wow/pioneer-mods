@@ -11,6 +11,4 @@ clap.workspace = true
 patch-core = { path = "../patch-core" }
 patch-schema = { path = "../patch-schema" }
 serde_json.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true

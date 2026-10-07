@@ -56,6 +56,10 @@ cargo run -p patch-cli -- patch \
   --output /path/to/XDJ700-patched.UPD
 ```
 
+Notes:
+- Existing output files are refused by default; pass `--force` to allow overwrite.
+- Patch output is written atomically and reports both input/output SHA-256 identities.
+
 ## Code quality baseline
 
 - Rust:

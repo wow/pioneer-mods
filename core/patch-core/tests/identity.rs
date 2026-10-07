@@ -1,4 +1,4 @@
-use patch_core::identify_firmware;
+use patch_core::{identify_bytes, identify_firmware};
 use std::fs::File;
 use std::io::Write;
 
@@ -11,6 +11,18 @@ fn identifies_file_size_and_sha256() {
     file.flush().expect("flush temp file");
 
     let identity = identify_firmware(&input_path).expect("identify firmware");
+
+    assert_eq!(identity.file_name, "XDJ700.UPD");
+    assert_eq!(identity.size_bytes, 3);
+    assert_eq!(
+        identity.sha256_hex,
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+}
+
+#[test]
+fn identifies_in_memory_bytes() {
+    let identity = identify_bytes("XDJ700.UPD".to_owned(), b"abc");
 
     assert_eq!(identity.file_name, "XDJ700.UPD");
     assert_eq!(identity.size_bytes, 3);

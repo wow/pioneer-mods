@@ -31,10 +31,21 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   (size + SHA-256), and applies deterministic `write_span` / `owner_copy_window` operations.
 - Rust tests now live in dedicated `tests/` files per crate instead of inline `#[cfg(test)]` blocks
   in production source files.
+- `patch-cli patch` now hashes in-memory input bytes (single-read flow), rejects overlapping destination
+  ranges, verifies that all byte mutations stay within declared destination regions, and reports
+  output SHA-256.
 
 ### Fixed
 - `scripts/check_file_size_caps.py` now reads tracked files with `git ls-files -z` from repository root,
   preventing silent skips for non-ASCII paths and subdirectory execution.
+- Output safety hardening for `patch-cli patch`:
+  - refuses output paths that resolve to the input firmware path,
+  - refuses overwriting existing output files unless `--force` is provided,
+  - writes patched output via atomic temp-file persist in the destination directory.
+- Recipe schema hardening:
+  - rejects unsupported schema versions (currently only `schema_version=1`),
+  - denies unknown JSON fields on manifest/target/operation structs,
+  - validates optional `expected_output_sha256` and uses portable length checks.
 
 ### Removed
 - Redundant `rustfmt.toml` and `clippy.toml` files (settings matched tool defaults or duplicated

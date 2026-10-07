@@ -1,6 +1,7 @@
 use patch_schema::{
     PatchOperation, RecipeManifest, SchemaValidationError, SupportedFirmware, WriteSpan,
 };
+use serde_json::json;
 
 fn valid_manifest() -> RecipeManifest {
     RecipeManifest {
@@ -12,6 +13,7 @@ fn valid_manifest() -> RecipeManifest {
             version: "1.15".to_owned(),
             size_bytes: 16,
             sha256_hex: "00".repeat(32),
+            expected_output_sha256: None,
         }],
         operations: vec![PatchOperation::WriteSpan(WriteSpan {
             offset: 4,
@@ -51,6 +53,16 @@ fn rejects_invalid_target_hash_shape() {
 }
 
 #[test]
+fn rejects_unsupported_schema_version() {
+    let mut manifest = valid_manifest();
+    manifest.schema_version = 2;
+    assert_eq!(
+        manifest.validate(),
+        Err(SchemaValidationError::UnsupportedSchemaVersion { schema_version: 2 })
+    );
+}
+
+#[test]
 fn matches_target_by_size_and_hash_case_insensitive() {
     let manifest = valid_manifest();
     let target = manifest
@@ -60,4 +72,34 @@ fn matches_target_by_size_and_hash_case_insensitive() {
         )
         .expect("matching target");
     assert_eq!(target.model, "XDJ-700");
+}
+
+#[test]
+fn serde_rejects_unknown_fields() {
+    let raw = json!({
+        "schema_version": 1,
+        "recipe_id": "xdj700-waveform3",
+        "description": "desc",
+        "targets": [
+            {
+                "model": "XDJ-700",
+                "version": "1.15",
+                "size_bytes": 16,
+                "sha256_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+                "unknown_target_field": true
+            }
+        ],
+        "operations": [
+            {
+                "kind": "write_span",
+                "offset": 4,
+                "length": 1,
+                "bytes": [1],
+                "unknown_operation_field": "x"
+            }
+        ],
+        "unknown_root_field": "x"
+    });
+    let parse_result = serde_json::from_value::<RecipeManifest>(raw);
+    assert!(parse_result.is_err());
 }

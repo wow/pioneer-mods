@@ -1,9 +1,12 @@
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
-use patch_core::identify_firmware;
+use patch_core::{identify_bytes, identify_firmware};
 use patch_schema::{PatchOperation, RecipeManifest};
 use std::fs;
+use std::io::Write;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -48,6 +51,10 @@ struct PatchArgs {
     /// Path for generated patched firmware output.
     #[arg(long)]
     output: PathBuf,
+
+    /// Allow overwriting an existing output file.
+    #[arg(long, default_value_t = false)]
+    force: bool,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -93,13 +100,6 @@ fn inspect(args: InspectArgs) -> Result<()> {
 }
 
 fn patch(args: PatchArgs) -> Result<()> {
-    let identity = identify_firmware(&args.input).with_context(|| {
-        format!(
-            "failed to inspect firmware identity for '{}'",
-            args.input.display()
-        )
-    })?;
-
     let manifest = load_manifest(&args.recipe)?;
     manifest.validate().with_context(|| {
         format!(
@@ -107,6 +107,10 @@ fn patch(args: PatchArgs) -> Result<()> {
             args.recipe.display()
         )
     })?;
+
+    let input_bytes = fs::read(&args.input)
+        .with_context(|| format!("failed to read input firmware '{}'", args.input.display()))?;
+    let identity = identify_bytes(firmware_file_name(&args.input), &input_bytes);
 
     let target = manifest
         .matching_target(identity.size_bytes, &identity.sha256_hex)
@@ -120,21 +124,38 @@ fn patch(args: PatchArgs) -> Result<()> {
             )
         })?;
 
-    let input_bytes = fs::read(&args.input)
-        .with_context(|| format!("failed to read input firmware '{}'", args.input.display()))?;
+    let declared_destination_ranges =
+        declared_destination_ranges(&manifest.operations, input_bytes.len())?;
     let patched_bytes = apply_operations(&input_bytes, &manifest.operations)?;
+    verify_mutations_within_declared_regions(
+        &input_bytes,
+        &patched_bytes,
+        &declared_destination_ranges,
+    )?;
 
-    fs::write(&args.output, patched_bytes).with_context(|| {
-        format!(
-            "failed to write output firmware '{}'",
-            args.output.display()
-        )
-    })?;
+    let output_identity = identify_bytes(firmware_file_name(&args.output), &patched_bytes);
+    if let Some(expected_output_sha256) = &target.expected_output_sha256
+        && !output_identity
+            .sha256_hex
+            .eq_ignore_ascii_case(expected_output_sha256)
+    {
+        bail!(
+            "output SHA-256 mismatch for recipe '{}': expected={}, actual={}",
+            manifest.recipe_id,
+            expected_output_sha256,
+            output_identity.sha256_hex
+        );
+    }
+
+    ensure_safe_output_path(&args.input, &args.output, args.force)?;
+    write_output_atomically(&args.output, &patched_bytes)?;
 
     println!("recipe_id: {}", manifest.recipe_id);
     println!("matched_target: {} {}", target.model, target.version);
     println!("input_file: {}", identity.file_name);
+    println!("input_sha256_hex: {}", identity.sha256_hex);
     println!("output_file: {}", args.output.display());
+    println!("output_sha256_hex: {}", output_identity.sha256_hex);
 
     Ok(())
 }
@@ -157,13 +178,6 @@ fn apply_operations(input_bytes: &[u8], operations: &[PatchOperation]) -> Result
                     output_bytes.len(),
                     &format!("operations[{idx}] write_span"),
                 )?;
-                if span.bytes.len() != range.len() {
-                    bail!(
-                        "operations[{idx}] write_span length mismatch: declared={}, bytes={}",
-                        span.length,
-                        span.bytes.len()
-                    );
-                }
                 output_bytes[range].copy_from_slice(&span.bytes);
             }
             PatchOperation::OwnerCopyWindow(window) => {
@@ -184,6 +198,88 @@ fn apply_operations(input_bytes: &[u8], operations: &[PatchOperation]) -> Result
         }
     }
     Ok(output_bytes)
+}
+
+fn declared_destination_ranges(
+    operations: &[PatchOperation],
+    total_len: usize,
+) -> Result<Vec<Range<usize>>> {
+    let mut indexed_ranges: Vec<(usize, Range<usize>)> = Vec::with_capacity(operations.len());
+    for (idx, operation) in operations.iter().enumerate() {
+        let range = match operation {
+            PatchOperation::WriteSpan(span) => checked_range(
+                span.offset,
+                span.length,
+                total_len,
+                &format!("operations[{idx}] write_span destination"),
+            )?,
+            PatchOperation::OwnerCopyWindow(window) => checked_range(
+                window.destination_offset,
+                window.length,
+                total_len,
+                &format!("operations[{idx}] owner_copy_window destination"),
+            )?,
+        };
+        indexed_ranges.push((idx, range));
+    }
+
+    indexed_ranges.sort_by_key(|(_, range)| (range.start, range.end));
+    for pair in indexed_ranges.windows(2) {
+        let (previous_idx, previous_range) = &pair[0];
+        let (current_idx, current_range) = &pair[1];
+        if current_range.start < previous_range.end {
+            bail!(
+                "operations[{current_idx}] destination range {}..{} overlaps with operations[{previous_idx}] range {}..{}",
+                current_range.start,
+                current_range.end,
+                previous_range.start,
+                previous_range.end
+            );
+        }
+    }
+
+    Ok(indexed_ranges
+        .into_iter()
+        .map(|(_, range)| range)
+        .collect::<Vec<_>>())
+}
+
+fn verify_mutations_within_declared_regions(
+    input_bytes: &[u8],
+    output_bytes: &[u8],
+    declared_destination_ranges: &[Range<usize>],
+) -> Result<()> {
+    if input_bytes.len() != output_bytes.len() {
+        bail!(
+            "mutation verification failed: input and output lengths differ (input={}, output={})",
+            input_bytes.len(),
+            output_bytes.len()
+        );
+    }
+
+    let mut range_idx = 0usize;
+    for (byte_idx, (input_byte, output_byte)) in input_bytes.iter().zip(output_bytes).enumerate() {
+        if input_byte == output_byte {
+            continue;
+        }
+
+        while range_idx < declared_destination_ranges.len()
+            && byte_idx >= declared_destination_ranges[range_idx].end
+        {
+            range_idx += 1;
+        }
+
+        if range_idx >= declared_destination_ranges.len()
+            || byte_idx < declared_destination_ranges[range_idx].start
+        {
+            bail!(
+                "mutation verification failed: byte offset {} changed outside declared destination ranges",
+                byte_idx
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn checked_range(
@@ -207,4 +303,80 @@ fn checked_range(
         );
     }
     Ok(start..end)
+}
+
+fn ensure_safe_output_path(input_path: &Path, output_path: &Path, force: bool) -> Result<()> {
+    let input_canonical = fs::canonicalize(input_path).with_context(|| {
+        format!(
+            "failed to canonicalize input path '{}'",
+            input_path.display()
+        )
+    })?;
+    let output_resolved = resolve_for_comparison(output_path)?;
+
+    if output_resolved == input_canonical {
+        bail!(
+            "refusing to write output to the same path as input firmware ('{}')",
+            input_canonical.display()
+        );
+    }
+
+    if output_path.exists() && !force {
+        bail!(
+            "refusing to overwrite existing output file '{}'; pass --force to overwrite",
+            output_path.display()
+        );
+    }
+
+    Ok(())
+}
+
+fn resolve_for_comparison(path: &Path) -> Result<PathBuf> {
+    if path.exists() {
+        return fs::canonicalize(path)
+            .with_context(|| format!("failed to canonicalize path '{}'", path.display()));
+    }
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    Ok(std::env::current_dir()
+        .context("failed to obtain current directory while resolving output path")?
+        .join(path))
+}
+
+fn write_output_atomically(output_path: &Path, bytes: &[u8]) -> Result<()> {
+    let output_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
+    let mut temp_file = NamedTempFile::new_in(output_dir).with_context(|| {
+        format!(
+            "failed to create temporary output file in '{}'",
+            output_dir.display()
+        )
+    })?;
+    temp_file.write_all(bytes).with_context(|| {
+        format!(
+            "failed to write temporary output file for '{}'",
+            output_path.display()
+        )
+    })?;
+    temp_file.as_file().sync_all().with_context(|| {
+        format!(
+            "failed to sync temporary output file for '{}'",
+            output_path.display()
+        )
+    })?;
+    temp_file.persist(output_path).map_err(|error| {
+        anyhow::anyhow!(
+            "failed to atomically persist output firmware '{}': {}",
+            output_path.display(),
+            error.error
+        )
+    })?;
+    Ok(())
+}
+
+fn firmware_file_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
