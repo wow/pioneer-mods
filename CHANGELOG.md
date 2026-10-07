@@ -37,8 +37,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - The patch engine moved from `patch-cli` into `patch-core` as an I/O-free `apply_recipe` API
   (manifest validation, size + SHA-256 gating, bounds/overlap checks, bounded-diff verification,
   expected output hash) with typed `PatchEngineError` refusals. `patch-cli patch` now only reads
-  input, writes output, and prints results; its refusal messages now name the input and recipe
-  paths, followed by the engine's reason.
+  input, writes output, and prints results. Engine refusals (identity, bounds, overlap, output hash)
+  now print a "refusing to patch input firmware '<input>' with recipe '<recipe>'" line followed by
+  the reason; the incompatible-identity reason no longer repeats the input file name.
 
 ### Fixed
 - `scripts/check_file_size_caps.py` now reads tracked files with `git ls-files -z` from repository root,

@@ -51,10 +51,7 @@ pub fn apply_recipe<'m>(
         })?;
 
     let planned = plan_operations(&manifest.operations, input_bytes.len())?;
-    let output_bytes = apply_planned(input_bytes, &planned);
-    let destination_ranges: Vec<Range<usize>> =
-        planned.iter().map(|op| op.destination.clone()).collect();
-    verify_bounded_diff(input_bytes, &output_bytes, &destination_ranges)?;
+    let VerifiedOutput(output_bytes) = apply_and_verify(input_bytes, &planned)?;
 
     let output_sha256_hex = sha256_hex(&output_bytes);
     if let Some(expected) = &target.expected_output_sha256
@@ -119,6 +116,21 @@ pub fn verify_bounded_diff(
     }
 
     Ok(())
+}
+
+/// Output bytes that passed [`verify_bounded_diff`]. Only [`apply_and_verify`] constructs it,
+/// so `apply_recipe` cannot return output that skipped the bounded-diff check.
+struct VerifiedOutput(Vec<u8>);
+
+fn apply_and_verify(
+    input_bytes: &[u8],
+    planned: &[PlannedOperation<'_>],
+) -> Result<VerifiedOutput, PatchEngineError> {
+    let output_bytes = apply_planned(input_bytes, planned);
+    let destination_ranges: Vec<Range<usize>> =
+        planned.iter().map(|op| op.destination.clone()).collect();
+    verify_bounded_diff(input_bytes, &output_bytes, &destination_ranges)?;
+    Ok(VerifiedOutput(output_bytes))
 }
 
 /// One operation with all ranges bounds-checked against the input length.

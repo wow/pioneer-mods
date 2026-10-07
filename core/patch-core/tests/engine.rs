@@ -152,7 +152,9 @@ fn rejects_input_with_matching_hash_but_wrong_size() {
 
 #[test]
 fn rejects_invalid_manifest_before_matching() {
-    let mut recipe = manifest(vec![target_for(&INPUT)], vec![write_span(0, &[7])]);
+    let mut target = target_for(&INPUT);
+    target.sha256_hex = "00".repeat(32);
+    let mut recipe = manifest(vec![target], vec![write_span(0, &[7])]);
     recipe.schema_version = 2;
 
     let error = apply_recipe(&recipe, &INPUT).expect_err("invalid manifest must refuse");
