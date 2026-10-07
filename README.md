@@ -30,7 +30,7 @@ This repository currently includes:
 - Canonical `.UPD` serializer with self-check, byte-exact no-op roundtrip, and memory image
   reconstruction
 - XDJ-700 MAIN application section verification, LZSS decoding, and self-checked LZSS section
-  encoding (DeckVolve-identical)
+  encoding (byte-identical to the reference encoder)
 
 Rebuilding the MAIN document and `.UPD` container from a re-encoded section is still in progress.
 
@@ -99,6 +99,14 @@ Notes:
   - unified checker entrypoint: `bash scripts/run_python_quality.sh`
 - Repository hygiene:
   - file-size cap check via `scripts/check_file_size_caps.py`
+
+## Acknowledgements
+
+The `.UPD` container model, the LZSS codec semantics and the published reference identities
+used in tests come from the MIT-licensed
+[DeckVolve xdj-700-mods](https://github.com/DeckVolve/xdj-700-mods) project. The LZSS encoder in
+`patch-core` is a decision-identical port of its encoder. Elsewhere in this repository it is
+called "the reference implementation".
 
 ## Versioning and release docs
 

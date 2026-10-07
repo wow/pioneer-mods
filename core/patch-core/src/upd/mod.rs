@@ -1,7 +1,6 @@
 //! Read-only parser for Pioneer `.UPD` update containers (XDJ-700 generation).
 //!
-//! Layout, as modelled by the MIT-licensed DeckVolve xdj-700-mods patcher
-//! (<https://github.com/DeckVolve/xdj-700-mods>):
+//! Layout, as modelled by the reference implementation (see the README's Acknowledgements):
 //!
 //! ```text
 //! "<len0>\r\n<len1>\r\n...<document0><document1>...

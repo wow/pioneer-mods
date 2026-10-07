@@ -1,7 +1,7 @@
 //! Decoder for the LZSS variant used by Pioneer XDJ-700 MAIN firmware sections.
 //!
-//! Semantics follow the device decompressor as documented by the MIT-licensed DeckVolve
-//! xdj-700-mods project (`lzss_pioneer.py`):
+//! Semantics follow the device decompressor as documented by the reference implementation (see the
+//! README's Acknowledgements):
 //!
 //! - a 4096-byte ring buffer pre-filled with `0x20`, first write at index `4096 - 18`;
 //! - each flag byte describes the next 8 items, least significant bit first;

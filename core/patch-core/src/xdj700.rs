@@ -6,8 +6,9 @@
 //! [u32 LE size][size bytes: LZSS stream starting with the section prefix][u16 LE checksum]
 //! ```
 //!
-//! The checksum is the 16-bit sum of the size field and every compressed byte. According to
-//! DeckVolve, the boot loader verifies it and falls back to a smaller updater section on mismatch.
+//! The checksum is the 16-bit sum of the size field and every compressed byte. According to the
+//! reference implementation, the boot loader verifies it and falls back to a smaller updater
+//! section on mismatch.
 
 use crate::error::SectionError;
 use crate::identity::sha256_hex;

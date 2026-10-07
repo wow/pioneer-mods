@@ -1,7 +1,7 @@
 //! Deterministic greedy encoder for the XDJ-700 LZSS variant.
 //!
-//! The match search reproduces DeckVolve's `lzss_pioneer.py` encoder decision for decision, so
-//! both produce byte-identical streams for the same input:
+//! The match search reproduces the reference encoder (see the README's Acknowledgements) decision
+//! for decision, so both produce byte-identical streams for the same input:
 //!
 //! - candidates are indexed by their next 3 bytes, in insertion order; the ring's initial spaces
 //!   are pre-indexed as logical sources `-4096..=-3`, and sources `-2` and `-1` (which straddle
