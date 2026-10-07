@@ -59,6 +59,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   A container with more than one XDJ-700 MAIN document is refused as ambiguous. The MAIN image
   is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
   section is reported with its reason instead of failing the whole report.
+- `patch-core` builds with `opt-level = 1` in the dev/test profile, so codec tests on 64 MiB
+  inputs stay fast. Debug assertions and overflow checks remain enabled.
 - Deterministic LZSS encoder (`patch_core::lzss::encode`, `encode_section_stream`). It is
   decision-identical to DeckVolve's reference encoder. It was verified byte-identical on random,
   exhaustive and adversarial inputs and on the official v1.15 application. CI pins golden vectors

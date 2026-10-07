@@ -22,3 +22,8 @@ serde_json = "1.0.145"
 sha2 = "0.10.9"
 tempfile = "3.23.0"
 thiserror = "2.0.17"
+
+# The LZSS encoder/decoder dominate test time on 64 MiB inputs. Light optimisation keeps
+# `cargo test` fast while debug assertions and overflow checks stay enabled.
+[profile.dev.package.patch-core]
+opt-level = 1
