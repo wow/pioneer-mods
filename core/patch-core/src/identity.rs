@@ -61,13 +61,14 @@ pub fn identify_firmware(path: &Path) -> Result<FirmwareIdentity, PatchCoreError
 }
 
 pub fn identify_bytes(file_name: String, input_bytes: &[u8]) -> FirmwareIdentity {
-    let mut hasher = Sha256::new();
-    hasher.update(input_bytes);
-    let sha256_hex = hex::encode(hasher.finalize());
-
     FirmwareIdentity {
         file_name,
         size_bytes: input_bytes.len() as u64,
-        sha256_hex,
+        sha256_hex: sha256_hex(input_bytes),
     }
+}
+
+/// Lowercase hex SHA-256 of `bytes`.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
 }
