@@ -21,6 +21,12 @@ const PANL_IMAGE_SHA256: &str = "52c5a54320c11477c50ed1da93fc585128c50e9e78d624c
 const APPLICATION_DECODED_LEN: usize = 18_601_864;
 const APPLICATION_DECODED_SHA256: &str =
     "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939";
+/// Re-encoding of the stock application (not the stock packer's bytes). Verified byte-identical
+/// to DeckVolve's `encode_section` output for the same input (2026-10-07), and pinned so any
+/// encoder drift is noticed.
+const REENCODED_STREAM_LEN: usize = 6_988_604;
+const REENCODED_STREAM_SHA256: &str =
+    "00b29057b9b92e20de9b5c899ac36095bbd1128f94e7aa1dd5b8314c8b0c8063";
 
 fn official_upd_path() -> PathBuf {
     std::env::var_os(ENV_VAR)
@@ -77,4 +83,11 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
     assert_eq!(application.decoded().len(), APPLICATION_DECODED_LEN);
     assert_eq!(application.decoded_sha256(), APPLICATION_DECODED_SHA256);
     assert_eq!(&application.decoded()[..19], &[0; 19]);
+
+    let reencoded = xdj700::encode_section(application.decoded()).expect("re-encode");
+    let stream = &reencoded[4..reencoded.len() - 2];
+    assert_eq!(stream.len(), REENCODED_STREAM_LEN);
+    assert_eq!(sha256_hex(stream), REENCODED_STREAM_SHA256);
+    let redecoded = xdj700::decode_section(&reencoded, 0).expect("decode re-encoded");
+    assert_eq!(redecoded.decoded_sha256(), APPLICATION_DECODED_SHA256);
 }

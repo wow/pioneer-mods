@@ -59,12 +59,26 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   A container with more than one XDJ-700 MAIN document is refused as ambiguous. The MAIN image
   is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
   section is reported with its reason instead of failing the whole report.
+- Deterministic LZSS encoder (`patch_core::lzss::encode`, `encode_section_stream`). It is
+  decision-identical to DeckVolve's reference encoder. It was verified byte-identical on random,
+  exhaustive and adversarial inputs and on the official v1.15 application. CI pins golden vectors
+  for each search decision: history insertion order, probe order, the 4096 window edge, a binding
+  candidate cap, and the early exit. Candidates are kept in hash chains (a fixed 24-bit key
+  table plus window-sized links), so memory does not grow with the input: the official
+  application encodes in about 0.6 s.
+- `patch_core::xdj700::encode_section` builds complete section bytes (size field, stream,
+  checksum). It is self-checked: the result must decode back to the input through
+  `decode_section` (`xdj700::verify_encoded_section`), and on failure it reports the decode
+  error or the mismatch. Inputs larger than the 64 MiB decode cap are refused up front with
+  `SectionError::DecodedTooLarge`.
 - `patch_core::read_firmware` reads an input once and returns its identity plus the hashed
   bytes; `read_regular_file` reads without hashing. Both refuse non-regular files (directories,
   FIFOs, devices): the path is checked first, the file is opened non-blocking on Unix so a path
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
+- `patch-core` builds with `opt-level = 1` in the dev/test profile, so codec tests on 64 MiB
+  inputs stay fast. Debug assertions and overflow checks remain enabled.
 - Local Python validation instructions now use the same entrypoint as CI (`scripts/run_python_quality.sh`).
 - `patch-cli patch` now loads and validates recipe manifests, enforces firmware identity compatibility
   (size + SHA-256), and applies deterministic `write_span` / `owner_copy_window` operations.

@@ -14,12 +14,25 @@
 
 use crate::error::LzssError;
 
+mod encode;
+
+pub(crate) use encode::{SECTION_SEED_LEN, encode_section_stream_into};
+pub use encode::{encode, encode_section_stream};
+
 pub const WINDOW_SIZE: usize = 4096;
 const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 pub const MIN_MATCH: usize = 3;
 pub const MAX_MATCH: usize = 18;
 pub const INITIAL_WRITE_INDEX: usize = WINDOW_SIZE - MAX_MATCH;
 pub const RING_FILL: u8 = 0x20;
+
+/// Start of the stock XDJ-700 section stream (`01 00 EE FF`). The device decodes it as data: a
+/// literal `0x00` and an 18-byte match of it, i.e. a 19-byte zero prefix.
+///
+/// The first byte is a flag byte covering 8 items. Only its two low bits belong to the tag
+/// (literal, then match); bits 2..=7 describe the data that follows, so a re-encoded section may
+/// start with a different first byte.
+pub const SECTION_TAG: [u8; 4] = [0x01, 0x00, 0xEE, 0xFF];
 
 /// Decodes `stream`, refusing to produce more than `max_output` bytes.
 ///

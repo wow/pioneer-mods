@@ -29,9 +29,10 @@ This repository currently includes:
 - Read-only `.UPD` container parser (`inspect --structure`)
 - Canonical `.UPD` serializer with self-check, byte-exact no-op roundtrip, and memory image
   reconstruction
-- XDJ-700 MAIN application section verification and LZSS decoding (read-only)
+- XDJ-700 MAIN application section verification, LZSS decoding, and self-checked LZSS section
+  encoding (DeckVolve-identical)
 
-Container-aware section codecs/repacking are still in progress.
+Rebuilding the MAIN document and `.UPD` container from a re-encoded section is still in progress.
 
 ## Quick start (developer)
 

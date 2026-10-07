@@ -4,7 +4,7 @@ use common::*;
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, MAX_DECODED_LEN, SECTION_TAG, VERIFIED_MAIN_VERSIONS,
     decode_application, decode_main_image, decode_section, is_xdj700, main_document,
-    section_checksum,
+    section_checksum, verify_encoded_section,
 };
 use patch_core::{LzssError, SectionError, parse_upd};
 
@@ -277,4 +277,119 @@ fn decode_main_image_uses_a_prebuilt_image() {
     let decoded = decode_main_image(main, &built).expect("decode");
 
     assert_eq!(Ok(decoded), decode_application(&parsed));
+}
+
+#[test]
+fn encode_section_roundtrips_through_decode_section() {
+    let mut decoded = vec![0; 19];
+    decoded.extend(b"application bytes ".repeat(50));
+
+    let bytes = patch_core::xdj700::encode_section(&decoded).expect("encode");
+    let section = decode_section(&bytes, 0).expect("decode");
+
+    assert_eq!(section.decoded(), decoded.as_slice());
+    let data_end = bytes.len() - 2;
+    assert_eq!(
+        u16::from_le_bytes([bytes[data_end], bytes[data_end + 1]]),
+        section_checksum(&bytes[..data_end])
+    );
+    assert_eq!(
+        u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize,
+        bytes.len() - 6
+    );
+}
+
+#[test]
+fn encode_section_refuses_data_without_seed() {
+    assert_eq!(
+        patch_core::xdj700::encode_section(b"no zero prefix"),
+        Err(SectionError::Encode(LzssError::MissingSectionSeed))
+    );
+}
+
+#[test]
+fn encode_section_refuses_input_above_decode_cap() {
+    let decoded = vec![0; MAX_DECODED_LEN + 1];
+
+    assert_eq!(
+        patch_core::xdj700::encode_section(&decoded),
+        Err(SectionError::DecodedTooLarge {
+            len: MAX_DECODED_LEN + 1,
+            limit: MAX_DECODED_LEN,
+        })
+    );
+}
+
+#[test]
+fn encode_section_accepts_input_at_decode_cap() {
+    let decoded = vec![0; MAX_DECODED_LEN];
+
+    let bytes = patch_core::xdj700::encode_section(&decoded).expect("at the cap");
+
+    assert_eq!(
+        decode_section(&bytes, 0).map(|section| section.decoded().len()),
+        Ok(MAX_DECODED_LEN)
+    );
+}
+
+fn encoded_application() -> (Vec<u8>, Vec<u8>) {
+    let mut decoded = vec![0; 19];
+    decoded.extend(b"application bytes ".repeat(50));
+    let bytes = patch_core::xdj700::encode_section(&decoded).expect("encode");
+    (bytes, decoded)
+}
+
+#[test]
+fn self_check_accepts_the_encoder_output() {
+    let (bytes, decoded) = encoded_application();
+
+    assert_eq!(verify_encoded_section(&bytes, &decoded), Ok(()));
+}
+
+#[test]
+fn self_check_refuses_bytes_that_do_not_decode_and_keeps_the_cause() {
+    let (mut bytes, decoded) = encoded_application();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 0x01;
+    let computed = section_checksum(&bytes[..bytes.len() - 2]);
+    let stored = u16::from_le_bytes([bytes[last - 1], bytes[last]]);
+
+    assert_eq!(
+        verify_encoded_section(&bytes, &decoded),
+        Err(SectionError::EncodeSelfCheckDecode(Box::new(
+            SectionError::ChecksumMismatch { stored, computed }
+        )))
+    );
+}
+
+#[test]
+fn self_check_refuses_a_valid_section_of_different_data() {
+    let (bytes, mut decoded) = encoded_application();
+    let last = decoded.len() - 1;
+    decoded[last] ^= 0x01;
+
+    assert_eq!(
+        verify_encoded_section(&bytes, &decoded),
+        Err(SectionError::EncodeSelfCheckMismatch)
+    );
+    assert_eq!(
+        verify_encoded_section(&bytes, &decoded[..last]),
+        Err(SectionError::EncodeSelfCheckMismatch)
+    );
+}
+
+#[test]
+fn seed_and_size_errors_name_their_limits() {
+    assert_eq!(
+        LzssError::MissingSectionSeed.to_string(),
+        "section data must start with the 19 zero bytes the section tag decodes to"
+    );
+    assert_eq!(
+        SectionError::DecodedTooLarge {
+            len: MAX_DECODED_LEN + 1,
+            limit: MAX_DECODED_LEN
+        }
+        .to_string(),
+        "section data of 67108865 bytes exceeds the 67108864-byte decoded-size limit"
+    );
 }
