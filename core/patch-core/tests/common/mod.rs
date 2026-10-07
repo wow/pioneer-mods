@@ -2,6 +2,8 @@
 // Each test crate uses a different subset of these helpers.
 #![allow(dead_code)]
 
+pub mod xdj700;
+
 use patch_core::upd::crc16_xmodem;
 /// Formats one S-record line (with CRLF) using a computed checksum.
 pub fn record(record_type: u8, address_len: usize, address: u32, data: &[u8]) -> Vec<u8> {

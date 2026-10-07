@@ -10,6 +10,10 @@
 //! reference implementation, the boot loader verifies it and falls back to a smaller updater
 //! section on mismatch.
 
+mod rebuild;
+
+pub use rebuild::{RECORD_DATA_LEN, RebuiltUpdate, rebuild_with_application, verify_rebuild};
+
 use crate::error::SectionError;
 use crate::identity::sha256_hex;
 use crate::lzss;

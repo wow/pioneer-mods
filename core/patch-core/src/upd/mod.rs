@@ -22,6 +22,7 @@ pub use image::{DocumentImage, GAP_FILL, MAX_IMAGE_LEN, MAX_TOTAL_IMAGE_LEN};
 pub use srecord::{SRecord, SRecordType};
 pub use summary::{DocumentSummary, Extent, ImageReport, UpdSummary};
 pub use write::verify_roundtrip;
+pub(crate) use write::{DocumentParts, encode_parts};
 
 use crate::error::{LayoutViolation, UpdError};
 use std::collections::BTreeSet;
@@ -86,6 +87,16 @@ impl Descriptor {
     /// Remaining descriptor bytes, kept verbatim (meaning not yet established).
     pub fn reserved(&self) -> &[u8; RESERVED_LEN] {
         &self.reserved
+    }
+
+    /// This descriptor with another version field, or `None` unless `version` is exactly
+    /// [`VERSION_LEN`] printable ASCII bytes (what the parser accepts).
+    pub(crate) fn with_version(&self, version: &str) -> Option<Descriptor> {
+        let valid = version.len() == VERSION_LEN && printable_ascii(version.as_bytes()).is_some();
+        valid.then(|| Descriptor {
+            version: version.to_owned(),
+            ..self.clone()
+        })
     }
 }
 

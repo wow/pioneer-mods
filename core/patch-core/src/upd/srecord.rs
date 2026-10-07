@@ -79,6 +79,17 @@ pub struct SRecord {
 }
 
 impl SRecord {
+    /// A data record for the canonical writer. Callers re-parse the written output, which checks
+    /// the count byte, checksum and address range of every record built here.
+    pub(crate) fn data_record(record_type: SRecordType, address: u32, data: Vec<u8>) -> Self {
+        debug_assert!(record_type.is_data());
+        Self {
+            record_type,
+            address,
+            data,
+        }
+    }
+
     pub fn record_type(&self) -> SRecordType {
         self.record_type
     }
