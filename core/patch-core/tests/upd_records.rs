@@ -195,3 +195,18 @@ fn rejects_empty_data_record() {
         layout_error(2, LayoutViolation::EmptyDataRecord)
     );
 }
+
+#[test]
+fn rejects_record_shorter_than_address_and_checksum() {
+    // S1 needs a 2-byte address plus a checksum byte; this record carries only 2 bytes in total.
+    let line = b"S10200FD\r\n".to_vec();
+
+    assert_eq!(
+        parse_upd(&container_with_main_line(2, &line)),
+        Err(UpdError::MalformedRecord {
+            document_index: 0,
+            record_index: 2,
+            defect: RecordDefect::TooShort,
+        })
+    );
+}

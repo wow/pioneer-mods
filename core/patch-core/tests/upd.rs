@@ -213,7 +213,7 @@ fn rejects_non_alphanumeric_descriptor_kind() {
 
 #[test]
 fn rejects_control_byte_in_descriptor_version() {
-    let bytes = container_with_descriptor(b"SYN-100     MAINVer9\x079\0       0");
+    let bytes = container_with_descriptor(b"SYN-100     MAINVer9.9\x07\0       0");
 
     assert_eq!(parse_upd(&bytes), descriptor_error("version"));
 }

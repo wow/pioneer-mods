@@ -98,3 +98,46 @@ fn patch_supports_bare_relative_output_filename() {
     );
     assert!(output_path.exists(), "expected output file to be created");
 }
+
+#[test]
+fn patch_refuses_non_regular_input_without_writing_output() {
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+    let input_dir = tempdir.path().join("XDJ700.UPD");
+    let recipe_path = tempdir.path().join("recipe.json");
+    let output_path = tempdir.path().join("XDJ700-patched.UPD");
+    fs::create_dir(&input_dir).expect("create directory input");
+
+    let manifest = RecipeManifest {
+        schema_version: 1,
+        recipe_id: "non-regular-input".to_owned(),
+        description: "input is a directory".to_owned(),
+        targets: vec![SupportedFirmware {
+            model: "XDJ-700".to_owned(),
+            version: "1.15".to_owned(),
+            size_bytes: 1,
+            sha256_hex: "00".repeat(32),
+            expected_output_sha256: None,
+        }],
+        operations: vec![PatchOperation::WriteSpan(WriteSpan {
+            offset: 0,
+            length: 1,
+            bytes: vec![1],
+        })],
+    };
+    fs::write(
+        &recipe_path,
+        serde_json::to_vec_pretty(&manifest).expect("serialize recipe"),
+    )
+    .expect("write recipe");
+
+    let output =
+        run_patch_command_with_args_in_dir(&input_dir, &recipe_path, &output_path, &[], None);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("does not point to a regular file"),
+        "stderr: {stderr}"
+    );
+    assert!(!output_path.exists(), "no output may be written");
+}

@@ -77,6 +77,7 @@ pub fn container_with_main_line(index: usize, line: &[u8]) -> Vec<u8> {
 
 /// Builds a document from an arbitrary 32-byte descriptor and appends a valid CRC trailer.
 pub fn document_with_descriptor(descriptor: &[u8], lines: &[Vec<u8>]) -> Vec<u8> {
+    assert_eq!(descriptor.len(), 32, "descriptor fixture must be 32 bytes");
     let mut doc = descriptor.to_vec();
     for line in lines {
         doc.extend_from_slice(line);
