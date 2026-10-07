@@ -3,9 +3,9 @@
 //! appear under the output name.
 
 use anyhow::{Context, Result, bail};
-use patch_core::{read_regular_file, sha256_hex};
+use patch_core::open_regular_file;
 use std::fs;
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
@@ -41,12 +41,14 @@ impl Overwrite {
     }
 }
 
-/// Refuses an output path that resolves to the input, or that exists unless overwriting is
-/// forced.
+/// Refuses, before any work is done, an output path that resolves to the input, whose directory
+/// does not exist, or that already exists (including as a dangling symlink) unless overwriting
+/// is forced.
 ///
 /// # Errors
 ///
-/// On aliasing, an existing output, or a path that cannot be resolved.
+/// On aliasing, a missing output directory, an existing output, or a path that cannot be
+/// resolved.
 pub fn ensure_safe_output_path(
     input_path: &Path,
     output_path: &Path,
@@ -67,11 +69,26 @@ pub fn ensure_safe_output_path(
         );
     }
 
-    if output_path.exists() && overwrite != Overwrite::Forced {
+    let output_dir = output_dir(output_path);
+    if !output_dir.is_dir() {
+        bail!(
+            "output directory '{}' does not exist or is not a directory",
+            output_dir.display()
+        );
+    }
+    // `symlink_metadata` also sees a dangling symlink, which `exists()` would miss.
+    if fs::symlink_metadata(output_path).is_ok() && overwrite != Overwrite::Forced {
         return Err(overwrite.refusal(output_path));
     }
 
     Ok(())
+}
+
+fn output_dir(output_path: &Path) -> &Path {
+    match output_path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir,
+        _ => Path::new("."),
+    }
 }
 
 fn resolve_for_comparison(path: &Path) -> Result<PathBuf> {
@@ -87,28 +104,27 @@ fn resolve_for_comparison(path: &Path) -> Result<PathBuf> {
         .join(path))
 }
 
-/// Writes `bytes` to `output_path` atomically and returns their SHA-256.
+/// Writes `bytes` to `output_path` atomically.
 ///
 /// The bytes go to a temporary file in the same directory (never under the output name), which
 /// is synced and then read back through the file system ([`read_back`]) before it is renamed into
 /// place, so only bytes that read back exactly can appear under `output_path`. The temporary file
-/// is deleted on any error. After the rename the directory is synced; if that fails, the output
-/// is removed. A crash after the rename can only leave the complete, verified file, because the
+/// is deleted on any error. After the rename the directory is synced. If that fails, the file is
+/// kept, because its bytes are verified and removing it would not make anything durable (with
+/// `--force` the previous file is already replaced), and the error says durability is
+/// unconfirmed. A crash after the rename can only leave the complete, verified file, because the
 /// rename is atomic.
 ///
 /// # Errors
 ///
-/// An overwrite refusal (see [`Overwrite`]), a write, sync or read-back failure, or a file system
-/// without a no-clobber rename (for example exFAT), with a hint to write elsewhere first.
+/// An overwrite refusal (see [`Overwrite`]), a write, sync or read-back failure, a file system
+/// without a no-clobber rename ([`is_no_clobber_unsupported`]), or a failed directory sync.
 pub fn write_output_atomically(
     output_path: &Path,
     bytes: &[u8],
     overwrite: Overwrite,
-) -> Result<String> {
-    let output_dir = match output_path.parent() {
-        Some(dir) if !dir.as_os_str().is_empty() => dir,
-        _ => Path::new("."),
-    };
+) -> Result<()> {
+    let output_dir = output_dir(output_path);
     let mut temp_file = NamedTempFile::new_in(output_dir).with_context(|| {
         format!(
             "failed to create temporary output file in '{}'",
@@ -127,7 +143,7 @@ pub fn write_output_atomically(
             output_path.display()
         )
     })?;
-    let sha256 = read_back(temp_file.path(), bytes).with_context(|| {
+    read_back(temp_file.path(), bytes).with_context(|| {
         format!(
             "refusing to create output firmware '{}'",
             output_path.display()
@@ -142,10 +158,10 @@ pub fn write_output_atomically(
         ErrorKind::AlreadyExists if overwrite != Overwrite::Forced => {
             overwrite.refusal(output_path)
         }
-        _ if no_clobber_unsupported(&error.error) => anyhow::anyhow!(
-            "failed to atomically persist output firmware '{}': {}; the output file system does \
-             not support a no-clobber rename (for example exFAT). Write to a local disk first, \
-             then copy the file to a FAT32 USB stick and check its SHA-256 there",
+        _ if is_no_clobber_unsupported(&error.error) => anyhow::anyhow!(
+            "failed to atomically persist output firmware '{}': {}; the output file system may \
+             not support a no-clobber rename (for example FAT or exFAT on some systems). Write \
+             the output to a local disk instead",
             output_path.display(),
             error.error
         ),
@@ -155,29 +171,29 @@ pub fn write_output_atomically(
             error.error
         ),
     })?;
-    if let Err(error) = sync_output_directory(output_dir) {
-        let removed = fs::remove_file(output_path).is_ok();
-        return Err(error.context(format!(
-            "output firmware '{}' may not be durable ({}); do not use it",
-            output_path.display(),
-            if removed {
-                "removed"
-            } else {
-                "could not be removed"
-            }
-        )));
-    }
-    Ok(sha256)
+    sync_output_directory(output_dir).with_context(|| {
+        format!(
+            "output firmware '{}' was written and verified, but its directory could not be \
+             synced, so durability is not confirmed; check the file again before use",
+            output_path.display()
+        )
+    })?;
+    Ok(())
 }
 
-/// Whether a persist failed because the file system lacks a no-clobber rename. Rust does not map
-/// every platform's "not supported" code to [`ErrorKind::Unsupported`] (macOS reports exFAT as
-/// `ENOTSUP`, 45), so the raw codes are checked too.
-fn no_clobber_unsupported(error: &std::io::Error) -> bool {
+/// Whether a persist error probably means the file system lacks a no-clobber rename.
+///
+/// Rust does not map every platform's "not supported" code to [`ErrorKind::Unsupported`]: macOS
+/// reports exFAT as `ENOTSUP` (45). On Linux, when the rename flag is unsupported the temporary
+/// file falls back to a hard link, which FAT and exFAT refuse with `EPERM`; so `EPERM` is
+/// included, and the message says "may".
+pub fn is_no_clobber_unsupported(error: &std::io::Error) -> bool {
     #[cfg(unix)]
     let raw = {
         let code = error.raw_os_error();
-        code == Some(libc::ENOTSUP) || code == Some(libc::EOPNOTSUPP)
+        [libc::ENOTSUP, libc::EOPNOTSUPP, libc::EPERM]
+            .iter()
+            .any(|&known| code == Some(known))
     };
     #[cfg(not(unix))]
     let raw = false;
@@ -206,8 +222,7 @@ fn sync_output_directory(_output_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Reads `path` back through the file system and requires exactly `expected`; returns the
-/// SHA-256 of the bytes read.
+/// Reads `path` back through the file system in chunks and requires exactly `expected`.
 ///
 /// This catches write-path errors and a wrong file at `path`. It does not prove what is on the
 /// storage medium, because the read may be served from the operating system's cache: check a USB
@@ -216,14 +231,38 @@ fn sync_output_directory(_output_dir: &Path) -> Result<()> {
 /// # Errors
 ///
 /// If `path` cannot be read as a regular file, or its bytes differ from `expected`.
-pub fn read_back(path: &Path, expected: &[u8]) -> Result<String> {
-    let written = read_regular_file(path)
-        .with_context(|| format!("failed to read back '{}'", path.display()))?;
-    if written != expected {
-        bail!(
+pub fn read_back(path: &Path, expected: &[u8]) -> Result<()> {
+    let mismatch = || {
+        anyhow::anyhow!(
             "'{}' does not match the verified bytes after writing; do not use it",
             path.display()
-        );
+        )
+    };
+    let failed = |error: std::io::Error| {
+        anyhow::Error::new(error).context(format!("failed to read back '{}'", path.display()))
+    };
+    let mut file = open_regular_file(path)
+        .with_context(|| format!("failed to read back '{}'", path.display()))?;
+    let len = file.metadata().map_err(failed)?.len();
+    if len != expected.len() as u64 {
+        return Err(mismatch());
     }
-    Ok(sha256_hex(&written))
+    let mut buffer = vec![0u8; READ_BACK_CHUNK];
+    let mut offset = 0;
+    loop {
+        let read = file.read(&mut buffer).map_err(failed)?;
+        if read == 0 {
+            break;
+        }
+        if expected.get(offset..offset + read) != Some(&buffer[..read]) {
+            return Err(mismatch());
+        }
+        offset += read;
+    }
+    if offset != expected.len() {
+        return Err(mismatch());
+    }
+    Ok(())
 }
+
+const READ_BACK_CHUNK: usize = 1 << 20;

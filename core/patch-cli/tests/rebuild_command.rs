@@ -151,3 +151,47 @@ fn requires_an_explicit_label_and_application() {
         assert_eq!(result.status.code(), Some(2), "clap usage error");
     }
 }
+
+#[test]
+fn refuses_an_input_of_the_wrong_length_without_reading_it() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = dir.path().join("huge.img");
+    let output = dir.path().join("rebuilt.UPD");
+    // Sparse 16 GiB file: refused from its length alone, long before it could be read.
+    std::fs::File::create(&input)
+        .expect("create")
+        .set_len(16 << 30)
+        .expect("set_len");
+
+    let started = std::time::Instant::now();
+    let result = rebuild(&input, &output, "Ver1.15");
+
+    assert!(!result.status.success());
+    assert!(
+        stderr(&result).contains("17179869184 bytes, expected 17371335"),
+        "{}",
+        stderr(&result)
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert!(!output.exists());
+}
+
+#[test]
+fn refuses_a_missing_output_directory_before_reading_the_input() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = dir.path().join("XDJ700.UPD");
+    write_bytes(&input, b"input");
+
+    let result = rebuild(
+        &input,
+        &dir.path().join("typo").join("XDJ700.UPD"),
+        "Ver1.15",
+    );
+
+    assert!(!result.status.success());
+    assert!(
+        stderr(&result).contains("does not exist"),
+        "{}",
+        stderr(&result)
+    );
+}

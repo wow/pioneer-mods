@@ -62,12 +62,19 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - `patch-cli rebuild --input <official .UPD> --application stock --label <VerX.YY> --output
   <new file>` writes a no-op rebuild of the official XDJ-700 v1.15 update: the stock
   application re-encoded under the declared label.
-  - It refuses any input other than the pinned official file, and any malformed label before
-    reading the input.
+  - It refuses any input other than the pinned official file: the length is checked on the
+    open handle before anything is read, then the library checks the hash. A malformed label,
+    a missing output directory, or an existing output (including a dangling symlink) is refused
+    before the input is read.
   - The output is never overwritten. It is written atomically: the temporary file is
-    fsynced and read back before a no-clobber rename, so only verified bytes ever appear under
-    the output name; then the directory is synced, and a failure there removes the output.
-  - A file system without a no-clobber rename (for example exFAT) is refused with a hint.
+    fsynced and read back (streamed, in chunks) before a no-clobber rename, so only verified
+    bytes ever appear under the output name. Then the directory is synced. If that fails, the
+    verified file is kept and the error says durability is not confirmed.
+  - A file system that may lack a no-clobber rename (ENOTSUP/EOPNOTSUPP, or EPERM from the
+    Linux hard-link fallback) gets a hint to write to a local disk.
+  - `xdj700::rebuild_with_stock_application` rebuilds with the input's own application, parsing
+    the input once. `StockRelease` also pins `upd_len`. `RebuiltUpdate` reports the decoded
+    application's SHA-256. `patch_core::open_regular_file` is public.
   - It reports input, application, MAIN image and output identities.
   - `patch_core::xdj700::validate_version_label` is now public.
   - Owner guide for flashing rebuilt files: `docs/xdj700-flashing.md`.

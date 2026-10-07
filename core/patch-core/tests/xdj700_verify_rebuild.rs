@@ -331,7 +331,7 @@ fn refuses_an_input_other_than_the_pinned_release() {
     assert_eq!(
         verify_rebuild(
             &case.stock,
-            &release(&output_sha256),
+            &release(output.len(), &output_sha256),
             &output,
             &case.decoded,
             "Ver1.22"

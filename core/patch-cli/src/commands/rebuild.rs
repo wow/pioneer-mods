@@ -1,10 +1,9 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
-use patch_core::xdj700::{
-    OFFICIAL_V115, decode_application, rebuild_with_application, validate_version_label,
-};
-use patch_core::{firmware_file_name, parse_upd, read_regular_file, sha256_hex};
-use std::path::PathBuf;
+use patch_core::xdj700::{OFFICIAL_V115, rebuild_with_stock_application, validate_version_label};
+use patch_core::{RebuildError, firmware_file_name, open_regular_file};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 /// Where the rebuilt application comes from.
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,43 +35,65 @@ pub struct RebuildArgs {
 pub fn rebuild(args: RebuildArgs) -> Result<()> {
     validate_version_label(&args.label)?;
     ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;
-    let input = read_regular_file(&args.input)
-        .with_context(|| format!("failed to read input update '{}'", args.input.display()))?;
-    let input_sha256 = sha256_hex(&input);
-    if input_sha256 != OFFICIAL_V115.upd_sha256 {
-        bail!(
-            "refusing to rebuild '{}': it is not the official XDJ-700 v1.15 update \
-             (SHA-256 {input_sha256}); only that exact file can be rebuilt",
-            args.input.display()
-        );
-    }
+    let input = read_official_input(&args.input)?;
 
-    let application = match args.application {
+    let rebuilt = match args.application {
         ApplicationSource::Stock => {
-            let container = parse_upd(&input).context("failed to parse the official update")?;
-            decode_application(&container).context("failed to decode the official application")?
+            rebuild_with_stock_application(&input, &OFFICIAL_V115, &args.label)
         }
-    };
-    let rebuilt =
-        rebuild_with_application(&input, &OFFICIAL_V115, application.decoded(), &args.label)
-            .with_context(|| format!("refusing to rebuild '{}'", args.input.display()))?;
+    }
+    .map_err(|error| match error {
+        RebuildError::UnpinnedInput { sha256 } => not_official(&args.input, &sha256),
+        other => anyhow::Error::new(other)
+            .context(format!("refusing to rebuild '{}'", args.input.display())),
+    })?;
 
-    let written_sha256 = write_output_atomically(&args.output, rebuilt.bytes(), Overwrite::Never)?;
+    write_output_atomically(&args.output, rebuilt.bytes(), Overwrite::Never)?;
 
     println!("release: XDJ-700 v1.15 (official)");
     println!("input_file: {}", firmware_file_name(&args.input));
-    println!("input_sha256_hex: {input_sha256}");
+    println!("input_sha256_hex: {}", OFFICIAL_V115.upd_sha256);
     println!("application: stock (re-encoded, unchanged)");
-    println!("application_sha256_hex: {}", application.decoded_sha256());
+    println!("application_sha256_hex: {}", rebuilt.application_sha256());
     println!("version_label: {}", args.label);
     println!("main_image_len: {}", rebuilt.main_image_len());
     println!("main_image_sha256_hex: {}", rebuilt.main_image_sha256());
     println!("output_file: {}", args.output.display());
     println!("output_len: {}", rebuilt.bytes().len());
-    println!("output_sha256_hex: {written_sha256}");
+    println!("output_sha256_hex: {}", rebuilt.sha256());
     println!(
         "verified: rebuild re-parsed and checked against the input; file read back through the \
          file system before it was renamed into place"
     );
     Ok(())
+}
+
+/// Reads the input only if its length is the official file's, checked on the open handle, so
+/// an arbitrary large file is refused without being read. The hash is checked by the library.
+fn read_official_input(path: &Path) -> Result<Vec<u8>> {
+    let read_failed = || format!("failed to read input update '{}'", path.display());
+    let file = open_regular_file(path).with_context(read_failed)?;
+    let len = file.metadata().with_context(read_failed)?.len();
+    if len != OFFICIAL_V115.upd_len as u64 {
+        bail!(
+            "refusing to rebuild '{}': it is not the official XDJ-700 v1.15 update ({len} bytes, \
+             expected {}); only that exact file can be rebuilt",
+            path.display(),
+            OFFICIAL_V115.upd_len
+        );
+    }
+    let mut bytes = Vec::with_capacity(OFFICIAL_V115.upd_len);
+    // One byte more than expected, so a file that grew after the check is still caught.
+    file.take(len + 1)
+        .read_to_end(&mut bytes)
+        .with_context(read_failed)?;
+    Ok(bytes)
+}
+
+fn not_official(path: &Path, sha256: &str) -> anyhow::Error {
+    anyhow::anyhow!(
+        "refusing to rebuild '{}': it is not the official XDJ-700 v1.15 update (SHA-256 \
+         {sha256}); only that exact file can be rebuilt",
+        path.display()
+    )
 }

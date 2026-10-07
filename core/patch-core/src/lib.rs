@@ -11,7 +11,7 @@ pub use error::{
     RebuildError, RecordDefect, SectionError, UpdError,
 };
 pub use identity::{
-    FirmwareIdentity, firmware_file_name, identify_bytes, identify_firmware, read_firmware,
-    read_regular_file, sha256_hex,
+    FirmwareIdentity, firmware_file_name, identify_bytes, identify_firmware, open_regular_file,
+    read_firmware, read_regular_file, sha256_hex,
 };
 pub use upd::{UpdContainer, parse_upd, verify_roundtrip};

@@ -1,8 +1,10 @@
 //! Output-file safety (`patch_cli::output`), exercised directly so the write-time refusals are
 //! covered without the official firmware.
 
-use patch_cli::output::{Overwrite, ensure_safe_output_path, read_back, write_output_atomically};
-use patch_core::sha256_hex;
+use patch_cli::output::{
+    Overwrite, ensure_safe_output_path, is_no_clobber_unsupported, read_back,
+    write_output_atomically,
+};
 use std::fs;
 use std::path::Path;
 
@@ -22,13 +24,12 @@ fn entries(dir: &Path) -> Vec<String> {
 }
 
 #[test]
-fn writes_a_new_file_and_returns_its_hash_without_leaving_temporaries() {
+fn writes_a_new_file_without_leaving_temporaries() {
     let dir = tempfile::tempdir().expect("tempdir");
     let output = dir.path().join("XDJ700.UPD");
 
-    let sha256 = write_output_atomically(&output, b"firmware", Overwrite::Never).expect("write");
+    write_output_atomically(&output, b"firmware", Overwrite::Never).expect("write");
 
-    assert_eq!(sha256, sha256_hex(b"firmware"));
     assert_eq!(fs::read(&output).expect("read"), b"firmware");
     assert_eq!(entries(dir.path()), ["XDJ700.UPD"]);
 }
@@ -98,10 +99,7 @@ fn read_back_accepts_matching_bytes_and_refuses_others() {
     let path = dir.path().join("XDJ700.UPD");
     fs::write(&path, b"firmware").expect("seed");
 
-    assert_eq!(
-        read_back(&path, b"firmware").expect("match"),
-        sha256_hex(b"firmware")
-    );
+    read_back(&path, b"firmware").expect("match");
     let error = read_back(&path, b"firmwarf").expect_err("mismatch");
     assert!(
         error
@@ -140,4 +138,102 @@ fn output_path_may_not_resolve_to_the_input() {
         );
     }
     assert!(ensure_safe_output_path(&input, &dir.path().join("new.UPD"), Overwrite::Never).is_ok());
+}
+
+#[test]
+fn read_back_compares_files_larger_than_one_chunk() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("big.UPD");
+    let mut expected: Vec<u8> = (0..(3 << 20) + 17).map(|i| (i % 251) as u8).collect();
+    fs::write(&path, &expected).expect("seed");
+
+    read_back(&path, &expected).expect("match");
+    let last = expected.len() - 1;
+    expected[last] ^= 1;
+    let error = read_back(&path, &expected).expect_err("last byte differs");
+    assert!(error.to_string().contains("does not match"), "{error:#}");
+}
+
+#[test]
+fn refuses_a_missing_output_directory_up_front() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = dir.path().join("XDJ700.UPD");
+    fs::write(&input, b"input").expect("seed");
+    let output = dir.path().join("typo").join("XDJ700.UPD");
+
+    let error = ensure_safe_output_path(&input, &output, Overwrite::Never).expect_err("missing");
+
+    assert!(error.to_string().contains("does not exist"), "{error:#}");
+}
+
+#[cfg(unix)]
+#[test]
+fn refuses_a_dangling_symlink_up_front_unless_forced() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = dir.path().join("XDJ700.UPD");
+    fs::write(&input, b"input").expect("seed");
+    let output = dir.path().join("out.UPD");
+    std::os::unix::fs::symlink(dir.path().join("nowhere.UPD"), &output).expect("symlink");
+
+    let error = ensure_safe_output_path(&input, &output, Overwrite::Never).expect_err("dangling");
+
+    assert!(
+        error.to_string().contains("choose a new output path"),
+        "{error:#}"
+    );
+    assert!(ensure_safe_output_path(&input, &output, Overwrite::Forced).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failed_directory_sync_keeps_the_verified_file_even_when_forced() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let sub = dir.path().join("out");
+    fs::create_dir(&sub).expect("subdir");
+    let output = sub.join("XDJ700.UPD");
+    fs::write(&output, b"old").expect("seed");
+    // Write and search, but no read: creating, reading back and renaming work; opening the
+    // directory for its sync does not.
+    fs::set_permissions(&sub, fs::Permissions::from_mode(0o300)).expect("chmod");
+    if fs::File::open(&sub).is_ok() {
+        fs::set_permissions(&sub, fs::Permissions::from_mode(0o700)).expect("restore");
+        eprintln!("skipped: permissions are not enforced for this user");
+        return;
+    }
+
+    let result = write_output_atomically(&output, b"new", Overwrite::Forced);
+
+    fs::set_permissions(&sub, fs::Permissions::from_mode(0o700)).expect("restore");
+    let error = result.expect_err("directory sync must fail");
+    assert!(
+        error.to_string().contains("durability is not confirmed"),
+        "{error:#}"
+    );
+    assert_eq!(
+        fs::read(&output).expect("read"),
+        b"new",
+        "verified file kept"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn recognises_file_systems_without_a_no_clobber_rename() {
+    use std::io::{Error, ErrorKind};
+    for code in [libc::ENOTSUP, libc::EOPNOTSUPP, libc::EPERM] {
+        assert!(
+            is_no_clobber_unsupported(&Error::from_raw_os_error(code)),
+            "{code}"
+        );
+    }
+    assert!(is_no_clobber_unsupported(&Error::from(
+        ErrorKind::Unsupported
+    )));
+    assert!(!is_no_clobber_unsupported(&Error::from_raw_os_error(
+        libc::ENOENT
+    )));
+    assert!(!is_no_clobber_unsupported(&Error::from(
+        ErrorKind::AlreadyExists
+    )));
 }

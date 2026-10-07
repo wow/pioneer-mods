@@ -2,12 +2,12 @@ mod common;
 
 use common::xdj700::{
     Main, SYNTHETIC_MAX_MAIN_IMAGE_LEN, application, descriptor, incompressible_application, lines,
-    loader, main_image, other_document, padded_application, panel, rebuild, release, stock_update,
+    loader, main_image, other_document, padded_application, panel, rebuild, stock_update,
 };
 use common::{container, document_with_descriptor, record};
 use patch_core::xdj700::{
-    APPLICATION_SECTION_OFFSET, MAX_MAIN_GROWTH, OFFICIAL_V115, StockRelease, decode_application,
-    encode_section, rebuild_with_application,
+    APPLICATION_SECTION_OFFSET, StockRelease, decode_application, encode_section,
+    rebuild_with_application,
 };
 use patch_core::{LzssError, RebuildError, SectionError, parse_upd, sha256_hex};
 
@@ -239,6 +239,7 @@ fn rebuild_clamps_the_size_bound_to_24_bit_addresses() {
     let stock = stock_update(&application(300, 7));
     let sha256 = sha256_hex(&stock);
     let unbounded = StockRelease {
+        upd_len: stock.len(),
         upd_sha256: &sha256,
         max_main_image_len: usize::MAX,
     };
@@ -265,57 +266,6 @@ fn rebuild_refuses_an_image_beyond_the_release_bound() {
             limit: SYNTHETIC_MAX_MAIN_IMAGE_LEN,
         })
     );
-}
-
-#[test]
-fn rebuild_refuses_an_input_other_than_the_pinned_release() {
-    let stock = stock_update(&padded_application(7));
-    let other = stock_update(&application(300, 9));
-    let other_sha256 = sha256_hex(&other);
-
-    assert_eq!(
-        rebuild_with_application(
-            &stock,
-            &release(&other_sha256),
-            &application(300, 9),
-            "Ver1.22"
-        ),
-        Err(RebuildError::UnpinnedInput {
-            sha256: sha256_hex(&stock)
-        })
-    );
-}
-
-#[test]
-fn rebuild_refuses_its_own_output_as_the_next_input() {
-    // Chaining rebuilds must not reset the size bound or carry a non-official loader forward.
-    let stock = stock_update(&padded_application(7));
-    let sha256 = sha256_hex(&stock);
-    let first = rebuild(&stock, &application(3000, 11), "Ver1.15").expect("first rebuild");
-
-    let second = rebuild_with_application(
-        first.bytes(),
-        &release(&sha256),
-        &application(3000, 13),
-        "Ver1.15",
-    );
-
-    assert_eq!(
-        second,
-        Err(RebuildError::UnpinnedInput {
-            sha256: first.sha256().to_owned()
-        })
-    );
-}
-
-#[test]
-fn official_v115_release_pins_the_official_file_and_bound() {
-    assert_eq!(
-        OFFICIAL_V115.upd_sha256,
-        "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c"
-    );
-    assert_eq!(OFFICIAL_V115.max_main_image_len, 7_251_904 + 256 * 1024);
-    assert_eq!(MAX_MAIN_GROWTH, 256 * 1024);
 }
 
 #[test]

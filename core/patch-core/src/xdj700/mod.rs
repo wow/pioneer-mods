@@ -16,7 +16,7 @@ mod rebuild;
 pub use grid::RECORD_DATA_LEN;
 pub use rebuild::{
     MAX_MAIN_GROWTH, OFFICIAL_V115, RebuiltUpdate, StockRelease, rebuild_with_application,
-    validate_version_label, verify_rebuild,
+    rebuild_with_stock_application, validate_version_label, verify_rebuild,
 };
 
 use crate::error::SectionError;
