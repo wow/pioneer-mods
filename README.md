@@ -26,3 +26,5 @@ Early stage. APIs, formats, and behavior may change quickly.
 
 - [LICENSE](./LICENSE)
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- [SECURITY.md](./SECURITY.md)

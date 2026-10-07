@@ -1,0 +1,45 @@
+name: Device / firmware support request
+description: Request support for a specific Pioneer DJ device or firmware version.
+labels: ["device-support", "compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not attach, link to, or paste vendor firmware.** This project uses owner-input workflows only.
+        Identify the firmware by model, version, file size, and SHA-256.
+  - type: input
+    id: model
+    attributes:
+      label: Device model
+      placeholder: e.g. XDJ-1000MK2
+    validations:
+      required: true
+  - type: input
+    id: fw-version
+    attributes:
+      label: Firmware version
+    validations:
+      required: true
+  - type: input
+    id: fw-sha256
+    attributes:
+      label: Firmware SHA-256
+    validations:
+      required: true
+  - type: input
+    id: fw-size
+    attributes:
+      label: Firmware file size (bytes)
+  - type: textarea
+    id: goal
+    attributes:
+      label: What would you like to do with this device?
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I own this device and obtained the firmware myself from the vendor.
+          required: true
+        - label: I have not attached, linked, or pasted any vendor firmware.
+          required: true
