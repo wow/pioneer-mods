@@ -33,10 +33,11 @@ This repository currently includes:
   encoding (byte-identical to the reference encoder)
 - XDJ-700 `.UPD` rebuild around a modified application (`xdj700::rebuild_with_application`),
   verified against its input by `xdj700::verify_rebuild`. It reproduces the reference alpha.2
-  update byte-for-byte. Library only for now.
+  update byte-for-byte.
+- `rebuild` command: writes a verified no-op rebuild of the official v1.15 update (stock
+  application re-encoded) under a declared version label
 
-A CLI command that writes rebuilt updates, and recipes that target the decoded application,
-are still in progress.
+Recipes that target the decoded application are still in progress.
 
 ## Quick start (developer)
 
@@ -90,6 +91,26 @@ Notes:
 - `patch` currently writes byte spans to the raw input file. It does not yet rebuild `.UPD`
   CRCs, S-record checksums, or compressed-section checksums, so it cannot produce an installable
   update yet. Do not flash its output.
+
+Rebuild the official XDJ-700 v1.15 update around its own, unchanged application (a no-op
+rebuild, the first hardware test candidate):
+
+```bash
+cargo run --release -p patch-cli -- rebuild \
+  --input /path/to/XDJ700.UPD \
+  --application stock \
+  --label Ver1.15 \
+  --output /path/to/new-dir/XDJ700.UPD
+```
+
+Notes:
+- Only the official v1.15 file is accepted (checked by SHA-256). A rebuilt file is never
+  accepted as input.
+- `--label` is required. Which labels the device's updater accepts is not yet confirmed.
+- The output must not exist; it is never overwritten. The rebuild is verified against the input
+  before it is written, then written atomically and read back.
+- Flashing any rebuilt file is at your own risk. Follow the hardware test plan, and never flash
+  a file whose SHA-256 differs from the one the command reports.
 
 ## Code quality baseline
 

@@ -111,7 +111,7 @@ pub fn rebuild_with_application(
     decoded: &[u8],
     version: &str,
 ) -> Result<RebuiltUpdate, RebuildError> {
-    check_version_label(version)?;
+    validate_version_label(version)?;
     let stock = StockMain::load(input, release)?;
     let main = stock.main();
 
@@ -126,7 +126,7 @@ pub fn rebuild_with_application(
     let descriptor = main
         .descriptor()
         .with_version(version)
-        .expect("check_version_label guarantees a 7-byte printable label");
+        .expect("validate_version_label guarantees a 7-byte printable label");
 
     let parts: Vec<DocumentParts<'_>> = stock
         .container
@@ -178,7 +178,7 @@ pub fn verify_rebuild(
     decoded: &[u8],
     version: &str,
 ) -> Result<(), RebuildError> {
-    check_version_label(version)?;
+    validate_version_label(version)?;
     StockMain::load(input, release)?
         .verify(input, output, decoded, version)
         .map(|_| ())
@@ -326,8 +326,13 @@ fn document_bytes<'a>(container_bytes: &'a [u8], document: &UpdDocument) -> &'a 
     &container_bytes[document.offset()..document.offset() + document.length()]
 }
 
-/// XDJ-700 MAIN labels have the form `VerX.YY`.
-fn check_version_label(version: &str) -> Result<(), RebuildError> {
+/// Checks that `version` is an XDJ-700 MAIN label of the form `VerX.YY`, as every rebuild
+/// requires.
+///
+/// # Errors
+///
+/// [`RebuildError::InvalidVersionLabel`] otherwise.
+pub fn validate_version_label(version: &str) -> Result<(), RebuildError> {
     let bytes = version.as_bytes();
     let valid = matches!(bytes, [b'V', b'e', b'r', major, b'.', minor @ ..]
         if major.is_ascii_digit() && minor.len() == 2 && minor.iter().all(u8::is_ascii_digit));

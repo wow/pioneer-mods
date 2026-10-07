@@ -59,6 +59,15 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   A container with more than one XDJ-700 MAIN document is refused as ambiguous. The MAIN image
   is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
   section is reported with its reason instead of failing the whole report.
+- `patch-cli rebuild --input <official .UPD> --application stock --label <VerX.YY> --output
+  <new file>` writes a no-op rebuild of the official XDJ-700 v1.15 update: the stock
+  application re-encoded under the declared label.
+  - It refuses any input other than the pinned official file, and any malformed label before
+    reading the input.
+  - The output is never overwritten. It is written atomically (fsync, no-clobber persist,
+    directory sync) and read back; a mismatch removes the file and fails.
+  - It reports input, application, MAIN image and output identities.
+  - `patch_core::xdj700::validate_version_label` is now public.
 - `patch_core::xdj700::rebuild_with_application` rebuilds a complete XDJ-700 `.UPD` around a
   new decoded application:
   - it encodes the section and places it after the input's unchanged loader region, dropping
@@ -96,6 +105,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
+- `patch-cli` output-file safety (input-path check, no-clobber atomic write) moved to a shared
+  module used by `patch` and `rebuild`. The overwrite refusal names the fix that applies to each
+  command: `--force` for `patch`, a new path for `rebuild`.
 - `patch-core` builds with `opt-level = 1` in the dev/test profile, so codec tests on 64 MiB
   inputs stay fast. Debug assertions and overflow checks remain enabled.
 - Local Python validation instructions now use the same entrypoint as CI (`scripts/run_python_quality.sh`).
