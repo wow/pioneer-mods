@@ -13,12 +13,7 @@ line-ending = "lf"
 
 [tool.mypy]
 python_version = "3.13"
-warn_unused_configs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_return_any = true
-no_implicit_optional = true
-strict_equality = true
+strict = true
 pretty = true
 
 [tool.pytest.ini_options]

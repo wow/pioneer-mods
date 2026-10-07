@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -14,9 +15,15 @@ PATH_CAP_OVERRIDES = {
 }
 
 
-def git_tracked_files() -> list[Path]:
-    output = subprocess.check_output(["git", "ls-files"], text=True)
-    return [Path(line.strip()) for line in output.splitlines() if line.strip()]
+def git_repo_root() -> Path:
+    output = subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True)
+    return Path(output.strip())
+
+
+def git_tracked_files(repo_root: Path) -> list[Path]:
+    output = subprocess.check_output(["git", "ls-files", "-z"], cwd=repo_root)
+    tracked = [Path(os.fsdecode(item)) for item in output.split(b"\0") if item]
+    return tracked
 
 
 def line_cap_for(path: Path) -> int | None:
@@ -27,14 +34,16 @@ def line_cap_for(path: Path) -> int | None:
 
 
 def main() -> int:
+    repo_root = git_repo_root()
     violations: list[tuple[str, int, int]] = []
 
-    for path in git_tracked_files():
+    for path in git_tracked_files(repo_root):
         cap = line_cap_for(path)
-        if cap is None or not path.is_file():
+        absolute_path = repo_root / path
+        if cap is None or not absolute_path.is_file():
             continue
 
-        line_count = sum(1 for _ in path.open("r", encoding="utf-8", errors="replace"))
+        line_count = sum(1 for _ in absolute_path.open("r", encoding="utf-8", errors="replace"))
         if line_count > cap:
             violations.append((path.as_posix(), line_count, cap))
 

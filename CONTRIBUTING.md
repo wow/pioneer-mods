@@ -33,6 +33,7 @@ Run from repository root:
 cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-targets --all-features
+cargo install cargo-audit --version 0.22.2 --locked
 cargo audit
 python scripts/check_file_size_caps.py
 ```
@@ -40,11 +41,8 @@ python scripts/check_file_size_caps.py
 If Python files are present:
 
 ```bash
-python -m pip install --upgrade ruff mypy pytest
-ruff format --check .
-ruff check .
-mypy scripts
-pytest -q
+python -m pip install --upgrade pip -r .github/requirements/python-quality.txt
+bash scripts/run_python_quality.sh
 ```
 
 ## Coding standards
