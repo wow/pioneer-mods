@@ -35,6 +35,11 @@ use std::ops::Range;
 pub const MAX_MAIN_GROWTH: usize = 256 * 1024;
 
 /// An official release a rebuild may start from.
+///
+/// The library guarantees that the input matches the release passed in. The fields are public so
+/// that tests can pin synthetic files, so the flash-safety bound ([`MAX_MAIN_GROWTH`] over the
+/// official image) holds only when callers use a pinned constant such as [`OFFICIAL_V115`].
+/// Production code, including the CLI, must never construct a release from user input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StockRelease<'a> {
     /// SHA-256 of the complete official `.UPD` (lowercase hex). Only this exact file is accepted
