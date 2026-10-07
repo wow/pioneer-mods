@@ -16,6 +16,7 @@ use crate::error::LzssError;
 
 mod encode;
 
+pub(crate) use encode::{SECTION_SEED_LEN, encode_section_stream_into};
 pub use encode::{encode, encode_section_stream};
 
 pub const WINDOW_SIZE: usize = 4096;

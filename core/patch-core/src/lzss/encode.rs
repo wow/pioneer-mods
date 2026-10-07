@@ -15,17 +15,17 @@
 
 use super::{INITIAL_WRITE_INDEX, MAX_MATCH, MIN_MATCH, RING_FILL, SECTION_TAG, WINDOW_SIZE};
 use crate::error::LzssError;
-use std::collections::HashMap;
 
 const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 /// The reference scans at most this many newest candidates. The cap never binds: in-window
 /// sources lie in `current-4096..=current-3` (at most 4094 of them), and the only entries that
 /// can be newer than an in-window one while outside the window are `-2` and `-1`.
 const MAX_CANDIDATES: usize = 4096;
-/// Decoded bytes produced by [`SECTION_TAG`].
-const SECTION_SEED_LEN: usize = 19;
+/// Decoded bytes produced by [`SECTION_TAG`]: one literal plus its match.
+pub(crate) const SECTION_SEED_LEN: usize = 1 + (SECTION_TAG[3] & 0x0F) as usize + MIN_MATCH;
 
-/// Encodes `data` as a standalone stream (empty ring history).
+/// Encodes `data` as a standalone stream, starting from the device's initial ring (pre-filled
+/// with [`RING_FILL`]).
 ///
 /// # Errors
 ///
@@ -43,24 +43,31 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>, LzssError> {
 ///
 /// # Errors
 ///
-/// [`LzssError::MissingSectionSeed`] unless `data` starts with the 19 zero bytes the tag decodes
-/// to, plus the errors of [`encode`].
+/// [`LzssError::MissingSectionSeed`] unless `data` starts with the zero bytes the tag decodes to
+/// (19 for [`SECTION_TAG`]), plus the errors of [`encode`].
 pub fn encode_section_stream(data: &[u8]) -> Result<Vec<u8>, LzssError> {
+    let mut stream = Vec::new();
+    encode_section_stream_into(data, &mut stream)?;
+    Ok(stream)
+}
+
+/// [`encode_section_stream`], appending to `out` (so a caller can frame the stream in place).
+pub(crate) fn encode_section_stream_into(data: &[u8], out: &mut Vec<u8>) -> Result<(), LzssError> {
     if data.len() < SECTION_SEED_LEN || data[..SECTION_SEED_LEN].iter().any(|&b| b != 0) {
         return Err(LzssError::MissingSectionSeed);
     }
     let mut state = State::new();
-    // Replay the tag: one literal, then an 18-byte match of the ring position just written.
+    // Replay the tag: one literal, then a match of the ring position just written.
     state.write(SECTION_TAG[1]);
     let position = usize::from(SECTION_TAG[2]) | (usize::from(SECTION_TAG[3] >> 4) << 8);
-    for step in 0..usize::from(SECTION_TAG[3] & 0x0F) + MIN_MATCH {
+    for step in 0..SECTION_SEED_LEN - 1 {
         let byte = state.ring[(position + step) & WINDOW_MASK];
         state.write(byte);
     }
 
-    let mut stream = SECTION_TAG.to_vec();
-    state.encode(data, SECTION_SEED_LEN, &mut stream, Some(0), 2)?;
-    Ok(stream)
+    let flags_at = out.len();
+    out.extend_from_slice(&SECTION_TAG);
+    state.encode(data, SECTION_SEED_LEN, out, Some(flags_at), 2)
 }
 
 struct State {
@@ -132,23 +139,63 @@ impl State {
     }
 }
 
-/// 3-byte key → logical source positions, in insertion order.
+/// Hash chains over 3-byte keys: each key's logical source positions, newest first, linked in
+/// insertion order (so a walk visits exactly the entries a per-key list scanned in reverse would).
+///
+/// Nodes are stored as `source + NODE_BIAS`, with 0 meaning "none". Data links live in a ring of
+/// [`WINDOW_SIZE`] slots: a walk only follows links out of in-window data sources (it stops at the
+/// first older data source), and those slots cannot have been reused yet. History sources
+/// `-4096..=-1` keep their own slots.
 struct CandidateIndex<'a> {
     data: &'a [u8],
-    buckets: HashMap<[u8; 3], Vec<i32>>,
+    /// Newest node per 24-bit key.
+    head: Vec<u32>,
+    /// Previous node for data source `s`, at `s % WINDOW_SIZE`.
+    data_prev: Vec<u32>,
+    /// Previous node for history source `s`, at `s + WINDOW_SIZE`.
+    history_prev: Vec<u32>,
     indexed_until: usize,
     history_indexed: [bool; 2],
 }
 
+/// Offset that maps logical sources (`>= -4096`) to non-zero node values.
+const NODE_BIAS: i64 = WINDOW_SIZE as i64 + 1;
+
 impl<'a> CandidateIndex<'a> {
     fn new(data: &'a [u8]) -> Self {
-        let mut buckets = HashMap::new();
-        buckets.insert([RING_FILL; 3], (-(WINDOW_SIZE as i32)..-2).collect());
-        Self {
+        let mut index = Self {
             data,
-            buckets,
+            head: vec![0; 1 << 24],
+            data_prev: vec![0; WINDOW_SIZE],
+            history_prev: vec![0; WINDOW_SIZE],
             indexed_until: 0,
             history_indexed: [false; 2],
+        };
+        for source in -(WINDOW_SIZE as i64)..-2 {
+            index.insert([RING_FILL; 3], source);
+        }
+        index
+    }
+
+    fn insert(&mut self, key: [u8; 3], source: i64) {
+        let key = usize::from(key[0]) << 16 | usize::from(key[1]) << 8 | usize::from(key[2]);
+        let previous = std::mem::replace(&mut self.head[key], (source + NODE_BIAS) as u32);
+        *self.prev_slot(source) = previous;
+    }
+
+    fn prev_slot(&mut self, source: i64) -> &mut u32 {
+        if source < 0 {
+            &mut self.history_prev[(source + WINDOW_SIZE as i64) as usize]
+        } else {
+            &mut self.data_prev[source as usize & WINDOW_MASK]
+        }
+    }
+
+    fn prev(&self, source: i64) -> u32 {
+        if source < 0 {
+            self.history_prev[(source + WINDOW_SIZE as i64) as usize]
+        } else {
+            self.data_prev[source as usize & WINDOW_MASK]
         }
     }
 
@@ -189,7 +236,7 @@ impl<'a> CandidateIndex<'a> {
                 self.data[source + 1],
                 self.data[source + 2],
             ];
-            self.buckets.entry(key).or_default().push(source as i32);
+            self.insert(key, source as i64);
             self.indexed_until += 1;
         }
         for (slot, source) in [(0, -2_i64), (1, -1_i64)] {
@@ -201,7 +248,7 @@ impl<'a> CandidateIndex<'a> {
                 self.match_byte(limit, source, 1),
                 self.match_byte(limit, source, 2),
             ];
-            self.buckets.entry(key).or_default().push(source as i32);
+            self.insert(key, source);
             self.history_indexed[slot] = true;
         }
     }
@@ -212,31 +259,31 @@ impl<'a> CandidateIndex<'a> {
         if position + MIN_MATCH > self.data.len() {
             return (0, 0);
         }
-        let key = [
-            self.data[position],
-            self.data[position + 1],
-            self.data[position + 2],
-        ];
+        let key = usize::from(self.data[position]) << 16
+            | usize::from(self.data[position + 1]) << 8
+            | usize::from(self.data[position + 2]);
         let lower_bound = current - WINDOW_SIZE as i64;
         let mut best = (0, 0);
-        if let Some(candidates) = self.buckets.get(&key) {
-            for &source in candidates.iter().rev().take(MAX_CANDIDATES) {
-                let source = i64::from(source);
-                if source >= 0 && source < lower_bound {
-                    // Data sources are indexed in ascending order, so every older entry is out of
-                    // the window too; negative history entries are then also out (current > 4096).
-                    // Not applied to `-2`/`-1`, which can precede in-window data positions.
+        let mut node = self.head[key];
+        let mut scanned = 0;
+        while node != 0 && scanned < MAX_CANDIDATES {
+            scanned += 1;
+            let source = i64::from(node) - NODE_BIAS;
+            if source >= 0 && source < lower_bound {
+                // Data sources are linked in ascending order, so every older entry is out of the
+                // window too; negative history entries are then also out (current > 4096). Not
+                // applied to `-2`/`-1`, which can precede in-window data positions.
+                break;
+            }
+            node = self.prev(source);
+            if source < lower_bound || source >= current {
+                continue;
+            }
+            let length = self.match_length(current, source);
+            if length > best.0 {
+                best = (length, source);
+                if length == MAX_MATCH {
                     break;
-                }
-                if source < lower_bound || source >= current {
-                    continue;
-                }
-                let length = self.match_length(current, source);
-                if length > best.0 {
-                    best = (length, source);
-                    if length == MAX_MATCH {
-                        break;
-                    }
                 }
             }
         }

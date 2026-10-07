@@ -9,7 +9,7 @@
 //! The checksum is the 16-bit sum of the size field and every compressed byte. According to
 //! DeckVolve, the boot loader verifies it and falls back to a smaller updater section on mismatch.
 
-use crate::error::{LzssError, SectionError};
+use crate::error::SectionError;
 use crate::identity::sha256_hex;
 use crate::lzss;
 use crate::upd::{DocumentImage, UpdContainer, UpdDocument};
@@ -113,38 +113,53 @@ pub fn decode_section(image: &[u8], offset: usize) -> Result<DecodedSection, Sec
     })
 }
 
+/// Worst-case section stream for [`MAX_DECODED_LEN`] input: the tag, every byte a literal, and
+/// one flag byte per 8 items. It fits the `u32` size field with a wide margin.
+const MAX_STREAM_LEN: usize = SECTION_TAG.len() + MAX_DECODED_LEN + MAX_DECODED_LEN.div_ceil(8);
+const _: () = assert!(MAX_STREAM_LEN <= u32::MAX as usize);
+
 /// Encodes `decoded` into complete section bytes (`[u32 LE size][stream][u16 LE checksum]`).
 ///
-/// Self-checked before returning: the bytes are verified and decoded with [`decode_section`],
-/// and must reproduce `decoded` exactly.
+/// Self-checked with [`verify_encoded_section`] before returning.
 ///
 /// # Errors
 ///
-/// [`SectionError::Encode`] if the input cannot be encoded (for example a missing 19-byte zero
-/// prefix), [`SectionError::SectionTooLarge`] if the stream does not fit the `u32` size field, or
-/// [`SectionError::EncodeSelfCheckDecode`] (with the decode error) or
-/// [`SectionError::EncodeSelfCheckMismatch`] if the result does not decode back to `decoded`.
+/// [`SectionError::DecodedTooLarge`] above [`MAX_DECODED_LEN`] (the most a section may decode
+/// to), [`SectionError::Encode`] if the input cannot be encoded (for example a missing 19-byte
+/// zero prefix), or the self-check errors of [`verify_encoded_section`].
 pub fn encode_section(decoded: &[u8]) -> Result<Vec<u8>, SectionError> {
     if decoded.len() > MAX_DECODED_LEN {
-        return Err(SectionError::Encode(LzssError::InputTooLarge {
+        return Err(SectionError::DecodedTooLarge {
             len: decoded.len(),
-        }));
+            limit: MAX_DECODED_LEN,
+        });
     }
-    let stream = lzss::encode_section_stream(decoded).map_err(SectionError::Encode)?;
-    let size = u32::try_from(stream.len())
-        .map_err(|_| SectionError::SectionTooLarge { len: stream.len() })?;
-    let mut bytes = Vec::with_capacity(SIZE_FIELD_LEN + stream.len() + CHECKSUM_LEN);
-    bytes.extend_from_slice(&size.to_le_bytes());
-    bytes.extend_from_slice(&stream);
+    let mut bytes = vec![0; SIZE_FIELD_LEN];
+    lzss::encode_section_stream_into(decoded, &mut bytes).map_err(SectionError::Encode)?;
+    let size = u32::try_from(bytes.len() - SIZE_FIELD_LEN)
+        .expect("stream is at most MAX_STREAM_LEN, which fits u32");
+    bytes[..SIZE_FIELD_LEN].copy_from_slice(&size.to_le_bytes());
     let checksum = section_checksum(&bytes);
     bytes.extend_from_slice(&checksum.to_le_bytes());
 
-    let section = decode_section(&bytes, 0)
+    verify_encoded_section(&bytes, decoded)?;
+    Ok(bytes)
+}
+
+/// The writer self-check of [`encode_section`]: `bytes` must be a complete section (as
+/// [`decode_section`] reads it at offset 0) that decodes to exactly `decoded`.
+///
+/// # Errors
+///
+/// [`SectionError::EncodeSelfCheckDecode`] (with the decode error) if `bytes` is not a valid
+/// section, or [`SectionError::EncodeSelfCheckMismatch`] if it decodes to different bytes.
+pub fn verify_encoded_section(bytes: &[u8], decoded: &[u8]) -> Result<(), SectionError> {
+    let section = decode_section(bytes, 0)
         .map_err(|error| SectionError::EncodeSelfCheckDecode(Box::new(error)))?;
     if section.decoded() != decoded {
         return Err(SectionError::EncodeSelfCheckMismatch);
     }
-    Ok(bytes)
+    Ok(())
 }
 
 /// The section checksum: 16-bit wrapping sum of `size_field_and_stream` (the `u32` size field

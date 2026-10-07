@@ -202,7 +202,10 @@ pub enum LzssError {
     #[error("LZSS output would exceed the {limit}-byte limit")]
     OutputLimitExceeded { limit: usize },
 
-    #[error("section data must start with the 19 zero bytes the section tag decodes to")]
+    #[error(
+        "section data must start with the {} zero bytes the section tag decodes to",
+        crate::lzss::SECTION_SEED_LEN
+    )]
     MissingSectionSeed,
 
     #[error("LZSS encoder input of {len} bytes is too large")]
@@ -257,8 +260,8 @@ pub enum SectionError {
     #[error("section could not be encoded: {0}")]
     Encode(LzssError),
 
-    #[error("encoded section stream of {len} bytes does not fit the u32 size field")]
-    SectionTooLarge { len: usize },
+    #[error("section data of {len} bytes exceeds the {limit}-byte decoded-size limit")]
+    DecodedTooLarge { len: usize, limit: usize },
 
     #[error("encoded section failed its self-check: it does not decode: {0}")]
     EncodeSelfCheckDecode(Box<SectionError>),
