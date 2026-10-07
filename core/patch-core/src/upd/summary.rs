@@ -1,6 +1,8 @@
 //! Serializable structure report for `patch-cli inspect --structure`.
 
 use super::{SRecordType, UpdContainer, UpdDocument};
+use crate::error::UpdError;
+use crate::identity::sha256_hex;
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -29,6 +31,10 @@ pub struct DocumentSummary {
     pub termination_type: SRecordType,
     /// Entry/start address from the termination record, formatted `0xNNNNNNNN`.
     pub entry_address: String,
+    /// Reconstructed memory image (gaps filled with `0xFF`): start address, length, SHA-256.
+    pub image_base: String,
+    pub image_len: u64,
+    pub image_sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -38,23 +44,29 @@ pub struct Extent {
 }
 
 impl UpdContainer {
-    pub fn summary(&self) -> UpdSummary {
-        UpdSummary {
+    /// Summarizes every document, including its reconstructed image identity.
+    ///
+    /// # Errors
+    ///
+    /// [`UpdError::ImageTooLarge`] if a document's image span exceeds the supported maximum.
+    pub fn summary(&self) -> Result<UpdSummary, UpdError> {
+        Ok(UpdSummary {
             documents: self
                 .documents()
                 .iter()
                 .enumerate()
                 .map(|(index, document)| document.summary(index))
-                .collect(),
-        }
+                .collect::<Result<_, _>>()?,
+        })
     }
 }
 
 impl UpdDocument {
-    fn summary(&self, index: usize) -> DocumentSummary {
+    fn summary(&self, index: usize) -> Result<DocumentSummary, UpdError> {
         let descriptor = self.descriptor();
         let data = self.data_records();
-        DocumentSummary {
+        let image = self.image(index)?;
+        Ok(DocumentSummary {
             index,
             offset: self.offset(),
             length: self.length(),
@@ -77,6 +89,9 @@ impl UpdDocument {
                 .collect(),
             termination_type: self.termination().record_type(),
             entry_address: format!("0x{:08X}", self.termination().address()),
-        }
+            image_base: format!("0x{:06X}", image.base()),
+            image_len: image.bytes().len() as u64,
+            image_sha256: sha256_hex(image.bytes()),
+        })
     }
 }

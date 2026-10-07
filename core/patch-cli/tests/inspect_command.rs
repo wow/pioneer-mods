@@ -60,6 +60,14 @@ fn inspect_structure_reports_documents_as_text() {
         stdout.contains("0x000000..0x000003 0x000010..0x000013"),
         "stdout: {stdout}"
     );
+    assert!(
+        stdout.contains("roundtrip: byte-identical"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("document[0].image: base=0x000000 len=19 sha256="),
+        "stdout: {stdout}"
+    );
 }
 
 #[test]
@@ -79,6 +87,8 @@ fn inspect_structure_reports_json_with_identity_fields() {
     assert_eq!(json["file_name"], "SYN100.UPD");
     assert_eq!(json["container"]["documents"][0]["kind"], "MAIN");
     assert_eq!(json["container"]["documents"][0]["data_records"], 2);
+    assert_eq!(json["roundtrip"], "byte-identical");
+    assert_eq!(json["container"]["documents"][0]["image_len"], 19);
 }
 
 #[test]

@@ -11,4 +11,4 @@ pub use identity::{
     FirmwareIdentity, firmware_file_name, identify_bytes, identify_firmware, read_firmware,
     read_regular_file, sha256_hex,
 };
-pub use upd::{UpdContainer, parse_upd};
+pub use upd::{UpdContainer, parse_upd, verify_roundtrip};

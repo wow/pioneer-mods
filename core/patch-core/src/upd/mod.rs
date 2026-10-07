@@ -13,12 +13,16 @@
 //! [`parse_upd`], so every value upholds the layout rules it checked.
 
 mod crc;
+mod image;
 mod srecord;
 mod summary;
+mod write;
 
 pub use crc::crc16_xmodem;
+pub use image::{DocumentImage, GAP_FILL, MAX_IMAGE_LEN};
 pub use srecord::{SRecord, SRecordType};
 pub use summary::{DocumentSummary, Extent, UpdSummary};
+pub use write::verify_roundtrip;
 
 use crate::error::{LayoutViolation, UpdError};
 use std::collections::BTreeSet;

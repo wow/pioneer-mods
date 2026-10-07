@@ -33,6 +33,20 @@ impl SRecordType {
         })
     }
 
+    fn digit(self) -> u8 {
+        match self {
+            Self::S0 => b'0',
+            Self::S1 => b'1',
+            Self::S2 => b'2',
+            Self::S3 => b'3',
+            Self::S5 => b'5',
+            Self::S6 => b'6',
+            Self::S7 => b'7',
+            Self::S8 => b'8',
+            Self::S9 => b'9',
+        }
+    }
+
     /// Width of the address field in bytes.
     pub fn address_len(self) -> usize {
         match self {
@@ -81,6 +95,36 @@ impl SRecord {
     pub fn end_address(&self) -> u64 {
         u64::from(self.address) + self.data.len() as u64
     }
+
+    /// Appends the canonical line for this record (uppercase hex, computed count and checksum,
+    /// CRLF). Every parsed record reproduces its source line exactly.
+    pub(super) fn write_line(&self, out: &mut Vec<u8>) {
+        let address_len = self.record_type.address_len();
+        // Parsed records always fit in one count byte; the serializer self-check re-parses the
+        // output, so a truncated count could never pass unnoticed.
+        let count = (address_len + self.data.len() + 1) as u8;
+        let address_bytes = &self.address.to_be_bytes()[4 - address_len..];
+
+        out.extend_from_slice(&[b'S', self.record_type.digit()]);
+        let mut sum = 0u8;
+        for &byte in std::iter::once(&count)
+            .chain(address_bytes)
+            .chain(&self.data)
+        {
+            push_upper_hex(out, byte);
+            sum = sum.wrapping_add(byte);
+        }
+        push_upper_hex(out, !sum);
+        out.extend_from_slice(b"\r\n");
+    }
+}
+
+fn push_upper_hex(out: &mut Vec<u8>, byte: u8) {
+    const DIGITS: &[u8; 16] = b"0123456789ABCDEF";
+    out.extend_from_slice(&[
+        DIGITS[usize::from(byte >> 4)],
+        DIGITS[usize::from(byte & 0x0F)],
+    ]);
 }
 
 /// Parses one S-record line without its CRLF terminator.

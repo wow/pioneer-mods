@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use patch_core::upd::UpdSummary;
-use patch_core::{FirmwareIdentity, identify_firmware, parse_upd, read_firmware};
+use patch_core::{FirmwareIdentity, identify_firmware, read_firmware, verify_roundtrip};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
@@ -32,6 +32,9 @@ struct InspectReport {
     identity: FirmwareIdentity,
     #[serde(skip_serializing_if = "Option::is_none")]
     container: Option<UpdSummary>,
+    /// Result of re-serializing the parsed container and comparing it with the input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    roundtrip: Option<&'static str>,
 }
 
 pub fn inspect(args: InspectArgs) -> Result<()> {
@@ -47,6 +50,7 @@ pub fn inspect(args: InspectArgs) -> Result<()> {
         InspectReport {
             identity,
             container: None,
+            roundtrip: None,
         }
     };
 
@@ -66,11 +70,15 @@ pub fn inspect(args: InspectArgs) -> Result<()> {
 fn inspect_structure(input: &Path) -> Result<InspectReport> {
     let (identity, bytes) = read_firmware(input)
         .with_context(|| format!("failed to read input firmware '{}'", input.display()))?;
-    let container = parse_upd(&bytes)
+    let container = verify_roundtrip(&bytes)
         .with_context(|| format!("input '{}' is not a valid .UPD container", input.display()))?;
+    let summary = container
+        .summary()
+        .with_context(|| format!("failed to summarize .UPD container '{}'", input.display()))?;
     Ok(InspectReport {
         identity,
-        container: Some(container.summary()),
+        container: Some(summary),
+        roundtrip: Some("byte-identical"),
     })
 }
 
@@ -82,6 +90,9 @@ fn print_text(report: &InspectReport) {
         return;
     };
     println!("documents: {}", container.documents.len());
+    if let Some(roundtrip) = report.roundtrip {
+        println!("roundtrip: {roundtrip}");
+    }
     for doc in &container.documents {
         let prefix = format!("document[{}]", doc.index);
         println!(
@@ -106,6 +117,10 @@ fn print_text(report: &InspectReport) {
             .map(|extent| format!("0x{:06X}..0x{:06X}", extent.start, extent.end))
             .collect();
         println!("{prefix}.extents: {}", extents.join(" "));
+        println!(
+            "{prefix}.image: base={} len={} sha256={}",
+            doc.image_base, doc.image_len, doc.image_sha256
+        );
         println!(
             "{prefix}.descriptor: reserved_hex={} header=\"{}\"",
             doc.reserved_hex, doc.header_text
