@@ -1,0 +1,13 @@
+[package]
+name = "patch-cli"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+patch-core = { path = "../patch-core" }
+patch-schema = { path = "../patch-schema" }
+serde_json.workspace = true

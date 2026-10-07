@@ -25,6 +25,16 @@ This project is unofficial and experimental. Please read [README.md](./README.md
    - how it was validated,
    - known limitations and risks.
 
+## Local validation commands
+
+Run from repository root:
+
+```bash
+cargo fmt --all
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-targets --all-features
+```
+
 ## Pull request checklist
 
 - [ ] Scope is clear and bounded.
