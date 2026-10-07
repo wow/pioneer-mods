@@ -24,6 +24,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   - concurrency adjusted to avoid canceling `main`/scheduled runs,
   - pinned `cargo-audit` install version and cached Rust security job dependencies.
 - Community health files: `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue templates, and pull request template.
+- Read-only `.UPD` container parser in `patch-core` (`patch_core::upd::parse_upd`): decimal
+  document-length header, 32-byte document descriptors, CRC-16/XMODEM document trailers, and
+  Motorola S-record syntax, checksum and layout validation (fail-closed).
+- `patch-cli inspect --structure` reports container documents, versions, CRCs, record counts and
+  address extents in text or JSON. Without `--structure`, `inspect` output is unchanged.
 
 ### Changed
 - Local Python validation instructions now use the same entrypoint as CI (`scripts/run_python_quality.sh`).
