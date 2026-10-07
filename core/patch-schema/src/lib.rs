@@ -108,6 +108,7 @@ pub struct WriteSpan {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnerCopyWindow {
+    /// Copy semantics always read from original owner input bytes, not from partially patched output bytes.
     pub source_offset: u64,
     pub destination_offset: u64,
     pub length: u64,

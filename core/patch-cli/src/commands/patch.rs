@@ -75,7 +75,7 @@ pub fn patch(args: PatchArgs) -> Result<()> {
     }
 
     ensure_safe_output_path(&args.input, &args.output, args.force)?;
-    write_output_atomically(&args.output, &patched_bytes)?;
+    write_output_atomically(&args.output, &patched_bytes, args.force)?;
 
     println!("recipe_id: {}", manifest.recipe_id);
     println!("matched_target: {} {}", target.model, target.version);
@@ -271,7 +271,7 @@ fn resolve_for_comparison(path: &Path) -> Result<PathBuf> {
         .join(path))
 }
 
-fn write_output_atomically(output_path: &Path, bytes: &[u8]) -> Result<()> {
+fn write_output_atomically(output_path: &Path, bytes: &[u8], force: bool) -> Result<()> {
     let output_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
     let mut temp_file = NamedTempFile::new_in(output_dir).with_context(|| {
         format!(
@@ -291,13 +291,26 @@ fn write_output_atomically(output_path: &Path, bytes: &[u8]) -> Result<()> {
             output_path.display()
         )
     })?;
-    temp_file.persist(output_path).map_err(|error| {
-        anyhow::anyhow!(
-            "failed to atomically persist output firmware '{}': {}",
-            output_path.display(),
-            error.error
-        )
+    let persist_result = if force {
+        temp_file.persist(output_path)
+    } else {
+        temp_file.persist_noclobber(output_path)
+    };
+    persist_result.map_err(|error| {
+        if !force && error.error.kind() == std::io::ErrorKind::AlreadyExists {
+            anyhow::anyhow!(
+                "refusing to overwrite existing output file '{}'; pass --force to overwrite",
+                output_path.display()
+            )
+        } else {
+            anyhow::anyhow!(
+                "failed to atomically persist output firmware '{}': {}",
+                output_path.display(),
+                error.error
+            )
+        }
     })?;
+    sync_output_directory(output_dir)?;
     Ok(())
 }
 
@@ -306,4 +319,26 @@ fn firmware_file_name(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| path.to_string_lossy().into_owned())
+}
+
+#[cfg(unix)]
+fn sync_output_directory(output_dir: &Path) -> Result<()> {
+    let dir_handle = fs::File::open(output_dir).with_context(|| {
+        format!(
+            "failed to open output directory '{}' for sync",
+            output_dir.display()
+        )
+    })?;
+    dir_handle.sync_all().with_context(|| {
+        format!(
+            "failed to sync output directory '{}' after atomic rename",
+            output_dir.display()
+        )
+    })?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_output_directory(_output_dir: &Path) -> Result<()> {
+    Ok(())
 }
