@@ -1,7 +1,9 @@
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use patch_core::identify_firmware;
-use std::path::PathBuf;
+use patch_schema::{PatchOperation, RecipeManifest};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -91,8 +93,118 @@ fn inspect(args: InspectArgs) -> Result<()> {
 }
 
 fn patch(args: PatchArgs) -> Result<()> {
-    let _ = (args.input, args.recipe, args.output);
-    bail!(
-        "the 'patch' command is not implemented yet; this milestone currently ships 'inspect' only"
-    )
+    let identity = identify_firmware(&args.input).with_context(|| {
+        format!(
+            "failed to inspect firmware identity for '{}'",
+            args.input.display()
+        )
+    })?;
+
+    let manifest = load_manifest(&args.recipe)?;
+    manifest.validate().with_context(|| {
+        format!(
+            "recipe manifest validation failed for '{}'",
+            args.recipe.display()
+        )
+    })?;
+
+    let target = manifest
+        .matching_target(identity.size_bytes, &identity.sha256_hex)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "input firmware '{}' (size={}, sha256={}) is not compatible with recipe '{}'",
+                identity.file_name,
+                identity.size_bytes,
+                identity.sha256_hex,
+                manifest.recipe_id
+            )
+        })?;
+
+    let input_bytes = fs::read(&args.input)
+        .with_context(|| format!("failed to read input firmware '{}'", args.input.display()))?;
+    let patched_bytes = apply_operations(&input_bytes, &manifest.operations)?;
+
+    fs::write(&args.output, patched_bytes).with_context(|| {
+        format!(
+            "failed to write output firmware '{}'",
+            args.output.display()
+        )
+    })?;
+
+    println!("recipe_id: {}", manifest.recipe_id);
+    println!("matched_target: {} {}", target.model, target.version);
+    println!("input_file: {}", identity.file_name);
+    println!("output_file: {}", args.output.display());
+
+    Ok(())
+}
+
+fn load_manifest(path: &Path) -> Result<RecipeManifest> {
+    let raw = fs::read(path)
+        .with_context(|| format!("failed to read recipe manifest '{}'", path.display()))?;
+    serde_json::from_slice::<RecipeManifest>(&raw)
+        .with_context(|| format!("failed to parse recipe manifest JSON '{}'", path.display()))
+}
+
+fn apply_operations(input_bytes: &[u8], operations: &[PatchOperation]) -> Result<Vec<u8>> {
+    let mut output_bytes = input_bytes.to_vec();
+    for (idx, operation) in operations.iter().enumerate() {
+        match operation {
+            PatchOperation::WriteSpan(span) => {
+                let range = checked_range(
+                    span.offset,
+                    span.length,
+                    output_bytes.len(),
+                    &format!("operations[{idx}] write_span"),
+                )?;
+                if span.bytes.len() != range.len() {
+                    bail!(
+                        "operations[{idx}] write_span length mismatch: declared={}, bytes={}",
+                        span.length,
+                        span.bytes.len()
+                    );
+                }
+                output_bytes[range].copy_from_slice(&span.bytes);
+            }
+            PatchOperation::OwnerCopyWindow(window) => {
+                let source_range = checked_range(
+                    window.source_offset,
+                    window.length,
+                    input_bytes.len(),
+                    &format!("operations[{idx}] owner_copy_window source"),
+                )?;
+                let destination_range = checked_range(
+                    window.destination_offset,
+                    window.length,
+                    output_bytes.len(),
+                    &format!("operations[{idx}] owner_copy_window destination"),
+                )?;
+                output_bytes[destination_range].copy_from_slice(&input_bytes[source_range]);
+            }
+        }
+    }
+    Ok(output_bytes)
+}
+
+fn checked_range(
+    offset: u64,
+    length: u64,
+    total_len: usize,
+    context_label: &str,
+) -> Result<std::ops::Range<usize>> {
+    let start = usize::try_from(offset)
+        .with_context(|| format!("{context_label}: offset does not fit platform usize"))?;
+    let span_len = usize::try_from(length)
+        .with_context(|| format!("{context_label}: length does not fit platform usize"))?;
+    let end = start
+        .checked_add(span_len)
+        .ok_or_else(|| anyhow::anyhow!("{context_label}: offset+length overflowed"))?;
+    if end > total_len {
+        bail!(
+            "{context_label}: out of bounds (offset={}, length={}, input_size={total_len})",
+            offset,
+            length
+        );
+    }
+    Ok(start..end)
 }

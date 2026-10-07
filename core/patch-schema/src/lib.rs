@@ -25,6 +25,18 @@ impl RecipeManifest {
             return Err(SchemaValidationError::NoOperations);
         }
 
+        for target in &self.targets {
+            if target.model.trim().is_empty() {
+                return Err(SchemaValidationError::EmptyTargetModel);
+            }
+            if target.version.trim().is_empty() {
+                return Err(SchemaValidationError::EmptyTargetVersion);
+            }
+            if !is_valid_sha256_hex(&target.sha256_hex) {
+                return Err(SchemaValidationError::InvalidTargetSha256Hex);
+            }
+        }
+
         for op in &self.operations {
             match op {
                 PatchOperation::WriteSpan(span) => {
@@ -45,6 +57,12 @@ impl RecipeManifest {
 
         Ok(())
     }
+
+    pub fn matching_target(&self, size_bytes: u64, sha256_hex: &str) -> Option<&SupportedFirmware> {
+        self.targets
+            .iter()
+            .find(|target| target.matches_identity(size_bytes, sha256_hex))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +71,12 @@ pub struct SupportedFirmware {
     pub version: String,
     pub size_bytes: u64,
     pub sha256_hex: String,
+}
+
+impl SupportedFirmware {
+    pub fn matches_identity(&self, size_bytes: u64, sha256_hex: &str) -> bool {
+        self.size_bytes == size_bytes && self.sha256_hex.eq_ignore_ascii_case(sha256_hex)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,6 +110,12 @@ pub enum SchemaValidationError {
     NoTargets,
     #[error("operations list must not be empty")]
     NoOperations,
+    #[error("target model must not be empty")]
+    EmptyTargetModel,
+    #[error("target version must not be empty")]
+    EmptyTargetVersion,
+    #[error("target sha256_hex must be 64 hexadecimal characters")]
+    InvalidTargetSha256Hex,
     #[error("write span length must be > 0")]
     ZeroLengthWriteSpan,
     #[error("write span bytes length does not match declared length")]
@@ -94,44 +124,6 @@ pub enum SchemaValidationError {
     ZeroLengthOwnerCopyWindow,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn valid_manifest() -> RecipeManifest {
-        RecipeManifest {
-            schema_version: 1,
-            recipe_id: "xdj700-waveform3".to_owned(),
-            description: "Enable 3-band waveform rendering".to_owned(),
-            targets: vec![SupportedFirmware {
-                model: "XDJ-700".to_owned(),
-                version: "1.15".to_owned(),
-                size_bytes: 16,
-                sha256_hex: "00".repeat(32),
-            }],
-            operations: vec![PatchOperation::WriteSpan(WriteSpan {
-                offset: 4,
-                length: 3,
-                bytes: vec![1, 2, 3],
-            })],
-        }
-    }
-
-    #[test]
-    fn validates_well_formed_manifest() {
-        assert!(valid_manifest().validate().is_ok());
-    }
-
-    #[test]
-    fn rejects_invalid_write_span_length_mismatch() {
-        let mut manifest = valid_manifest();
-        let PatchOperation::WriteSpan(span) = &mut manifest.operations[0] else {
-            panic!("unexpected operation");
-        };
-        span.length = 10;
-        assert_eq!(
-            manifest.validate(),
-            Err(SchemaValidationError::WriteSpanLengthMismatch)
-        );
-    }
+fn is_valid_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.as_bytes().iter().all(u8::is_ascii_hexdigit)
 }

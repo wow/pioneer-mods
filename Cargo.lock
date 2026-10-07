@@ -254,6 +254,7 @@ dependencies = [
  "patch-core",
  "patch-schema",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

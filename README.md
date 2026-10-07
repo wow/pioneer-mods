@@ -23,9 +23,10 @@ This repository currently includes:
 - Rust workspace scaffolding (`core/patch-core`, `core/patch-schema`, `core/patch-cli`)
 - Deterministic firmware identity inspection (`inspect`) command
 - Recipe schema baseline and validation primitives
+- Compatibility-gated recipe execution with deterministic byte-span patch operations
 - CI checks for format/lint/test
 
-The patch-application command path is intentionally not released yet.
+Container-aware section codecs/repacking are still in progress.
 
 ## Quick start (developer)
 
@@ -44,6 +45,15 @@ Inspect owner-supplied firmware identity:
 
 ```bash
 cargo run -p patch-cli -- inspect --input /path/to/XDJ700.UPD --format json
+```
+
+Apply a compatibility-gated recipe manifest:
+
+```bash
+cargo run -p patch-cli -- patch \
+  --input /path/to/XDJ700.UPD \
+  --recipe /path/to/recipe.json \
+  --output /path/to/XDJ700-patched.UPD
 ```
 
 ## Code quality baseline
