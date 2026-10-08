@@ -17,6 +17,8 @@
 
 #[path = "common/official_pins.rs"]
 mod official_pins;
+#[path = "common/recipe_files.rs"]
+mod recipe_files;
 
 use official_pins::{
     NOOP_MAIN_LEN, NOOP_MAIN_SHA256, NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES,
@@ -29,6 +31,7 @@ use patch_core::xdj700::{
     rebuild_with_stock_application, verify_rebuild,
 };
 use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex, xdj700};
+use recipe_files::committed_recipes;
 use std::path::PathBuf;
 
 const ALPHA2_ENV: &str = "PIONEER_XDJ700_REFERENCE_ALPHA2_DECODED";
@@ -216,28 +219,10 @@ fn a_modified_application_reporting_1_16_is_refused() {
 #[ignore = "needs owner-supplied firmware; see module docs"]
 fn every_committed_recipe_applies_and_the_version_marker_reproduces_stage3() {
     let official = official_upd();
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../recipes");
-    let mut files = Vec::new();
-    let mut directories = vec![root];
-    while let Some(directory) = directories.pop() {
-        for entry in std::fs::read_dir(&directory).expect("read recipes directory") {
-            let path = entry.expect("entry").path();
-            if path.is_dir() {
-                directories.push(path);
-            } else if path
-                .extension()
-                .is_some_and(|extension| extension == "json")
-            {
-                files.push(path);
-            }
-        }
-    }
-    assert!(!files.is_empty());
+    let mut reproduced_stage3 = false;
 
-    for path in files {
+    for (path, recipe) in committed_recipes() {
         let name = path.display();
-        let recipe: patch_schema::RecipeV2 =
-            serde_json::from_slice(&std::fs::read(&path).expect("read")).expect("recipe JSON");
         let rebuilt = xdj700::apply_recipe_v2(&recipe, &official)
             .unwrap_or_else(|error| panic!("{name}: {error}"));
         assert!(recipe.expected.is_some(), "{name}: pins its outputs");
@@ -251,12 +236,14 @@ fn every_committed_recipe_applies_and_the_version_marker_reproduces_stage3() {
                 rebuilt.application_reported_version(),
                 Some(STAGE3_REPORTED_VERSION)
             );
+            reproduced_stage3 = true;
         }
     }
+    assert!(reproduced_stage3, "the version marker is committed");
 }
 
-/// On the real application, a precondition window over zero padding is refused before its hash
-/// is compared, so a recipe cannot publish the few bytes next to padding. Prints no bytes.
+/// On the real application, a precondition window over zero padding is refused although its hash
+/// matches, so a recipe cannot publish the few bytes next to padding. Prints no bytes.
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
 fn a_window_over_real_padding_is_refused() {
@@ -273,7 +260,8 @@ fn a_window_over_real_padding_is_refused() {
     recipe.expected = None;
     recipe.replacements = vec![patch_schema::Replacement {
         offset: (padding + 32) as u64,
-        bytes_hex: "00".to_owned(),
+        // A changed byte, so that only the window is judged.
+        bytes_hex: format!("{:02x}", !decoded[padding + 32]),
         precondition: patch_schema::Precondition {
             before: 32,
             after: 7,

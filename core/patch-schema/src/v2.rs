@@ -1,15 +1,17 @@
 //! Recipe schema v2: changes to the **decoded application** of a pinned official release, rebuilt
 //! into a complete, installable update.
 //!
-//! A v2 recipe never carries vendor bytes. Each replacement declares a precondition: the SHA-256
-//! of the stock bytes in a window around the replaced span, [`MIN_PRECONDITION_LEN`] to
+//! A v2 recipe is meant to carry no vendor bytes. Each replacement declares a precondition: the
+//! SHA-256 of the stock bytes in a window around the replaced span, [`MIN_PRECONDITION_LEN`] to
 //! [`MAX_PRECONDITION_LEN`] bytes long. The window is defined relative to the span (`before` and
-//! `after` it), so a wrong `offset` moves the window and fails the hash. A hash of only a few
-//! bytes could be inverted by brute force, which would publish them; over a window this long that
-//! is impractical unless most of the window is predictable. So windows may not overlap each other
-//! (overlapping windows would share all but a few bytes, and each hash would reveal the
-//! difference), the engine refuses windows in protected ranges and windows that are mostly one
-//! repeated byte, and windows belong over code, not padding or known strings.
+//! `after` it), so a wrong `offset` moves the window and fails the hash. A hash over only a few
+//! unknown bytes could be inverted by brute force, which would publish them. So the windows of a
+//! recipe may not overlap each other (overlapping windows would share all but a few bytes, and
+//! each hash would reveal the difference); CI checks the same across all committed recipes. On
+//! the stock application, the engine in `patch-core` also refuses windows in protected ranges,
+//! windows without enough unpublished, unpredictable bytes, and spans that would copy stock bytes
+//! into `bytes_hex`. These checks guard against accidental leaks; they are heuristics, so windows
+//! belong over code, not strings or tables, and review is the backstop.
 //! Only the project's own replacement bytes are written. The static checks here need no
 //! firmware; the release-specific rules (protected ranges, label and reported-version order,
 //! preconditions) are enforced by the engine in `patch-core`.

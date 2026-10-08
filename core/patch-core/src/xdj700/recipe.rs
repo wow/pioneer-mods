@@ -6,13 +6,15 @@
 //! own version, and keep every replacement and its precondition window inside the application and
 //! out of the release's protected ranges. On the stock application, before anything changes, each
 //! precondition window (defined relative to its offset, so a wrong offset moves the window) must
-//! not be mostly one repeated byte and must match its declared SHA-256. The output application may
-//! differ from stock only in the declared replacements and the version string (checked by the
-//! rebuild entry point), the rebuild then runs its own verification (including the version
-//! rule), and any declared output identities must match.
+//! match its declared SHA-256, and the recipe must not reveal the stock bytes in it (the
+//! `precondition` module). The output application may differ from stock only in the declared
+//! replacements and the version string (checked by the rebuild entry point), the rebuild then runs
+//! its own verification (including the version rule), and any declared output identities must
+//! match.
 
 use super::app_version::VERSION_TEXT_LEN;
 use super::is_label_higher;
+use super::precondition::{check_unpublished, window};
 use super::rebuild::{RebuiltUpdate, rebuild_with_edited_stock_application};
 use super::release::{OFFICIAL_V115, StockRelease};
 use crate::error::RebuildError;
@@ -121,14 +123,41 @@ pub enum RecipeError {
     OutOfBounds { index: usize, end: u64, len: usize },
 
     #[error(
-        "replacements[{index}]: {count} of the {len} bytes in the precondition window are \
-         {byte:#04x}; a window that predictable could be inverted to recover the rest, so choose a \
-         window over code"
+        "replacements[{index}]: the {top} most common byte values fill {count} of the {len} \
+         unpublished bytes in the precondition window; a window that predictable could be \
+         inverted to recover the rest, so choose a window over code"
     )]
     PredictableWindow {
         index: usize,
-        byte: u8,
+        top: usize,
         count: usize,
+        len: usize,
+    },
+
+    #[error(
+        "replacements[{index}]: only {unpublished} bytes of the precondition window are not \
+         published by the recipe itself (replacement bytes equal to stock are published); at \
+         least {min} are needed"
+    )]
+    TooFewUnpublishedBytes {
+        index: usize,
+        unpublished: usize,
+        min: usize,
+    },
+
+    #[error(
+        "replacements[{index}]: the span's first and last bytes must differ from stock (unchanged \
+         bytes at its edges belong outside the span)"
+    )]
+    UnchangedSpanEdge { index: usize },
+
+    #[error(
+        "replacements[{index}]: {unchanged} of the span's {len} bytes equal stock, and bytes_hex \
+         would publish them; at most half may, so split the span around unchanged bytes"
+    )]
+    MostlyUnchangedSpan {
+        index: usize,
+        unchanged: usize,
         len: usize,
     },
 
@@ -274,9 +303,8 @@ pub fn apply_recipe_v2_to(
         rebuild_with_edited_stock_application(input, release, &recipe.label, |decoded| {
             // Every precondition is checked on the stock application before anything changes.
             for (index, replacement) in recipe.replacements.iter().enumerate() {
-                let window = &decoded[window(index, replacement, decoded.len())?];
-                check_unpredictable(index, window)?;
-                let actual = sha256_hex(window);
+                let range = window(index, replacement, decoded.len())?;
+                let actual = sha256_hex(&decoded[range.clone()]);
                 if !actual.eq_ignore_ascii_case(&replacement.precondition.sha256) {
                     return Err(RecipeError::Precondition {
                         index,
@@ -284,6 +312,7 @@ pub fn apply_recipe_v2_to(
                         actual,
                     });
                 }
+                check_unpublished(index, replacement, &decoded[..], range)?;
             }
             // The version string, then every replaced span.
             let mut declared = Vec::with_capacity(recipe.replacements.len() + 1);
@@ -322,50 +351,4 @@ pub fn apply_recipe_v2_to(
         }
     }
     Ok(rebuilt)
-}
-
-/// The replacement's precondition window, if it lies inside an application of `application_len`.
-fn window(
-    index: usize,
-    replacement: &patch_schema::Replacement,
-    application_len: usize,
-) -> Result<Range<usize>, RecipeError> {
-    // `validate` has checked that the window neither starts before 0 nor overflows.
-    let Range { start, end } = replacement
-        .precondition_window()
-        .unwrap_or(u64::MAX..u64::MAX);
-    let out_of_bounds = || RecipeError::OutOfBounds {
-        index,
-        end,
-        len: application_len,
-    };
-    let start = usize::try_from(start).map_err(|_| out_of_bounds())?;
-    let end_usize = usize::try_from(end).map_err(|_| out_of_bounds())?;
-    if end_usize > application_len {
-        return Err(out_of_bounds());
-    }
-    Ok(start..end_usize)
-}
-
-/// Refuses a window in which one byte value fills more than half: padding, fill or a zeroed table,
-/// whose hash would reveal the few other bytes by brute force.
-fn check_unpredictable(index: usize, window: &[u8]) -> Result<(), RecipeError> {
-    let mut counts = [0usize; 256];
-    for &byte in window {
-        counts[usize::from(byte)] += 1;
-    }
-    let (byte, &count) = counts
-        .iter()
-        .enumerate()
-        .max_by_key(|&(_, count)| *count)
-        .expect("256 counts");
-    if count * 2 > window.len() {
-        return Err(RecipeError::PredictableWindow {
-            index,
-            byte: byte as u8,
-            count,
-            len: window.len(),
-        });
-    }
-    Ok(())
 }

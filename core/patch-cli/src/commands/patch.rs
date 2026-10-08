@@ -169,7 +169,8 @@ fn read_recipe(path: &Path) -> Result<Vec<u8>> {
     let len = file.metadata().with_context(read_failed)?.len();
     if len > MAX_RECIPE_LEN {
         bail!(
-            "refusing recipe '{}': {len} bytes is larger than any recipe (at most {MAX_RECIPE_LEN})",
+            "refusing recipe '{}': {len} bytes is larger than any recipe (at most \
+             {MAX_RECIPE_LEN})",
             path.display()
         );
     }

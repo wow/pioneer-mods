@@ -13,6 +13,7 @@
 mod app_version;
 mod grid;
 mod label;
+mod precondition;
 mod rebuild;
 mod recipe;
 mod release;

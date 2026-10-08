@@ -14,9 +14,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   a window of code the hash is impractical to invert to recover vendor bytes. A recipe declares a
   label higher and a reported version lower than the release's own, and may pin its output
   identities (an empty `expected` is refused). `patch` refuses any `schema_version` other than 1
-  and 2. Precondition windows are 32 to 4096 bytes and may not overlap each other or a
-  protected range; the engine also refuses a window mostly filled by one byte value (padding), so a
-  recipe cannot reveal stock bytes one hash at a time.
+  and 2. Precondition windows are 32 to 4096 bytes and may not overlap each other or a protected
+  range; CI checks that the windows of all committed recipes are disjoint, too. On the stock
+  application the engine refuses a window with fewer than 32 bytes the recipe does not publish (a
+  replacement byte equal to stock is published), or in which four byte values fill more than half
+  of those bytes, and a span that keeps its first or last stock byte or more than half of them.
+  These guard against accidentally revealing stock bytes through the hashes; they are heuristics,
+  and review remains the backstop.
 - **Recipe engine** (`xdj700::apply_recipe_v2`, `check_recipe_v2`, `RECIPE_TARGETS`). Before
   reading the input it checks the recipe, the release pins, the version order and the protected
   ranges (v1.15: `[0, 0x800)`, the header and version block). On the official file it checks each

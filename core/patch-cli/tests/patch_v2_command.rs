@@ -224,3 +224,24 @@ fn refuses_a_recipe_that_is_not_a_small_regular_file() {
         assert_refused(&result, &output, message);
     }
 }
+
+#[test]
+fn refuses_a_window_past_the_application_before_reading_the_input() {
+    let (_dir, missing_input, output) = paths();
+    let mut recipe = committed_recipe();
+    // The span ends at the application's end (18_601_864 bytes); its window one byte later.
+    recipe["replacements"] = json!([{
+        "offset": 18_601_862,
+        "bytes_hex": "0102",
+        "precondition": {"before": 30, "after": 1, "sha256": "00".repeat(32)},
+        "purpose": "a window one byte past the application"
+    }]);
+
+    let result = run_patch(&missing_input, &recipe, &output, &[]);
+
+    assert_refused(
+        &result,
+        &output,
+        "replacements[0].precondition ends at 0x11bd789, past the application's end at 0x11bd788",
+    );
+}
