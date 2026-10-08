@@ -21,7 +21,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   that region byte-identical, so `inspect --structure` decodes the stage files instead of
   reporting them as unsupported. `verify_main_version` is replaced by `verify_main_layout`.
 - `patch-cli rebuild` warns on stderr when the label is not higher than `Ver1.15`, since a unit
-  running official v1.15 or later skips such a file.
+  running official v1.15 or later skips such a file. The comparison is
+  `xdj700::is_label_higher`; label handling moved to `xdj700::label` (`OFFICIAL_V115_LABEL`).
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
   the updater writes only versions higher than the installed one; equal and lower versions
   (including the project's `Ver0.90` probe) are skipped. Stage 1b therefore uses `Ver1.16`, the
@@ -75,8 +76,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   16-bit additive checksum and the zero-prefix tag at MAIN image offset `0x40000`, then decodes
   the section with a 64 MiB output cap.
 - `inspect --structure` reports the decoded application (offset, compressed length, checksum,
-  decoded length and SHA-256) for XDJ-700 updates. Decoding is limited to MAIN versions whose
-  layout has been verified (currently `Ver1.15`); other versions are reported as `unsupported`.
+  decoded length and SHA-256) for XDJ-700 updates. Decoding is limited to MAIN images whose
+  layout has been verified, by label (`Ver1.15`) or by loader region (see above); others are
+  reported as `unsupported`.
   A container with more than one XDJ-700 MAIN document is refused as ambiguous. The MAIN image
   is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
   section is reported with its reason instead of failing the whole report.

@@ -1,0 +1,51 @@
+//! XDJ-700 MAIN version labels (`VerX.YY`) and the order the updater compares them in.
+
+use crate::error::RebuildError;
+
+/// MAIN label of the official v1.15 release.
+pub const OFFICIAL_V115_LABEL: &str = "Ver1.15";
+
+/// Checks that `version` is an XDJ-700 MAIN label of the form `VerX.YY`, as every rebuild
+/// requires.
+///
+/// # Errors
+///
+/// [`RebuildError::InvalidVersionLabel`] otherwise.
+pub fn validate_version_label(version: &str) -> Result<(), RebuildError> {
+    version_number(version)
+        .map(|_| ())
+        .ok_or_else(|| RebuildError::InvalidVersionLabel {
+            label: version.to_owned(),
+        })
+}
+
+/// Whether `label` is a higher version than `installed`. The updater writes a document only when
+/// its version is higher than the installed one (observed on an owner's unit), so a label that
+/// is not higher is skipped.
+///
+/// # Errors
+///
+/// [`RebuildError::InvalidVersionLabel`] if either label is not of the form `VerX.YY`.
+pub fn is_label_higher(label: &str, installed: &str) -> Result<bool, RebuildError> {
+    let number = |version: &str| {
+        version_number(version).ok_or_else(|| RebuildError::InvalidVersionLabel {
+            label: version.to_owned(),
+        })
+    };
+    Ok(number(label)? > number(installed)?)
+}
+
+/// `VerX.YY` as `X * 100 + YY`, or `None` for any other form.
+fn version_number(version: &str) -> Option<u16> {
+    match version.as_bytes() {
+        [b'V', b'e', b'r', major, b'.', tens, units]
+            if [major, tens, units]
+                .iter()
+                .all(|digit| digit.is_ascii_digit()) =>
+        {
+            let digit = |byte: &u8| u16::from(byte - b'0');
+            Some(digit(major) * 100 + digit(tens) * 10 + digit(units))
+        }
+        _ => None,
+    }
+}

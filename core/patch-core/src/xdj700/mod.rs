@@ -11,12 +11,14 @@
 //! instead (static analysis of the v1.15 loader).
 
 mod grid;
+mod label;
 mod rebuild;
 
 pub use grid::RECORD_DATA_LEN;
+pub use label::{OFFICIAL_V115_LABEL, is_label_higher, validate_version_label};
 pub use rebuild::{
     MAX_MAIN_GROWTH, OFFICIAL_V115, RebuiltUpdate, StockRelease, rebuild_with_application,
-    rebuild_with_stock_application, validate_version_label, verify_rebuild,
+    rebuild_with_stock_application, verify_rebuild,
 };
 
 use crate::error::SectionError;
@@ -38,7 +40,7 @@ pub const FALLBACK_SECTION_OFFSET: usize = 0x10000;
 /// MAIN versions whose application-section layout has been verified against an official file.
 /// An image with another label is decoded only if its loader region matches
 /// [`VERIFIED_LOADER_SHA256`]; otherwise it is refused rather than decoded at a guessed offset.
-pub const VERIFIED_MAIN_VERSIONS: &[&str] = &["Ver1.15"];
+pub const VERIFIED_MAIN_VERSIONS: &[&str] = &[OFFICIAL_V115_LABEL];
 
 /// SHA-256 of the loader region `[0, APPLICATION_SECTION_OFFSET)` of the verified official MAIN
 /// images (v1.15). The loader code fixes where the application section starts, so an image whose
@@ -256,22 +258,34 @@ pub fn main_document(container: &UpdContainer) -> Result<&UpdDocument, SectionEr
 ///
 /// [`SectionError::UnverifiedVersion`] if neither the version nor the loader region is verified.
 pub fn verify_main_layout(main: &UpdDocument, image: &DocumentImage) -> Result<(), SectionError> {
+    verify_main_layout_with(main, image, VERIFIED_LOADER_SHA256)
+}
+
+/// [`verify_main_layout`] against the given loader-region identities (lowercase SHA-256 hex of
+/// `[0, APPLICATION_SECTION_OFFSET)` in an image based at 0) instead of
+/// [`VERIFIED_LOADER_SHA256`].
+///
+/// # Errors
+///
+/// [`SectionError::UnverifiedVersion`] if neither the version nor the loader region is verified.
+pub fn verify_main_layout_with(
+    main: &UpdDocument,
+    image: &DocumentImage,
+    verified_loaders: &[&str],
+) -> Result<(), SectionError> {
     let version = main.descriptor().version();
-    if VERIFIED_MAIN_VERSIONS.contains(&version) || has_verified_loader(image) {
+    let loader_verified = image.base() == 0
+        && image
+            .bytes()
+            .get(..APPLICATION_SECTION_OFFSET)
+            .is_some_and(|loader| verified_loaders.contains(&sha256_hex(loader).as_str()));
+    if VERIFIED_MAIN_VERSIONS.contains(&version) || loader_verified {
         Ok(())
     } else {
         Err(SectionError::UnverifiedVersion {
             version: version.to_owned(),
         })
     }
-}
-
-fn has_verified_loader(image: &DocumentImage) -> bool {
-    image.base() == 0
-        && image
-            .bytes()
-            .get(..APPLICATION_SECTION_OFFSET)
-            .is_some_and(|loader| VERIFIED_LOADER_SHA256.contains(&sha256_hex(loader).as_str()))
 }
 
 /// Decodes the application section from an already reconstructed MAIN image.

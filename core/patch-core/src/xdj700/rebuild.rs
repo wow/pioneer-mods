@@ -18,7 +18,7 @@
 use super::grid::{S2_ADDRESS_SPACE, follows_grid, grid_records};
 use super::{
     APPLICATION_SECTION_OFFSET, decode_section, encode_section, main_document, section_frame,
-    verify_main_layout,
+    validate_version_label, verify_main_layout,
 };
 use crate::error::{RebuildCheck, RebuildError, SectionError};
 use crate::identity::sha256_hex;
@@ -366,23 +366,4 @@ fn section_end(compressed_len: usize) -> usize {
 
 fn document_bytes<'a>(container_bytes: &'a [u8], document: &UpdDocument) -> &'a [u8] {
     &container_bytes[document.offset()..document.offset() + document.length()]
-}
-
-/// Checks that `version` is an XDJ-700 MAIN label of the form `VerX.YY`, as every rebuild
-/// requires.
-///
-/// # Errors
-///
-/// [`RebuildError::InvalidVersionLabel`] otherwise.
-pub fn validate_version_label(version: &str) -> Result<(), RebuildError> {
-    let bytes = version.as_bytes();
-    let valid = matches!(bytes, [b'V', b'e', b'r', major, b'.', minor @ ..]
-        if major.is_ascii_digit() && minor.len() == 2 && minor.iter().all(u8::is_ascii_digit));
-    if valid {
-        Ok(())
-    } else {
-        Err(RebuildError::InvalidVersionLabel {
-            label: version.to_owned(),
-        })
-    }
 }
