@@ -7,9 +7,9 @@
 //! `offset` moves the window and fails the hash. A hash of only a few bytes could be inverted by
 //! brute force, which would publish them; over a window this long that is impractical unless
 //! most of the window is predictable, so windows belong over code, not padding or known strings.
-//! Only the project's own replacement bytes are written. The static checks here need no firmware; the release-specific rules (protected
-//! ranges, label and reported-version order, preconditions) are enforced by the engine in
-//! `patch-core`.
+//! Only the project's own replacement bytes are written. The static checks here need no
+//! firmware; the release-specific rules (protected ranges, label and reported-version order,
+//! preconditions) are enforced by the engine in `patch-core`.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
