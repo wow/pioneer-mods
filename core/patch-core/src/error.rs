@@ -305,7 +305,8 @@ pub enum RebuildError {
 
     #[error(
         "a modified application must report a version lower than the official {official} (it \
-         reports {reported:?}), so that the official update can restore it"
+         reports {}), so that the official update can restore it",
+        .reported.as_deref().unwrap_or("no version string of the form X.YY")
     )]
     ModifiedApplicationVersion {
         reported: Option<String>,

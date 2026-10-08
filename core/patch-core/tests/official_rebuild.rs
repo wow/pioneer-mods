@@ -115,6 +115,8 @@ fn rebuild_reproduces_the_reference_alpha2_pins() {
     assert_eq!(rebuilt.main_image_sha256(), ALPHA2_MAIN_SHA256);
     assert_eq!(rebuilt.bytes().len(), ALPHA2_UPD_LEN);
     assert_eq!(rebuilt.sha256(), ALPHA2_UPD_SHA256);
+    // Why the release rule accepts alpha.2: it reports a version lower than 1.15.
+    assert_eq!(rebuilt.application_reported_version(), Some("0.96"));
 }
 
 #[test]
@@ -184,8 +186,8 @@ fn stage3_reported_version_file_is_pinned() {
     );
 }
 
-/// The release rule on the real file: a modified application must report a version lower than
-/// 1.15, whichever public entry point builds or verifies it.
+/// The release rule on the real file: `rebuild_with_application` refuses a modified application
+/// that does not report a version lower than 1.15 (the synthetic tests cover `verify_rebuild`).
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
 fn a_modified_application_reporting_1_16_is_refused() {

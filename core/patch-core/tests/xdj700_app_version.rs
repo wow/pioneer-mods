@@ -284,3 +284,48 @@ fn reporting_rebuild_refuses_an_application_without_a_version_string() {
         })
     );
 }
+
+#[test]
+fn the_reported_version_is_read_at_the_release_block_offset() {
+    // A release whose block sits at 0x100, with an unrelated well-formed string at 0x740.
+    let mut decoded = application(b"9.99\0");
+    decoded[0x100..0x105].copy_from_slice(b"1.15\0");
+    let stock = stock_update(&decoded);
+    let (upd_sha256, stock_sha256) = (sha256_hex(&stock), sha256_hex(&decoded));
+    let at_0x100 = VersionBlock {
+        offset: 0x100,
+        ..block(&stock_sha256)
+    };
+
+    let rebuilt = rebuild_with_stock_application_reporting(
+        &stock,
+        &release_with(&stock, &upd_sha256, at_0x100),
+        "0.10",
+        "Ver1.16",
+    )
+    .expect("rebuild");
+
+    assert_eq!(rebuilt.application_reported_version(), Some("0.10"));
+}
+
+#[test]
+fn the_refusal_names_what_the_application_reports() {
+    let message = |reported: Option<&str>| {
+        RebuildError::ModifiedApplicationVersion {
+            reported: reported.map(str::to_owned),
+            official: "1.15".to_owned(),
+        }
+        .to_string()
+    };
+
+    assert!(
+        message(Some("1.16")).contains("(it reports 1.16)"),
+        "{}",
+        message(Some("1.16"))
+    );
+    assert!(
+        message(None).contains("(it reports no version string of the form X.YY)"),
+        "{}",
+        message(None)
+    );
+}

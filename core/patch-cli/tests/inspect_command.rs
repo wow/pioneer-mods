@@ -270,6 +270,8 @@ fn inspect_structure_decodes_xdj700_application_section() {
         application["reported_version"].is_null() && application.get("reported_version").is_some(),
         "a 27-byte application holds no version string, reported as null: {application}"
     );
+    let text = run_inspect(&input, &["--structure"]);
+    assert!(String::from_utf8_lossy(&text.stdout).contains(" reported_version=none"));
 }
 
 #[test]

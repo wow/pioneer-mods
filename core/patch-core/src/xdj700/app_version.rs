@@ -88,11 +88,25 @@ impl VersionBlock<'_> {
     /// [`RebuildError::ModifiedApplicationVersion`] for a modified application that reports no
     /// version string, or one not lower than [`Self::stock_version`].
     pub fn check_application(&self, decoded: &[u8]) -> Result<(), RebuildError> {
+        self.check(decoded, || sha256_hex(decoded))
+    }
+
+    /// [`Self::check_application`] with the application's SHA-256 already computed.
+    pub(crate) fn check_application_hashed(
+        &self,
+        decoded: &[u8],
+        sha256: &str,
+    ) -> Result<(), RebuildError> {
+        self.check(decoded, || sha256.to_owned())
+    }
+
+    /// Hashes `decoded` (through `sha256`) only when it does not report a lower version.
+    fn check(&self, decoded: &[u8], sha256: impl FnOnce() -> String) -> Result<(), RebuildError> {
         let reported = reported_version_at(decoded, self.offset);
         let lower = reported
             .and_then(bare_version_number)
             .is_some_and(|number| self.is_lower(number));
-        if lower || sha256_hex(decoded) == self.stock_application_sha256 {
+        if lower || sha256() == self.stock_application_sha256 {
             Ok(())
         } else {
             Err(RebuildError::ModifiedApplicationVersion {

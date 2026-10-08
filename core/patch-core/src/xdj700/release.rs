@@ -14,7 +14,8 @@ pub const MAX_MAIN_GROWTH: usize = 256 * 1024;
 /// The library guarantees that the input matches the release passed in. The fields are public so
 /// that tests can pin synthetic files, so the flash-safety bound ([`MAX_MAIN_GROWTH`] over the
 /// official image) holds only when callers use a pinned constant such as [`OFFICIAL_V115`].
-/// Production code, including the CLI, must never construct a release from user input.
+/// The same holds for the version rule ([`StockRelease::version_block`]). Production code,
+/// including the CLI, must never construct a release from user input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StockRelease<'a> {
     /// Length of the complete official `.UPD`, checked before its hash (and before reading, by
@@ -58,6 +59,9 @@ pub const OFFICIAL_V115: StockRelease<'static> = StockRelease {
     max_main_image_len: 0x6E_A7C0 + MAX_MAIN_GROWTH,
     version_block: Some(OFFICIAL_V115_VERSION_BLOCK),
 };
+
+// Every pinned release carries a version block, so the rule for modified applications applies.
+const _: () = assert!(OFFICIAL_V115.version_block.is_some());
 
 /// The v1.15 application's version block: `1.15` at decoded offset `0x740`.
 pub const OFFICIAL_V115_VERSION_BLOCK: VersionBlock<'static> = VersionBlock {

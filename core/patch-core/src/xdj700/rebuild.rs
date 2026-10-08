@@ -16,10 +16,10 @@
 //! The output is then re-parsed and checked by the same verification [`verify_rebuild`] runs.
 
 use super::grid::{S2_ADDRESS_SPACE, follows_grid, grid_records};
-use super::release::StockRelease;
+use super::release::{StockRelease, VersionBlock};
 use super::{
-    APPLICATION_SECTION_OFFSET, decode_section, encode_section, main_document, section_frame,
-    validate_version_label, verify_main_layout,
+    APPLICATION_SECTION_OFFSET, decode_section, encode_section, main_document, reported_version_at,
+    section_frame, validate_version_label, verify_main_layout,
 };
 use crate::error::{RebuildCheck, RebuildError, SectionError};
 use crate::identity::sha256_hex;
@@ -74,7 +74,8 @@ impl RebuiltUpdate {
     }
 
     /// The version the verified application reports about itself
-    /// ([`reported_version`](super::reported_version)), if it holds a version string.
+    /// at the release's [`VersionBlock`] offset, if the release pins one and the application holds
+    /// a well-formed version string there.
     pub fn application_reported_version(&self) -> Option<&str> {
         self.application_reported_version.as_deref()
     }
@@ -89,11 +90,12 @@ impl RebuiltUpdate {
 /// - Input refusals: [`RebuildError::UnpinnedInput`], [`RebuildError::Input`],
 ///   [`RebuildError::InputSection`], [`RebuildError::DataAfterSection`] or
 ///   [`RebuildError::NonCanonicalRecordLayout`].
-/// - [`RebuildError::ModifiedApplicationVersion`] if `decoded` is a modified application that
-///   does not report a version lower than the release's ([`VersionBlock::check_application`]).
 /// - [`RebuildError::Encode`] if `decoded` cannot be encoded, or [`RebuildError::ImageTooLarge`]
 ///   beyond the release's bound (and 24-bit addresses).
-/// - Any [`verify_rebuild`] error, which would indicate a defect in this library.
+/// - [`RebuildError::ModifiedApplicationVersion`] if `decoded` is a modified application that
+///   does not report a version lower than the release's ([`VersionBlock::check_application`]);
+///   checked by the verification every rebuild runs.
+/// - Any other [`verify_rebuild`] error, which would indicate a defect in this library.
 ///
 /// [`VersionBlock::check_application`]: super::VersionBlock::check_application
 pub fn rebuild_with_application(
@@ -104,7 +106,6 @@ pub fn rebuild_with_application(
 ) -> Result<RebuiltUpdate, RebuildError> {
     validate_version_label(version)?;
     let stock = StockMain::load(input, release)?;
-    check_application_version(release, decoded)?;
     rebuild_from(&stock, input, decoded, version)
 }
 
@@ -132,7 +133,7 @@ pub fn rebuild_with_stock_application_reporting(
     let mut decoded = decode_section(stock.image.bytes(), APPLICATION_SECTION_OFFSET)
         .map_err(RebuildError::InputSection)?
         .into_decoded();
-    // A version lower than the release's, so `check_application_version` would pass.
+    // A version lower than the release's, so the rule `verify` enforces passes.
     block.set_reported_version(&mut decoded, reported_version)?;
     rebuild_from(&stock, input, &decoded, label)
 }
@@ -157,7 +158,7 @@ pub fn rebuild_with_stock_application(
 }
 
 fn rebuild_from(
-    stock: &StockMain,
+    stock: &StockMain<'_>,
     input: &[u8],
     decoded: &[u8],
     version: &str,
@@ -203,8 +204,7 @@ fn rebuild_from(
         main_image_len: verified.len,
         main_image_sha256: verified.sha256,
         application_sha256: verified.application_sha256,
-        // `verify` proved that the output's application decodes to exactly `decoded`.
-        application_reported_version: super::reported_version(decoded).map(str::to_owned),
+        application_reported_version: verified.reported_version,
     })
 }
 
@@ -221,8 +221,9 @@ fn rebuild_from(
 ///
 /// The input refusals of [`rebuild_with_application`], [`RebuildError::OutputUnparseable`],
 /// [`RebuildError::OutputSection`] if the output's MAIN image cannot be built
-/// ([`SectionError::Image`]) or its section is invalid, [`RebuildError::ImageTooLarge`], or
-/// [`RebuildError::Verification`] naming the failed property.
+/// ([`SectionError::Image`]) or its section is invalid, [`RebuildError::ImageTooLarge`],
+/// [`RebuildError::Verification`] naming the failed property, or
+/// [`RebuildError::ModifiedApplicationVersion`] under the release's version rule.
 pub fn verify_rebuild(
     input: &[u8],
     release: &StockRelease<'_>,
@@ -231,19 +232,9 @@ pub fn verify_rebuild(
     version: &str,
 ) -> Result<(), RebuildError> {
     validate_version_label(version)?;
-    let stock = StockMain::load(input, release)?;
-    check_application_version(release, decoded)?;
-    stock.verify(input, output, decoded, version).map(|_| ())
-}
-
-/// The release's rule for modified applications, when it pins a version block.
-fn check_application_version(
-    release: &StockRelease<'_>,
-    decoded: &[u8],
-) -> Result<(), RebuildError> {
-    release
-        .version_block
-        .map_or(Ok(()), |block| block.check_application(decoded))
+    StockMain::load(input, release)?
+        .verify(input, output, decoded, version)
+        .map(|_| ())
 }
 
 /// Identity of a verified output's MAIN image.
@@ -251,19 +242,23 @@ struct VerifiedMain {
     len: usize,
     sha256: String,
     application_sha256: String,
+    /// At the release's version block; `None` without one.
+    reported_version: Option<String>,
 }
 
-/// The verified input: its container, single MAIN document, image, extents and size bound.
-struct StockMain {
+/// The verified input: its container, single MAIN document, image, extents, size bound and
+/// version rule.
+struct StockMain<'a> {
     container: UpdContainer,
     main_position: usize,
     image: DocumentImage,
     extents: Vec<Range<u64>>,
     max_image_len: usize,
+    version_block: Option<VersionBlock<'a>>,
 }
 
-impl StockMain {
-    fn load(input: &[u8], release: &StockRelease<'_>) -> Result<Self, RebuildError> {
+impl<'a> StockMain<'a> {
+    fn load(input: &[u8], release: &StockRelease<'a>) -> Result<Self, RebuildError> {
         let sha256 = sha256_hex(input);
         if input.len() != release.upd_len || sha256 != release.upd_sha256 {
             return Err(RebuildError::UnpinnedInput { sha256 });
@@ -301,6 +296,7 @@ impl StockMain {
             image,
             extents,
             max_image_len: release.max_main_image_len.min(S2_ADDRESS_SPACE),
+            version_block: release.version_block,
         })
     }
 
@@ -374,10 +370,19 @@ impl StockMain {
         if section.decoded() != decoded {
             return failed(RebuildCheck::Application);
         }
+        // Every public rebuild and verification passes here: the one place the rule is enforced.
+        let application_sha256 = section.decoded_sha256();
+        if let Some(block) = &self.version_block {
+            block.check_application_hashed(decoded, &application_sha256)?;
+        }
         Ok(VerifiedMain {
             len: image.bytes().len(),
             sha256: sha256_hex(image.bytes()),
-            application_sha256: section.decoded_sha256(),
+            application_sha256,
+            reported_version: self
+                .version_block
+                .and_then(|block| reported_version_at(decoded, block.offset))
+                .map(str::to_owned),
         })
     }
 }
