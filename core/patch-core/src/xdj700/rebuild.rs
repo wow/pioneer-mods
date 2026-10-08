@@ -106,6 +106,8 @@ pub fn rebuild_with_application(
 ) -> Result<RebuiltUpdate, RebuildError> {
     validate_version_label(version)?;
     let stock = StockMain::load(input, release)?;
+    // Fail fast, before encoding; `verify` enforces the same rule for every path.
+    release.check_application(decoded)?;
     rebuild_from(&stock, input, decoded, version)
 }
 

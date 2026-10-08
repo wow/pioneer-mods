@@ -1,6 +1,7 @@
 //! The official releases a rebuild may start from, and what each one pins.
 
 use super::app_version::VERSION_STRING_OFFSET;
+use crate::error::RebuildError;
 
 /// Most a rebuilt MAIN image may grow beyond the official one. The fallback updater lies in the
 /// loader region, which every rebuild keeps byte-identical (see
@@ -59,6 +60,15 @@ pub const OFFICIAL_V115: StockRelease<'static> = StockRelease {
     max_main_image_len: 0x6E_A7C0 + MAX_MAIN_GROWTH,
     version_block: Some(OFFICIAL_V115_VERSION_BLOCK),
 };
+
+impl StockRelease<'_> {
+    /// The release's rule for modified applications ([`VersionBlock::check_application`]); no
+    /// rule without a version block (synthetic test releases only).
+    pub(crate) fn check_application(&self, decoded: &[u8]) -> Result<(), RebuildError> {
+        self.version_block
+            .map_or(Ok(()), |block| block.check_application(decoded))
+    }
+}
 
 // Every pinned release carries a version block, so the rule for modified applications applies.
 const _: () = assert!(OFFICIAL_V115.version_block.is_some());
