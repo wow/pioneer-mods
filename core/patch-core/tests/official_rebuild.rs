@@ -27,7 +27,7 @@ const ALPHA2_ENV: &str = "PIONEER_XDJ700_REFERENCE_ALPHA2_DECODED";
 const UPD_SHA256: &str = "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c";
 
 /// The stock application re-encoded under the stock label. (On a v1.15 unit the updater skips
-/// this label; the hardware stage-1 file is the `Ver1.90` variant below.)
+/// this label; the hardware stage files are the `Ver0.90` and `Ver1.90` variants below.)
 /// Cross-checked byte-identical against the reference serializer (2026-10-07).
 const NOOP_UPD_LEN: usize = 17_368_545;
 const NOOP_UPD_SHA256: &str = "f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c";

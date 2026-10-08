@@ -44,21 +44,34 @@ Go one stage at a time. Do not move on until the previous stage has passed. Phot
 | Stage | File | What to look for | Next |
 | --- | --- | --- | --- |
 | 0 | The **official** v1.15 update, if the unit runs an older version | MAIN progresses to v1.15 | Stage 1 |
-| 1 | **No-op rebuild labelled `Ver0.90`** (lower than the installed version) | **Accepted:** MAIN shows `… -> Ver0.90` and progresses for about 3 minutes; the stock application is installed. **Refused or skipped:** an error, or MAIN jumps to 100%; nothing is written | Accepted: stage 2. Refused or skipped: stage 1b |
-| 1b | **No-op rebuild labelled `Ver1.90`** (higher), only if stage 1 was refused or skipped | MAIN shows `… -> Ver1.90` and progresses | Stage 2 |
-| 2 | The **official** v1.15 update again | The MAIN line's **left-hand** version: `Ver1.15 -> Ver1.15` (and a skip) means the unit reports the application's own version. `Ver0.90 -> Ver1.15` or `Ver1.90 -> Ver1.15` means it stores the last file's label | Done: the unit runs the official application either way |
+| 1 | **No-op rebuild labelled `Ver0.90`** (lower than the installed version) | **Accepted:** MAIN shows `… -> Ver0.90` and progresses for about 3 minutes; the stock application is installed. **Refused or skipped:** an error *before MAIN progresses at all*, or MAIN jumps straight to 100%; nothing should have been written. **An error after MAIN has started progressing is neither: stop and follow section 6** | Accepted: stage 2. Refused or skipped: **stop and decide** about stage 1b (below) |
+| 1b | **No-op rebuild labelled `Ver1.90`** (higher). Only if stage 1 was refused or skipped, and only after reading the warning below | MAIN shows `… -> Ver1.90` and progresses | Stage 2 |
+| 2 | The **official** v1.15 update again | The MAIN line's **left-hand** version. **`Ver1.15 -> Ver1.15` and a skip:** the unit reports the application's own version (expected outcome, not a failure). **`Ver0.90 -> Ver1.15` or `Ver1.90 -> Ver1.15` with progress:** it stores the last file's label, and the official file is re-installed. **`Ver1.90 -> Ver1.15` refused or skipped:** the label sticks and lower versions are refused (see the warning below) | Done: the unit runs the official application in every case |
 
 A no-op rebuild's application is the official one, re-compressed, so nothing should change
-functionally at any stage. After stage 1 accepted, any official file is "higher", so the unit can
-always go back to official firmware. After stage 1b, see section 1.
+functionally at any stage. **After stage 1 is accepted**, any official file is "higher", so the
+unit can always go back to official firmware.
 
-The stage files built from the official v1.15 file (`XDJ700.UPD`, SHA-256 `73edec98…f99c`) are
-always the same. Both are 17,368,545 bytes:
+> **Warning before stage 1b.** A refused stage 1 is evidence that the updater refuses lower
+> versions. Stage 1b is then reversible **only if** the installed version comes from the
+> application (section 1), which is not yet confirmed. If instead the unit stores the last
+> file's label, then after stage 1b:
+> - the official v1.15 update, and any future official update numbered below 1.90, may be
+>   refused;
+> - recovering from a later modified application needs a stock no-op rebuild with a label
+>   *higher* than 1.90.
+>
+> The application stays the official one either way, so the unit keeps working normally.
+> Stage 1b is your decision; you can also stop after stage 1.
 
-| Label | SHA-256 |
-| --- | --- |
-| `Ver0.90` (stage 1) | `79f25fa1be84e0e5323273eb36ca5cbfd0f532824f6a2fde0a80db6965380252` |
-| `Ver1.90` (stage 1b) | `aff3a1b9f887dc6d6e35f5686d0edfa644ce9e661011775489315ddbcf928f99` |
+The stage files built from the official v1.15 file (`XDJ700.UPD`, 17,371,335 bytes, SHA-256
+`73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c`) are always the same. Both are
+17,368,545 bytes:
+
+| Stage | Label | SHA-256 |
+| --- | --- | --- |
+| 1 | `Ver0.90` | `79f25fa1be84e0e5323273eb36ca5cbfd0f532824f6a2fde0a80db6965380252` |
+| 1b | `Ver1.90` | `aff3a1b9f887dc6d6e35f5686d0edfa644ce9e661011775489315ddbcf928f99` |
 
 (With `--label Ver1.15` the SHA-256 is
 `f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c`, but on a v1.15 unit that
@@ -71,9 +84,15 @@ file is skipped.)
    root (the output directory must exist):
 
    ```bash
+   # Stage 1
    mkdir -p ~/xdj700-stage1
    cargo run --release -p patch-cli -- rebuild --input /path/to/XDJ700.UPD \
      --application stock --label Ver0.90 --output ~/xdj700-stage1/XDJ700.UPD
+
+   # Stage 1b, only after the warning in section 2
+   mkdir -p ~/xdj700-stage1b
+   cargo run --release -p patch-cli -- rebuild --input /path/to/XDJ700.UPD \
+     --application stock --label Ver1.90 --output ~/xdj700-stage1b/XDJ700.UPD
    ```
 
    The command checks the rebuild against the official file, writes atomically, reads the file
@@ -87,7 +106,8 @@ file is skipped.)
 4. **Check the stick, not the copy source:**
    - eject the stick and plug it back in;
    - run `shasum -a 256 /Volumes/<stick>/XDJ700.UPD`;
-   - it must equal the identity in section 2. **On any mismatch, stop.** The read-back done by
+   - it must equal the identity **for the stage you are flashing** in section 2 (stage 1:
+     `79f25fa1…`). **On any mismatch, stop.** The read-back done by
      `patch-cli` can be served from the operating system's cache, so it does not prove what is on
      the stick.
 5. **Recovery stick ready:** keep a second stick with the official v1.15 file, checked the same
@@ -108,8 +128,9 @@ file is skipped.)
   `MAIN Ver1.15 -> Ver0.90`), and its progress bar runs for about 3 minutes.
 - **Skip:** the MAIN line jumps straight to 100%.
 
-A stage only passes if MAIN really progressed. **Photograph the MAIN line**: its left-hand
-version tells us where the installed version comes from.
+Stages 0, 1 and 1b only pass if MAIN really progressed. For stage 2, a skip is an expected,
+informative outcome (section 2). **Photograph the MAIN line**: its left-hand version tells us
+where the installed version comes from.
 
 Then check each of these:
 - the update completed with no error message;
@@ -158,5 +179,6 @@ Then try the official v1.15 update with the official procedure. **Check whether 
 progressed** (section 4). After a rebuild the updater may skip the official file as
 `Ver1.15 -> Ver1.15`. That is harmless after a no-op rebuild, whose application is already the
 official one, but it does **not** restore a modified application. Restoring one needs a stock
-no-op rebuild under a label different from the version the unit reports. That route is untested.
+no-op rebuild under a label the updater accepts: one different from the version the unit
+reports, and **higher** than it if lower versions were refused. That route is untested.
 If the unit no longer starts, leave it powered off and open an issue with your notes.
