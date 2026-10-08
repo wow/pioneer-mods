@@ -19,10 +19,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   the loader region `[0, 0x40000)` matches the official v1.15 loader
   (`xdj700::VERIFIED_LOADER_SHA256`). The loader fixes the application offset, and rebuilds keep
   that region byte-identical, so `inspect --structure` decodes the stage files instead of
-  reporting them as unsupported. `verify_main_version` is replaced by `verify_main_layout`.
+  reporting them as unsupported. `verify_main_version` is replaced by `verify_main_layout`
+  (and `verify_main_layout_with`, which takes the loader identities to accept).
 - `patch-cli rebuild` warns on stderr when the label is not higher than `Ver1.15`, since a unit
   running official v1.15 or later skips such a file. The comparison is
-  `xdj700::is_label_higher`; label handling moved to `xdj700::label` (`OFFICIAL_V115_LABEL`).
+  `xdj700::is_label_higher`; the label helpers (`xdj700::OFFICIAL_V115_LABEL`,
+  `is_label_higher`, `validate_version_label`) live in one place.
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
   the updater writes only versions higher than the installed one; equal and lower versions
   (including the project's `Ver0.90` probe) are skipped. Stage 1b therefore uses `Ver1.16`, the
