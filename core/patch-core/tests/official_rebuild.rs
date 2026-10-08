@@ -20,7 +20,9 @@ mod official_pins;
 
 use official_pins::{
     NOOP_MAIN_LEN, NOOP_MAIN_SHA256, NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES,
-    STOCK_APPLICATION_SHA256, UPD_ENV, UPD_SHA256,
+    STAGE3_APPLICATION_SHA256, STAGE3_LABEL, STAGE3_MAIN_LEN, STAGE3_MAIN_SHA256,
+    STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STOCK_APPLICATION_SHA256, UPD_ENV,
+    UPD_SHA256,
 };
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115, decode_application, rebuild_with_application,
@@ -145,4 +147,29 @@ fn stage_files_are_pinned_and_decode_to_the_stock_application() {
             "{label}"
         );
     }
+}
+
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn stage3_reported_version_file_is_pinned() {
+    let official = official_upd();
+    let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    assert_eq!(xdj700::reported_version(stock.decoded()), Some("1.15"));
+
+    let modified = xdj700::with_reported_version(stock.decoded(), STAGE3_REPORTED_VERSION)
+        .expect("lower version");
+    let rebuilt = rebuild_with_application(&official, &OFFICIAL_V115, &modified, STAGE3_LABEL)
+        .expect("rebuild");
+
+    assert_eq!(rebuilt.application_sha256(), STAGE3_APPLICATION_SHA256);
+    assert_eq!(rebuilt.main_image_len(), STAGE3_MAIN_LEN);
+    assert_eq!(rebuilt.main_image_sha256(), STAGE3_MAIN_SHA256);
+    assert_eq!(rebuilt.bytes().len(), STAGE3_UPD_LEN);
+    assert_eq!(rebuilt.sha256(), STAGE3_UPD_SHA256);
+    let application = decode_application(&parse_upd(rebuilt.bytes()).expect("parse output"))
+        .expect("the stage-3 file decodes");
+    assert_eq!(
+        xdj700::reported_version(application.decoded()),
+        Some(STAGE3_REPORTED_VERSION)
+    );
 }

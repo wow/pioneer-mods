@@ -108,6 +108,10 @@ Notes:
   accepted as input.
 - `--label` is required, with no default (see the note on versions below). A label not higher
   than `Ver1.15` gets a warning.
+- `--report-version X.YY` (optional) sets the version the application reports about itself;
+  only its version string changes. It must be lower than 1.15, so that the official v1.15
+  update can restore the stock application (to be confirmed on hardware; see the guide's stages 3
+  and 4). `inspect --structure` shows a file's `reported_version`.
 - The output must not exist; it is never overwritten. The rebuild is verified against the input
   before it is written. It is then written atomically, after its temporary file has been read
   back through the file system. Write to a local disk, then copy the file to a FAT32 stick

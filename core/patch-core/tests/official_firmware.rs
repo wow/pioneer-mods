@@ -93,6 +93,10 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
     assert_eq!(application.decoded().len(), STOCK_APPLICATION_LEN);
     assert_eq!(application.decoded_sha256(), STOCK_APPLICATION_SHA256);
     assert_eq!(&application.decoded()[..19], &[0; 19]);
+    assert_eq!(
+        xdj700::reported_version(application.decoded()),
+        Some("1.15")
+    );
 
     let fallback = xdj700::decode_section(main_image.bytes(), xdj700::FALLBACK_SECTION_OFFSET)
         .expect("fallback updater section");

@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `patch-cli rebuild --report-version X.YY` sets the version the application reports about
+  itself (the NUL-terminated string at decoded offset `0x740`, `xdj700::VERSION_STRING_OFFSET`);
+  only those bytes change. It must be lower than 1.15 (`xdj700::validate_reported_version`
+  refuses 1.15 or higher), so that the official v1.15 update is a higher version and is expected
+  to restore the stock application. `inspect --structure` reports the application's
+  `reported_version`. The owner-input tests pin the stage-3 file (`Ver1.16`, reporting `0.10`:
+  `84cbd263…`), cross-checked byte-identical against the reference serializer.
 - `patch_core::xdj700::FALLBACK_SECTION_OFFSET` (`0x10000`) records the loader's fallback updater
   section. Static analysis of the v1.15 loader, not yet observed on hardware, shows it runs this
   section instead of the application when the application section is left with a bad checksum. The
@@ -30,7 +37,7 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   normally. The guide's recovery stick is the `Ver1.16` stock no-op file; `Ver1.17` is kept only
   as a spare pin.
   The guide makes two rules for future modifications: stay out of the early start-up code, and
-  never change the application's version block, so that the recovery stick keeps working.
+  report a version lower than 1.15 (see `--report-version` below).
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
   the updater writes only versions higher than the installed one; equal and lower versions
   (including the project's `Ver0.90` probe) are skipped. Stage 1b therefore uses `Ver1.16`, the

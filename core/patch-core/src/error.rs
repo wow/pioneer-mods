@@ -291,6 +291,18 @@ pub enum RebuildError {
     #[error("version label {label:?} is not of the form VerX.YY")]
     InvalidVersionLabel { label: String },
 
+    #[error("reported version {version:?} is not of the form X.YY")]
+    InvalidReportedVersion { version: String },
+
+    #[error(
+        "reported version {version} is not lower than the official {official}; a modified \
+         application must report a lower version so that the official update restores it"
+    )]
+    ReportedVersionNotLower { version: String, official: String },
+
+    #[error("decoded application has no version string of the form X.YY at offset {offset:#x}")]
+    MissingVersionString { offset: usize },
+
     #[error(
         "stock MAIN image has data after the application section (only 0xFF padding is allowed)"
     )]
