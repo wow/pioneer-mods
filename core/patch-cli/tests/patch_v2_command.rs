@@ -106,6 +106,22 @@ fn refuses_an_input_of_the_wrong_length_without_reading_it() {
 }
 
 #[test]
+fn refuses_an_input_of_the_right_length_that_is_not_the_official_update() {
+    let (_dir, input, output) = paths();
+    // Zeros, as long as the official update.
+    let file = std::fs::File::create(&input).expect("create");
+    file.set_len(17_371_335).expect("grow");
+
+    let result = run_patch(&input, &committed_recipe(), &output, &[]);
+
+    assert_refused(
+        &result,
+        &output,
+        "it is not the official update of release xdj700-v1.15 (SHA-256 ",
+    );
+}
+
+#[test]
 fn refuses_a_label_the_updater_would_skip_before_reading_the_input() {
     let (_dir, missing_input, output) = paths();
     let mut recipe = committed_recipe();

@@ -1,7 +1,8 @@
-//! Owner-input test of `patch-cli rebuild` against the official XDJ-700 v1.15 update.
+//! Owner-input tests of `patch-cli rebuild`, `patch` and `precondition` against the official
+//! XDJ-700 v1.15 update.
 //!
 //! Vendor firmware and rebuilt files are never committed; the output goes to a temporary
-//! directory. To run locally:
+//! directory, and no firmware byte is printed. To run locally:
 //!
 //! ```text
 //! PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD \
@@ -34,6 +35,22 @@ fn run_rebuild(input: &Path, label: &str, output: &Path) -> Output {
         .arg(output)
         .output()
         .expect("run patch-cli rebuild")
+}
+
+const VERSION_MARKER: &str = "../../recipes/xdj700-v1.15/version-marker-0.10.json";
+
+/// Runs `patch` (with `output`) or `precondition` on `input` and `recipe`.
+fn run_recipe_command(command: &str, input: &Path, recipe: &Path, output: Option<&Path>) -> Output {
+    let mut run = Command::new(env!("CARGO_BIN_EXE_patch-cli"));
+    run.arg(command)
+        .arg("--input")
+        .arg(input)
+        .arg("--recipe")
+        .arg(recipe);
+    if let Some(output) = output {
+        run.arg("--output").arg(output);
+    }
+    run.output().expect("run patch-cli")
 }
 
 fn text(bytes: &[u8]) -> String {
@@ -185,23 +202,76 @@ fn patch_with_the_version_marker_recipe_writes_the_stage3_file() {
     let input = official_input();
     let dir = tempfile::tempdir().expect("tempdir");
     let output = dir.path().join("XDJ700.UPD");
-    let recipe = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../recipes/xdj700-v1.15/version-marker-0.10.json");
+    let recipe = Path::new(env!("CARGO_MANIFEST_DIR")).join(VERSION_MARKER);
 
-    let result = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
-        .arg("patch")
-        .arg("--input")
-        .arg(&input)
-        .arg("--recipe")
-        .arg(&recipe)
-        .arg("--output")
-        .arg(&output)
-        .output()
-        .expect("run patch-cli patch");
+    let result = run_recipe_command("patch", &input, &recipe, Some(&output));
 
     assert!(result.status.success(), "{}", text(&result.stderr));
     assert!(text(&result.stdout).contains(&format!("output_sha256_hex: {STAGE3_UPD_SHA256}")));
     let written = std::fs::read(&output).expect("read output");
     assert_eq!(written.len(), STAGE3_UPD_LEN);
     assert_eq!(sha256_hex(&written), STAGE3_UPD_SHA256);
+}
+
+/// The authoring flow on the official file: `precondition` hashes a draft's window, reports the
+/// completed recipe as declared, and `patch` applies it. The replacement inverts two bytes in the
+/// code after the header, inside a window of distinct bytes; no byte is printed.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn precondition_completes_a_draft_that_patch_then_applies() {
+    let input = official_input();
+    let official = std::fs::read(&input).expect("read official update");
+    let stock = xdj700::decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    let decoded = stock.decoded();
+    let distinct = |offset: usize| {
+        let mut seen = [false; 256];
+        decoded[offset - 16..offset]
+            .iter()
+            .chain(&decoded[offset + 2..offset + 18])
+            .all(|&byte| !std::mem::replace(&mut seen[usize::from(byte)], true))
+    };
+    let offset = (0x1000..decoded.len() - 18)
+        .find(|&offset| distinct(offset))
+        .expect("a window of distinct bytes");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let recipe_path = dir.path().join("draft.json");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(VERSION_MARKER);
+    let mut recipe: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(path).expect("read recipe")).expect("recipe JSON");
+    recipe.as_object_mut().expect("object").remove("expected");
+    recipe["replacements"] = serde_json::json!([{
+        "offset": offset,
+        "bytes_hex": format!("{:02x}{:02x}", !decoded[offset], !decoded[offset + 1]),
+        "precondition": {"before": 16, "after": 16, "sha256": "00".repeat(32)},
+        "purpose": "an authoring test; never flashed"
+    }]);
+    let write = |recipe: &serde_json::Value| {
+        std::fs::write(&recipe_path, serde_json::to_vec(recipe).expect("JSON")).expect("write")
+    };
+    write(&recipe);
+    let sha256 = sha256_hex(&decoded[offset - 16..offset + 18]);
+
+    let draft = run_recipe_command("precondition", &input, &recipe_path, None);
+    assert!(draft.status.success(), "{}", text(&draft.stderr));
+    let line = format!(
+        "replacements[0].precondition: {:#x}..{:#x} sha256 {sha256} (the recipe declares another \
+         hash)",
+        offset - 16,
+        offset + 18
+    );
+    assert!(
+        text(&draft.stdout).contains(&line),
+        "{}",
+        text(&draft.stdout)
+    );
+
+    recipe["replacements"][0]["precondition"]["sha256"] = serde_json::json!(sha256);
+    write(&recipe);
+    let complete = run_recipe_command("precondition", &input, &recipe_path, None);
+    assert!(text(&complete.stdout).contains(&format!("sha256 {sha256} (as declared)")));
+
+    let output = dir.path().join("XDJ700.UPD");
+    let patched = run_recipe_command("patch", &input, &recipe_path, Some(&output));
+    assert!(patched.status.success(), "{}", text(&patched.stderr));
+    assert!(text(&patched.stdout).contains("application_reported_version: 0.10"));
 }

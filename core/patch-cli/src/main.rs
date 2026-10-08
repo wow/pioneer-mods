@@ -2,7 +2,9 @@ mod commands;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use commands::{InspectArgs, PatchArgs, RebuildArgs, inspect, patch, rebuild};
+use commands::{
+    InspectArgs, PatchArgs, PreconditionArgs, RebuildArgs, inspect, patch, precondition, rebuild,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -24,6 +26,9 @@ enum Commands {
     /// Rebuild the official XDJ-700 v1.15 update around an application (verified, never
     /// overwrites).
     Rebuild(RebuildArgs),
+    /// Print the precondition hashes of a schema-v2 recipe, computed on the official update after
+    /// every check, for completing a draft (writes nothing).
+    Precondition(PreconditionArgs),
 }
 
 fn main() -> Result<()> {
@@ -36,5 +41,6 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Inspect(args) => inspect(args),
         Commands::Patch(args) => patch(args),
         Commands::Rebuild(args) => rebuild(args),
+        Commands::Precondition(args) => precondition(args),
     }
 }

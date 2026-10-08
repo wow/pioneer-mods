@@ -7,6 +7,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `patch-cli precondition --input --recipe` (`xdj700::precondition_hashes`): prints the
+  precondition hashes of a schema-v2 recipe, typically a draft with placeholder hashes. The recipe
+  is checked before the input is read, and each window passes the leak checks before its hash is
+  computed, so no hash of a refused window is ever shown. It writes nothing. The recipe reader and
+  the v2 checks are shared with `patch` (`patch_cli::recipe`).
 - **Recipe schema v2** (`patch_schema::RecipeV2`, `docs/recipes.md`): same-length replacements in
   the decoded application of a pinned release. Each replacement has a precondition: the SHA-256 of
   the stock bytes `before` and `after` the span, with at least 32 bytes outside the span

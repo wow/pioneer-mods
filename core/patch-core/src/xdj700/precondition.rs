@@ -11,14 +11,47 @@
 //! These are heuristic guards against accidental leaks, not a proof: windows belong over code, not
 //! over strings or tables, and review is the backstop. They hold for one recipe; the windows of
 //! all committed recipes are checked to be disjoint by the `committed_recipes` test.
+//!
+//! [`precondition_hashes`] helps an author complete a draft recipe: it hashes each window only
+//! after these checks, so it never shows the hash of a window the engine would refuse.
 
-use super::recipe::RecipeError;
-use patch_schema::{MIN_PRECONDITION_LEN, Replacement};
+use super::recipe::{RecipeError, RecipeTarget, check_recipe_v2};
+use super::stock::StockMain;
+use crate::identity::sha256_hex;
+use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2, Replacement};
 use std::ops::Range;
 
 /// How many of the most common byte values may together fill at most half of the bytes around a
 /// span.
 const TOP_VALUES: usize = 4;
+
+/// The SHA-256 of every precondition window of `recipe`, computed on `input`, the official update
+/// of `target`, for an author completing a draft. The recipe first passes [`check_recipe_v2`], and
+/// each window the bounds and leak checks, before its hash is computed. The hashes the recipe
+/// declares are not compared (a draft holds placeholders); applying the recipe compares them.
+///
+/// A hash covers whatever is at the declared offset, so it cannot show that the offset is the
+/// intended one: check offsets against your own analysis first. It then catches later changes.
+///
+/// # Errors
+///
+/// As [`check_recipe_v2`]; [`RecipeError::Rebuild`] for an input that is not the release's
+/// official update; [`RecipeError::OutOfBounds`] or a leak check's error for a window.
+pub fn precondition_hashes(
+    recipe: &RecipeV2,
+    target: &RecipeTarget<'_>,
+    input: &[u8],
+) -> Result<Vec<String>, RecipeError> {
+    check_recipe_v2(recipe, target)?;
+    let stock = StockMain::load(input, &target.release)?.application()?;
+    let stock = stock.decoded();
+    let hash = |(index, replacement)| {
+        let range = window(index, replacement, stock.len())?;
+        check_leaks(index, replacement, stock, range.clone())?;
+        Ok(sha256_hex(&stock[range]))
+    };
+    recipe.replacements.iter().enumerate().map(hash).collect()
+}
 
 /// The replacement's precondition window, if it lies inside an application of `application_len`.
 pub(super) fn window(

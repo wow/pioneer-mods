@@ -78,12 +78,30 @@ backstop.
 
 ## Writing a recipe
 
-Write recipes against your own copy of the official file, and commit only the recipe. The CLI
-does not yet print a window's SHA-256; a helper that does, after the same leak checks, is
-planned. Until then, compute it with `patch-core`: decode the stock application with
-`xdj700::decode_application`, take `sha256_hex` of the window, and check the recipe with
-`xdj700::apply_recipe_v2` before you commit it. Never paste stock bytes into an issue or a
-commit, only their hash.
+Write recipes against your own copy of the official file, and commit only the recipe. Never
+paste stock bytes into an issue or a commit, only their hash.
+
+1. Choose each span and its window in your own analysis of the decoded application. Write the
+   recipe with every field filled in, and use any 64 hex digits (for example all zeros) as the
+   placeholder for each `precondition.sha256`. Leave `expected` out for now.
+2. Compute the hashes:
+
+   ```bash
+   cargo run --release -p patch-cli -- precondition \
+     --input /path/to/XDJ700.UPD \
+     --recipe /path/to/draft.json
+   ```
+
+   The command runs every check a recipe gets, the leak checks included, before it computes any
+   hash. It never prints the hash of a window the engine would refuse, and it writes nothing. For
+   each replacement it prints the window and its SHA-256, and says whether the recipe already
+   declares it. Copy the hashes into the recipe.
+3. Run `patch` to build the update. It checks every hash and prints the output identities; copy
+   them into `expected`. Running `precondition` again shows every hash `as declared`.
+
+A hash covers whatever is at the declared offset, so it cannot show that the offset is the one
+you meant. Check offsets against your own analysis before step 2. After that, the hash catches
+any later change to an offset.
 
 ## What the engine checks
 
