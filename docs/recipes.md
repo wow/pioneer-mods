@@ -76,6 +76,25 @@ over strings or tables: text passes the value check but is easy to guess. Window
 per release; a future release that shares code with this one needs the same care. Review is the
 backstop.
 
+### Known exceptions
+
+Windows over data that review accepted, and why. No later recipe can use these ranges.
+
+- **`xdj700-v1.15/beat-loop-16-plays-32.json`:** decoded `0xD6234..0xD66F5`, the span and the
+  1,216 bytes after it.
+  - The span is a table entry, so any window around it lies over table data. Windows before it
+    are refused (four values fill 74 to 80 percent of them). After it, only 49 of the sizes
+    below 636 bytes pass, all close to the limit of half; every size from 636 bytes passes, and
+    the share falls to 40 percent at about 1,160 bytes. At 1,216 bytes it is 38 percent.
+  - Every valid window covers at least the 32 bytes after the span, which hold the next group of
+    the same handler's table, so that group is reserved whatever the window's size. A later
+    change there cannot add a recipe of its own: it would replace this one, and review would
+    weigh its window against this published hash.
+  - The first commit of #19 published a 96-byte window for the same span. It lies inside this
+    one. The 1,120 bytes that only this window covers pass the value check on their own
+    (38 percent), so the pair does not leave the short stretch covered by one hash alone that the
+    rule against overlapping windows guards against.
+
 ## Writing a recipe
 
 Write recipes against your own copy of the official file, and commit only the recipe. Never

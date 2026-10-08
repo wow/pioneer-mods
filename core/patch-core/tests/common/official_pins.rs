@@ -57,6 +57,8 @@ pub const STAGE_FILES: [(&str, &str); 3] = [
 /// Cross-checked byte-identical against the reference serializer (2026-10-08).
 pub const STAGE3_REPORTED_VERSION: &str = "0.10";
 pub const STAGE3_LABEL: &str = "Ver1.16";
+/// The committed recipe that reproduces the stage-3 file with `patch`.
+pub const STAGE3_RECIPE: &str = "xdj700-v1.15/version-marker-0.10.json";
 pub const STAGE3_APPLICATION_SHA256: &str =
     "74afbf4409242f58f11caac5142ccc220d39199f28c50155d0a2af9ed42d5ad3";
 pub const STAGE3_MAIN_LEN: usize = 7_250_753;
@@ -65,3 +67,19 @@ pub const STAGE3_MAIN_SHA256: &str =
 pub const STAGE3_UPD_LEN: usize = 17_368_543;
 pub const STAGE3_UPD_SHA256: &str =
     "84cbd2637b167893c6ad3ff8bc4a0b4cfb7cf5984dc399f6b018a8b5ddb0be5c";
+
+/// Stage 5: the beat-loop experiment, built with `patch` from the committed recipe below. Its
+/// application reports `0.11` and differs from stock in the version string and one entry of the
+/// BEAT LOOP button table (the button labelled 16 selects 32 beats); labelled `Ver1.16`.
+pub const STAGE5_RECIPE: &str = "xdj700-v1.15/beat-loop-16-plays-32.json";
+pub const STAGE5_REPORTED_VERSION: &str = "0.11";
+/// The decoded offset of the table entry, the recipe's only span.
+pub const STAGE5_TABLE_ENTRY_OFFSET: usize = 0xd6234;
+pub const STAGE5_APPLICATION_SHA256: &str =
+    "dd5adad4ae531db95c9dae10d9fa534afc4e31d2ffd54daadc22da6e463f25db";
+pub const STAGE5_MAIN_LEN: usize = 7_250_752;
+pub const STAGE5_MAIN_SHA256: &str =
+    "827936ea3c0e5d259766d3d164c04dc7e1157a427a6cedea50c6fdb1b9cf55e0";
+pub const STAGE5_UPD_LEN: usize = 17_368_527;
+pub const STAGE5_UPD_SHA256: &str =
+    "144f4b557127a7eec2d5d2f5fadee0e6585f05a83af321097876a0edca345e12";

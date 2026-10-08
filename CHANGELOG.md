@@ -13,7 +13,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   and the six-entry table mapping the PERFORM screen's buttons to it, read only by the BEAT LOOP
   touch handler; the recipe changes that table's last entry. The decoded application differs from
   stock in exactly three bytes (version string and table entry), checked by the owner-input
-  tests. `docs/xdj700-flashing.md` adds stage 5 (the experiment) and stage 6 (restore).
+  tests, which also pin the stage-5 file and run the guide's `patch` command. Its precondition
+  window lies over table data, recorded under "Known exceptions" in `docs/recipes.md`.
+  `docs/xdj700-flashing.md` adds stage 5 (the experiment) and stage 6 (restore).
 - `patch-cli precondition --input --recipe --committed-recipes [--check]`
   (`xdj700::precondition_hashes`): prints the precondition hashes of a schema-v2 recipe, typically
   a draft with placeholder hashes. Before the input is read, the recipe is checked and its windows
