@@ -7,7 +7,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
-- `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`, **experimental, not yet tested on hardware**:
+- `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`, **experimental; passed on an owner's unit
+  (2026-10-09)**, where BEAT LOOP 16 looped 32 beats and the official update restored stock:
   the BEAT LOOP button labelled 16 sets a 32-beat loop (the label still reads 16), reporting
   `0.11`. Static analysis found the player's list of loop lengths (which already holds 32 beats)
   and the six-entry table mapping the PERFORM screen's buttons to it, read only by the BEAT LOOP

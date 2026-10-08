@@ -20,6 +20,8 @@ error, and the unit still reports "Firmware update is complete":
 | higher (`Ver1.15 -> Ver1.16`) | accepted, MAIN progresses (about 3 minutes, as in a real write) | the project's stage-1b no-op rebuild over v1.15 |
 | higher (`Ver1.15 -> Ver1.16`) | **written** (about 3 minutes; UTILITY then shows the new application's `0.10`) | the project's stage-3 file over v1.15 |
 | higher (`Ver0.10 -> Ver1.15`) | **written** (about 3 minutes; UTILITY back to `1.15`) | official v1.15 over the stage-3 application |
+| higher (`Ver1.15 -> Ver1.16`) | **written** (UTILITY then shows `0.11`; BEAT LOOP 16 loops 32 beats) | the project's stage-5 file over v1.15 (2026-10-09) |
+| higher (`Ver0.11 -> Ver1.15`) | **written** (UTILITY back to `1.15`) | official v1.15 over the stage-5 application (2026-10-09) |
 | equal (`Ver1.15 -> Ver1.15`, PANEL `Ver1.00 -> Ver1.00`) | skipped at once | official v1.15 over v1.15; PANEL in every update |
 | lower (`Ver1.15 -> Ver0.90`) | skipped at once | the project's stage-1 file over v1.15 |
 
@@ -50,10 +52,11 @@ What this means:
   --report-version` (for example `0.10`) or a schema-v2 recipe's `reported_version` with `patch`
   (stage 5: `0.11`). Both refuse 1.15 or higher. The unit then reports that version, so **the
   official v1.15 file is written over it and restores the stock application with the vendor's
-  own file**. *(Observed on an owner's unit, 2026-10-08, stages 3 and 4: `Ver0.10 -> Ver1.15`
-  progressed for about 3 minutes and UTILITY returned to `1.15`.)* This was observed for an
-  application changed only in its version string. An application whose code is changed also
-  needs its own update mode to keep working (section 5).
+  own file**. *(Observed on an owner's unit: stages 3 and 4, 2026-10-08, `Ver0.10 -> Ver1.15`
+  progressed for about 3 minutes and UTILITY returned to `1.15`; stages 5 and 6, 2026-10-09, the
+  unit went from `0.11` back to `1.15`.)* This was observed for an application changed in its
+  version string, and in its version string and one table entry (stage 5). An application whose
+  code is changed also needs its own update mode to keep working (section 5).
 - Official files older than v1.15 are no longer downloadable.
 
 ## 2. Stages
@@ -69,8 +72,8 @@ table says otherwise. Photograph the **MAIN line** of every update (section 4).
 | 2 | The **official** v1.15 update again (optional: it only confirms section 1) | `MAIN Ver1.15 -> Ver1.15` and a skip, so the label did not stick. *(Observed on an owner's unit, 2026-10-08.)* Nothing is written | Stage 3 |
 | 3 | **Stock application reporting `0.10`, labelled `Ver1.16`** (built **with** `--report-version 0.10`; the recovery stick is built without it): only the application's 4-byte version string differs from stock. This is the first flashed application that differs from stock. A static scan finds one pointer to the string, in a small table with the model string, and no code literal that points to it directly (computed addresses are not ruled out); the reference implementation changed the same string and its build booted on hardware | *(Passed on an owner's unit, 2026-10-08: about 3 minutes; UTILITY showed `0.10`; the owner's checks of the unit were all good. Whether Pro DJ Link or rekordbox was exercised was not stated.)* **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes. Afterwards the boot screen and UTILITY show **`0.10`**; the unit otherwise behaves as stock (cold boots, browsing, playback, cue, loop, and Pro DJ Link or rekordbox if you use them: the version may be announced there). **Skipped**, or UTILITY still shows `1.15`: stop and report it (the unit then runs an application equivalent to stock; the `Ver1.16` stick restores it exactly). **An error:** section 6 | Stage 4 |
 | 4 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-08: `MAIN Ver0.10 -> Ver1.15` progressed for about 3 minutes and UTILITY returned to `1.15`.)* **Real flash:** `MAIN Ver0.10 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again: the vendor file restores stock. **If it is skipped** (`MAIN Ver0.10 -> Ver1.15` at 100% at once, UTILITY still `0.10`): use the `Ver1.16` stock no-op stick, which is higher than `0.10`, and report it | Done: the unit runs the official application. Stage 5 is an optional experiment |
-| 5 | **Beat-loop experiment, reporting `0.11`, labelled `Ver1.16`** (`patch` with `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`). **The first file that changes behaviour.** Besides the version string, one table entry differs from stock: the BEAT LOOP button labelled 16 selects the player's existing 32-beat length instead of 16. By static analysis only the PERFORM screen's BEAT LOOP touch handler reads that table, so the change acts when the button is touched, not during start-up | **Real flash:** `MAIN Ver1.15 -> Ver1.16` progressing for about 3 minutes; UTILITY shows **`0.11`**; three cold boots reach the normal screen. **Skipped**, or UTILITY still shows `1.15`: stop and report it. The experiment was not installed, so the checks below would say nothing about it. Then, with an analysed track (beat grid) loaded, touch BEAT LOOP **16**: the loop should span **32 beats** (8 bars: count bars on the waveform or the beat display). Touch 1/2, 1, 2, 4 and 8: each unchanged. Exit and reloop, and loop with QUANTIZE on and off: unchanged. Also try the cases most likely to differ from stock: a **slow track** (about 70 BPM: 32 beats last about 27 seconds, twice the longest loop this button gave before); **storing the 32-beat loop** wherever the unit can (REC to a hot cue, a memory) and recalling it; **loading another track** while the loop plays; and **three more cold boots after** these checks, in case loop state is saved. **16 still gives 16 beats** (after a real flash): the player limits this path; report it. **Anything odd** (a freeze, a wrong length, a display glitch): note it and go to stage 6. **An error:** section 6 | Stage 6 |
-| 6 | The **official** v1.15 update | **Real flash:** `MAIN Ver0.11 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again. **If it is skipped:** use the `Ver1.16` stock no-op stick, which is higher than `0.11`, and report it | Done |
+| 5 | **Beat-loop experiment, reporting `0.11`, labelled `Ver1.16`** (`patch` with `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`). **The first file that changes behaviour.** Besides the version string, one table entry differs from stock: the BEAT LOOP button labelled 16 selects the player's existing 32-beat length instead of 16. By static analysis only the PERFORM screen's BEAT LOOP touch handler reads that table, so the change acts when the button is touched, not during start-up | *(Passed on an owner's unit, 2026-10-09: the owner reported every check in this row as expected; BEAT LOOP 16 looped 32 beats.)* **Real flash:** `MAIN Ver1.15 -> Ver1.16` progressing for about 3 minutes; UTILITY shows **`0.11`**; three cold boots reach the normal screen. **Skipped**, or UTILITY still shows `1.15`: stop and report it. The experiment was not installed, so the checks below would say nothing about it. Then, with an analysed track (beat grid) loaded, touch BEAT LOOP **16**: the loop should span **32 beats** (8 bars: count bars on the waveform or the beat display). Touch 1/2, 1, 2, 4 and 8: each unchanged. Exit and reloop, and loop with QUANTIZE on and off: unchanged. Also try the cases most likely to differ from stock: a **slow track** (about 70 BPM: 32 beats last about 27 seconds, twice the longest loop this button gave before); **storing the 32-beat loop** wherever the unit can (REC to a hot cue, a memory) and recalling it; **loading another track** while the loop plays; and **three more cold boots after** these checks, in case loop state is saved. **16 still gives 16 beats** (after a real flash): the player limits this path; report it. **Anything odd** (a freeze, a wrong length, a display glitch): note it and go to stage 6. **An error:** section 6 | Stage 6 |
+| 6 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-09: the unit went from `0.11` back to `1.15`.)* **Real flash:** `MAIN Ver0.11 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again. **If it is skipped:** use the `Ver1.16` stock no-op stick, which is higher than `0.11`, and report it | Done |
 
 A no-op rebuild's application is the official one, re-compressed, so nothing should change
 functionally in it. Stage 3 changes only the text of the application's version string. Stage 5
@@ -145,14 +148,14 @@ owner-input tests check.
      `patch-cli` can be served from the operating system's cache, so it does not prove what is on
      the stick.
 5. **Recovery sticks ready**, each checked the same way (re-insert, then `shasum`):
-   - **Stock no-op rebuild labelled `Ver1.16`**, built **without** `--report-version` (the
-     stage-1b file, `9e1ac10e…`): the official application, re-compressed. On a unit that
-     reports 1.15 it is accepted in normal update mode (stage 1b, over the official application).
-     It is higher than any version a modified application reports (lower than 1.15), so it is the
-     backup restore stick for those too (untested over a modified application: stage 4 did not
-     need it). **Check that its SHA-256 is `9e1ac10e…`:** the stage-3 file (`84cbd263…`) and the
-     stage-5 file (`144f4b55…`) have the same name and label, and the stage-5 file, flashed by
-     mistake, progresses like a restore but reinstalls the experiment.
+   - **Stock no-op rebuild labelled `Ver1.16`**, built **without** `--report-version` (the stage-1b
+     file, `9e1ac10e…`): the official application, re-compressed. On a unit that reports 1.15 it is
+     accepted in normal update mode (stage 1b, over the official application). It is higher than any
+     version a modified application reports (lower than 1.15), so it is the backup restore stick for
+     those too (untested over a modified application: stages 4 and 6 did not need it). **Check that
+     its SHA-256 is `9e1ac10e…`:** the stage-3 file (`84cbd263…`) and the stage-5 file (`144f4b55…`)
+     have the same name and label, and the stage-5 file, flashed by mistake, progresses like a
+     restore but reinstalls the experiment.
    - **Official v1.15 file: the first restore stick for a modified application.** On a unit that
      reports a lower version (for example `0.10` after stage 3) it is written and restores stock
      (observed, stage 4). On a unit that reports 1.15 it is skipped in normal update mode, so
@@ -215,9 +218,11 @@ observed.**
   - *Observed:* the stage-1b and stage-3 files did not cause this. On one owner's unit stage 1b
     was accepted and stage 3 was visibly written (UTILITY changed to `0.10`); the unit booted
     normally each time, and its update mode still worked (stage 4). Stage 3's application differs
-    from stock only in its version string; an application whose code is changed yields a different
-    compressed stream and needs its own test. Stage 5 is that test for a one-entry table change
-    read only by a touch handler.
+    from stock only in its version string; a changed application yields a different compressed
+    stream and needs its own test. Stage 5 was that test for a one-entry table change read only
+    by a touch handler: on the same unit (2026-10-09) it was written, the unit booted normally
+    and behaved as expected, and its update mode still worked (stage 6). An application whose
+    code is changed is still untested.
   - Files that change behaviour can cause it, so every future modification must stay out of the
     code that runs early during start-up.
 - **Rules for every future modification:**
@@ -242,7 +247,8 @@ Then use a recovery stick (section 3, step 5), and **check whether MAIN really p
   is harmless after a no-op rebuild, whose application is already the official one. On a unit
   that reports a lower version (a modified application, section 5) it is written and restores
   the stock application (observed at stage 4, over an application changed only in its version
-  string; untested over one whose code is changed).
+  string, and at stage 6, over one with a changed table entry; untested over one whose code is
+  changed).
 - **Otherwise, to write the official application**, use the `Ver1.16` stock no-op stick, or any
   stock no-op rebuild labelled higher than the version the unit reports. Writing it over the
   official application is tested (stage 1b); over a modified application it is not yet.
