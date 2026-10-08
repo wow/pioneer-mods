@@ -16,9 +16,10 @@ pub struct PreconditionArgs {
     #[arg(long)]
     pub recipe: PathBuf,
 
-    /// The repository's recipe directory (`recipes`). The recipe's precondition windows must be
-    /// disjoint from those of these recipes (its own file is skipped), checked before any hash is
-    /// computed.
+    /// The repository's `recipes` directory itself, not a copy or a subset: the check is only as
+    /// complete as this directory. The recipe's precondition windows must be disjoint from those
+    /// of its other recipes for the release (the recipe's own file is skipped), checked before any
+    /// hash is computed. CI checks the repository's directory again.
     #[arg(long)]
     pub committed_recipes: PathBuf,
 
