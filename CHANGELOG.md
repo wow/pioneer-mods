@@ -7,14 +7,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
-- `patch_core::xdj700::FALLBACK_SECTION_OFFSET` (`0x10000`) records the loader's fallback
-  updater section. Static analysis of the v1.15 loader, not yet observed on hardware, shows it
-  runs this section instead of the application when the application section is left with a bad
-  checksum. The owner-input tests pin its decoded identity and
-  check that a rebuild keeps it intact. They also pin the hardware stage files: the no-op
-  rebuild labelled `Ver0.90` (stage 1, the lower probe), `Ver1.16` (stage 1b) and `Ver1.17`
-  (the recovery stick; the official v1.15 file is skipped in normal update mode on a unit that
-  reports 1.15 or higher).
+- `patch_core::xdj700::FALLBACK_SECTION_OFFSET` (`0x10000`) records the loader's fallback updater
+  section. Static analysis of the v1.15 loader, not yet observed on hardware, shows it runs this
+  section instead of the application when the application section is left with a bad checksum. The
+  owner-input tests pin its decoded identity and check that a rebuild keeps it intact. They also
+  pin the hardware stage files: the no-op rebuild labelled `Ver0.90` (stage 1, the lower probe),
+  `Ver1.16` (stage 1b, also the recovery stick) and `Ver1.17` (a spare).
 - The XDJ-700 application layout is accepted when the MAIN label is verified (`Ver1.15`) **or**
   the loader region `[0, 0x40000)` matches the official v1.15 loader
   (`xdj700::VERIFIED_LOADER_SHA256`). The loader fixes the application offset, and rebuilds keep
@@ -25,11 +23,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   running official v1.15 or later skips such a file. The comparison is
   `xdj700::is_label_higher`; the label helpers (`xdj700::OFFICIAL_V115_LABEL`,
   `is_label_higher`, `validate_version_label`) live in one place.
-- Hardware result (owner's unit, 2026-10-08): the `Ver1.16` no-op rebuild was **written**
-  (MAIN progressed for about 3 minutes) and the unit boots and plays normally. Afterwards the
-  unit still reports `1.15`, and the official v1.15 file shows `Ver1.15 -> Ver1.15` and is
-  skipped: labels do not stick, and future official releases install normally. The guide's
-  recovery stick is the `Ver1.16` stock no-op file; `Ver1.17` is kept only as a spare pin.
+- Hardware result (owner's unit, 2026-10-08): the `Ver1.16` no-op rebuild was flashed with MAIN
+  progressing for about 3 minutes, as in a real write, and the unit boots and plays normally.
+  Afterwards the unit still reports `1.15`, and the official v1.15 file shows `Ver1.15 -> Ver1.15`
+  and is skipped: labels do not stick, and future official releases are expected to install
+  normally. The guide's recovery stick is the `Ver1.16` stock no-op file; `Ver1.17` is kept only
+  as a spare pin.
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
   the updater writes only versions higher than the installed one; equal and lower versions
   (including the project's `Ver0.90` probe) are skipped. Stage 1b therefore uses `Ver1.16`, the

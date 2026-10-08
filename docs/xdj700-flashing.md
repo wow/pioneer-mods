@@ -21,7 +21,8 @@ error, and the unit still reports "Firmware update is complete":
 | lower (`Ver1.15 -> Ver0.90`) | skipped at once | the project's stage-1 file over v1.15 |
 
 **Where the installed version comes from (observed 2026-10-08):** not from the label of the last
-file. After the project's `Ver1.16` file was really written (stage 1b):
+file. After the project's `Ver1.16` file was flashed with MAIN progressing for about 3 minutes, as
+in a real write (stage 1b):
 - the boot screen and the UTILITY screen still showed `Ver 1.15`;
 - the official v1.15 file flashed next showed `MAIN Ver1.15 -> Ver1.15` and was skipped.
 
@@ -34,12 +35,13 @@ What this means:
   **`Ver1.16`**, the smallest one. The version field holds exactly seven characters (`VerX.YY`),
   so no label sits between 1.15 and 1.16. `patch-cli rebuild` warns about labels that are not
   higher.
-- **Future official releases install normally** after a no-op rebuild, because the unit still
-  reports `1.15`, not the label.
-- **The official v1.15 file never restores the official application on a v1.15 unit:** it is
-  skipped (equal version). To write the official application, flash the stock no-op rebuild
-  labelled `Ver1.16` (section 3, step 5). This applies after any modified application that keeps the
-  `1.15` version block.
+- **Future official releases are expected to install normally** after a no-op rebuild, because
+  the unit still reports `1.15`, not the label. No release above 1.15 exists yet to confirm it.
+- **In normal update mode the official v1.15 file never restores the official application on a
+  v1.15 unit:** it is skipped (equal version). To write the official application, flash the
+  stock no-op rebuild labelled `Ver1.16` (section 3, step 5). That is tested over the official
+  application only. Over a modified application that keeps the `1.15` version block it is
+  expected to work but untested (section 6).
 - Official files older than v1.15 are no longer downloadable.
 
 ## 2. Stages
@@ -51,7 +53,7 @@ table says otherwise. Photograph the **MAIN line** of every update (section 4).
 | --- | --- | --- | --- |
 | 0 | The **official** v1.15 update, if the unit runs an older version | MAIN progresses to v1.15 | Stage 1b |
 | 1 | *(done: the probe that established the policy)* No-op rebuild labelled `Ver0.90`, lower than the installed version | Skipped at once, as the policy predicts; nothing was written | — |
-| 1b | **No-op rebuild labelled `Ver1.16`** (higher) | **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes; the stock application is installed, and the unit still reports `1.15`. *(Passed on an owner's unit, 2026-10-08: about 3 minutes, normal cold boots, playback, cue and loop unchanged.)* **Skipped:** MAIN jumps to 100%: stop and report it. **An error at any point:** stop and follow section 6 | Stage 2 |
+| 1b | **No-op rebuild labelled `Ver1.16`** (higher) | **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes, as in a real write; the unit still reports `1.15`. *(Passed on an owner's unit, 2026-10-08: about 3 minutes, normal cold boots, browsing, playback, cue and loop unchanged.)* **Skipped:** MAIN jumps to 100%: stop and report it. **An error at any point:** stop and follow section 6 | Stage 2 |
 | 2 | The **official** v1.15 update again (optional: it only confirms section 1) | `MAIN Ver1.15 -> Ver1.15` and a skip, so the label did not stick. *(Observed on an owner's unit, 2026-10-08.)* Nothing is written | Done: the unit runs the official application |
 
 A no-op rebuild's application is the official one, re-compressed, so nothing should change
@@ -104,8 +106,9 @@ file is skipped.)
      the stick.
 5. **Recovery sticks ready**, each checked the same way (re-insert, then `shasum`):
    - **Stock no-op rebuild labelled `Ver1.16`** (the stage-1b file, `9e1ac10e…`): the official
-     application, re-compressed. On a unit that reports 1.15 it is written in normal update mode,
-     so it restores the official application (tested as stage 1b).
+     application, re-compressed. On a unit that reports 1.15 it is written in normal update mode
+     (stage 1b, over the official application). Over a modified application it is expected to
+     restore the official one, but that is untested (section 6).
    - **Official v1.15 file.** In normal update mode it is skipped on a v1.15 unit, so it only helps
      where no version is compared, for example possibly the fallback updater (section 5).
 6. **Follow the official update procedure:**
@@ -124,9 +127,9 @@ file is skipped.)
   `MAIN Ver1.15 -> Ver1.16`), and its progress bar runs for about 3 minutes.
 - **Skip:** the MAIN line jumps straight to 100%.
 
-Stages 0 and 1b only pass if MAIN really progressed. For stage 2, a skip is an expected,
-informative outcome (section 2). **Photograph the MAIN line**: its left-hand version tells us
-where the installed version comes from.
+Stages 0 and 1b only pass if MAIN really progressed. For stage 2, a skip is the expected outcome
+(section 2). **Photograph the MAIN line**: after a no-op rebuild its left-hand version should be
+`Ver1.15` (section 1); report anything else.
 
 Then check each of these:
 - the update completed with no error message;
@@ -137,8 +140,8 @@ Then check each of these:
 
 ## 5. Recovery: what protects the unit, and what does not
 
-**Everything in this section comes from static analysis of the v1.15 loader. None of it has been
-observed on hardware.**
+**Everything in this section comes from static analysis of the v1.15 loader, except where marked
+observed.**
 
 - **The loader checks the application before running it.** It verifies the application
   section's checksum before starting it.
@@ -156,9 +159,10 @@ observed on hardware.**
   the application itself.
 - **The unprotected case:** an application whose checksum is valid but which crashes or hangs
   before its update mode starts cannot be recovered by software.
-  - The stage-1b no-op file did not cause this: it was written and booted normally on an
-    owner's unit, which confirms that the updater and the loader accept the rebuilt file's
-    layout and the project's encoder.
+  - *Observed:* the stage-1b no-op file did not cause this. It was flashed (MAIN progressed for
+    about 3 minutes) and booted normally on one owner's unit, so the updater and the loader
+    accepted that file's layout and its encoded application. A modified application yields a
+    different compressed stream and needs its own test.
   - Files that change behaviour can cause it, so every future modification must stay out of the
     code that runs early during start-up.
 
@@ -178,4 +182,5 @@ Then use a recovery stick (section 3, step 5), and **check whether MAIN really p
 - **To actually write the official application**, use the `Ver1.16` stock no-op stick, or any
   stock no-op rebuild labelled higher than the version the unit reports. Writing it over the
   official application is tested (stage 1b); over a modified application it is not yet.
-If the unit no longer starts, leave it powered off and open an issue with your notes.
+
+**If the unit no longer starts, leave it powered off and open an issue with your notes.**

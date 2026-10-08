@@ -77,8 +77,8 @@ fn rebuild_writes_the_pinned_noop_update_once() {
     assert_eq!(std::fs::read(&output).expect("reread output"), written);
 }
 
-/// Every hardware stage file the guide tells owners to build (stage 1, stage 1b and the
-/// recovery stick), written by the binary and checked with `inspect`, as an owner would.
+/// Every pinned hardware stage file (stage 1, stage 1b, which is also the recovery stick, and the
+/// `Ver1.17` spare), written by the binary and checked with `inspect`, as an owner would.
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
 fn rebuild_writes_every_pinned_stage_file() {

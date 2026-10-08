@@ -32,8 +32,9 @@ pub const NOOP_UPD_SHA256: &str =
 
 /// The no-op rebuild under the hardware-stage labels. The updater writes only versions higher
 /// than the installed one (observed on an owner's unit): `Ver0.90` (stage 1, the lower probe)
-/// was skipped, so stage 1b uses `Ver1.16`, the smallest higher label, and the recovery stick
-/// uses `Ver1.17`. All are cross-checked byte-identical against the reference serializer.
+/// was skipped, so stage 1b uses `Ver1.16`, the smallest higher label, which is also the
+/// recovery stick. `Ver1.17` is a spare. All are cross-checked byte-identical against the
+/// reference serializer.
 pub const STAGE_FILES: [(&str, &str); 3] = [
     (
         "Ver0.90",
@@ -43,8 +44,8 @@ pub const STAGE_FILES: [(&str, &str); 3] = [
         "Ver1.16",
         "9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08",
     ),
-    // Spare, prepared in case labels stuck. They do not (observed: after `Ver1.16` was written
-    // the unit still reports the application's `1.15`), so the `Ver1.16` file is the recovery.
+    // Spare, prepared in case labels stuck. They do not (observed: after `Ver1.16` was flashed
+    // the unit still reports `1.15`), so the `Ver1.16` file is the recovery.
     (
         "Ver1.17",
         "2d0a4a09a90494c8af26fd585ec5bc1b058b2d731f9d5d72d8ed03fafc4a758d",
