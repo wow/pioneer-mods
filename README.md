@@ -36,8 +36,9 @@ This repository currently includes:
   update byte-for-byte.
 - `rebuild` command: writes a verified no-op rebuild of the official v1.15 update (stock
   application re-encoded) under a declared version label
-
-Recipes that target the decoded application are still in progress.
+- Recipe schema v2: same-length changes to the decoded application of a pinned release, with
+  hash preconditions (no vendor bytes), protected ranges and a bounded diff, written as a
+  complete, verified update by `patch`. See [docs/recipes.md](./docs/recipes.md).
 
 ## Quick start (developer)
 
@@ -76,21 +77,22 @@ PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD \
   cargo test -p patch-core --test official_firmware -- --ignored
 ```
 
-Apply a compatibility-gated recipe manifest:
+Apply a schema-v2 recipe (see [docs/recipes.md](./docs/recipes.md)), for example the committed
+version marker, which reproduces the hardware-tested stage-3 file:
 
 ```bash
-cargo run -p patch-cli -- patch \
+cargo run --release -p patch-cli -- patch \
   --input /path/to/XDJ700.UPD \
-  --recipe /path/to/recipe.json \
-  --output /path/to/XDJ700-patched.UPD
+  --recipe recipes/xdj700-v1.15/version-marker-0.10.json \
+  --output /path/to/new-dir/XDJ700.UPD
 ```
 
 Notes:
-- Existing output files are refused by default; pass `--force` to allow overwrite.
-- Patch output is written atomically and reports both input/output SHA-256 identities.
-- `patch` currently writes byte spans to the raw input file. It does not yet rebuild `.UPD`
-  CRCs, S-record checksums, or compressed-section checksums, so it cannot produce an installable
-  update yet. Do not flash its output.
+- A v2 output is a complete update, verified before it is written, written atomically and never
+  overwritten (`--force` is refused).
+- Schema v1 manifests still work, but they write raw byte spans to the input file and cannot
+  produce an installable update. Do not flash their output. For v1 only, `--force` allows
+  overwriting an existing output.
 
 Rebuild the official XDJ-700 v1.15 update around its own application: unchanged (a no-op
 rebuild), or with only its reported version changed (`--report-version`):

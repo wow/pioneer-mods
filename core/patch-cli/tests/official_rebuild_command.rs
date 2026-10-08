@@ -177,3 +177,31 @@ fn rebuild_writes_the_pinned_stage3_reported_version_file() {
         STAGE3_APPLICATION_SHA256
     );
 }
+
+/// `patch` with the committed version-marker recipe writes the stage-3 file.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn patch_with_the_version_marker_recipe_writes_the_stage3_file() {
+    let input = official_input();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let output = dir.path().join("XDJ700.UPD");
+    let recipe = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../recipes/xdj700-v1.15/version-marker-0.10.json");
+
+    let result = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
+        .arg("patch")
+        .arg("--input")
+        .arg(&input)
+        .arg("--recipe")
+        .arg(&recipe)
+        .arg("--output")
+        .arg(&output)
+        .output()
+        .expect("run patch-cli patch");
+
+    assert!(result.status.success(), "{}", text(&result.stderr));
+    assert!(text(&result.stdout).contains(&format!("output_sha256_hex: {STAGE3_UPD_SHA256}")));
+    let written = std::fs::read(&output).expect("read output");
+    assert_eq!(written.len(), STAGE3_UPD_LEN);
+    assert_eq!(sha256_hex(&written), STAGE3_UPD_SHA256);
+}

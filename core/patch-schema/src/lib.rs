@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub mod v2;
+
+pub use v2::{
+    ExpectedV2, RecipeV2, RecipeV2Error, Replacement, SCHEMA_VERSION_V2, SchemaVersionProbe,
+    TargetV2,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecipeManifest {

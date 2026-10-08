@@ -209,3 +209,25 @@ fn a_modified_application_reporting_1_16_is_refused() {
         })
     );
 }
+
+/// The committed version-marker recipe reproduces the hardware-tested stage-3 file exactly.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn the_version_marker_recipe_reproduces_the_stage3_file() {
+    let official = official_upd();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../recipes/xdj700-v1.15/version-marker-0.10.json");
+    let recipe: patch_schema::RecipeV2 =
+        serde_json::from_slice(&std::fs::read(path).expect("read recipe")).expect("recipe JSON");
+
+    let rebuilt = xdj700::apply_recipe_v2(&recipe, &official).expect("apply");
+
+    assert_eq!(rebuilt.application_sha256(), STAGE3_APPLICATION_SHA256);
+    assert_eq!(rebuilt.main_image_sha256(), STAGE3_MAIN_SHA256);
+    assert_eq!(rebuilt.bytes().len(), STAGE3_UPD_LEN);
+    assert_eq!(rebuilt.sha256(), STAGE3_UPD_SHA256);
+    assert_eq!(
+        rebuilt.application_reported_version(),
+        Some(STAGE3_REPORTED_VERSION)
+    );
+}

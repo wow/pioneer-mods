@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "recipe_id": "xdj700-v1.15-version-marker-0.10",
+  "description": "The stock application with only its reported version changed to 0.10, labelled Ver1.16. It changes no behaviour: the unit shows 0.10 on UTILITY, and the official v1.15 update restores stock (observed on an owner's unit, stages 3 and 4 of docs/xdj700-flashing.md).",
+  "target": {
+    "release": "xdj700-v1.15",
+    "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
+    "application_sha256": "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939"
+  },
+  "label": "Ver1.16",
+  "reported_version": "0.10",
+  "replacements": [],
+  "expected": {
+    "application_sha256": "74afbf4409242f58f11caac5142ccc220d39199f28c50155d0a2af9ed42d5ad3",
+    "upd_sha256": "84cbd2637b167893c6ad3ff8bc4a0b4cfb7cf5984dc399f6b018a8b5ddb0be5c"
+  }
+}
