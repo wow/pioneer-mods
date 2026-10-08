@@ -15,8 +15,8 @@
       "bytes_hex": "0d",
       "precondition": {
         "before": 0,
-        "after": 96,
-        "sha256": "024c5b1a7ae89d179fda00d76a8e06654b10b5598f21d93dcb849bba89b9bea1"
+        "after": 1216,
+        "sha256": "1ef2fab950010865b384af1cd2c995d526644ce877dc8f0b01a581c9e743f117"
       },
       "purpose": "The last entry of the six-entry table that maps the PERFORM screen's BEAT LOOP buttons to the player's list of loop lengths. It selects the list's 16-beat entry; the replacement selects the next entry, 32 beats, which the list already holds. Only the BEAT LOOP touch handler, a PERFORM-screen callback, reads the table, so the change acts when the button is touched, never during start-up. The button keeps its 16 label."
     }

@@ -4,8 +4,8 @@
 > Never use a unit running a rebuilt update for a live performance. Read section 5 on recovery
 > before you flash anything.
 
-This guide covers the files `patch-cli rebuild` and `patch-cli patch` write. Read it completely before you flash
-anything.
+This guide covers the files `patch-cli rebuild` and `patch-cli patch` write. Read it completely
+before you flash anything.
 
 ## 1. How the updater treats versions
 
