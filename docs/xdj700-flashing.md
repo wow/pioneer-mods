@@ -4,7 +4,7 @@
 > Never use a unit running a rebuilt update for a live performance. Read section 5 on recovery
 > before you flash anything.
 
-This guide covers the files `patch-cli rebuild` writes. Read it completely before you flash
+This guide covers the files `patch-cli rebuild` and `patch-cli patch` write. Read it completely before you flash
 anything.
 
 ## 1. How the updater treats versions
@@ -66,10 +66,13 @@ table says otherwise. Photograph the **MAIN line** of every update (section 4).
 | 1b | **No-op rebuild labelled `Ver1.16`** (higher) | **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes, as in a real write; the unit still reports `1.15`. *(Passed on an owner's unit, 2026-10-08: about 3 minutes, normal cold boots, browsing, playback, cue and loop unchanged.)* **Skipped:** MAIN jumps to 100%: stop and report it. **An error at any point:** stop and follow section 6 | Stage 2 |
 | 2 | The **official** v1.15 update again (optional: it only confirms section 1) | `MAIN Ver1.15 -> Ver1.15` and a skip, so the label did not stick. *(Observed on an owner's unit, 2026-10-08.)* Nothing is written | Stage 3 |
 | 3 | **Stock application reporting `0.10`, labelled `Ver1.16`** (built **with** `--report-version 0.10`; the recovery stick is built without it): only the application's 4-byte version string differs from stock. This is the first flashed application that differs from stock. A static scan finds one pointer to the string, in a small table with the model string, and no code literal that points to it directly (computed addresses are not ruled out); the reference implementation changed the same string and its build booted on hardware | *(Passed on an owner's unit, 2026-10-08: about 3 minutes; UTILITY showed `0.10`; the owner's checks of the unit were all good. Whether Pro DJ Link or rekordbox was exercised was not stated.)* **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes. Afterwards the boot screen and UTILITY show **`0.10`**; the unit otherwise behaves as stock (cold boots, browsing, playback, cue, loop, and Pro DJ Link or rekordbox if you use them: the version may be announced there). **Skipped**, or UTILITY still shows `1.15`: stop and report it (the unit then runs an application equivalent to stock; the `Ver1.16` stick restores it exactly). **An error:** section 6 | Stage 4 |
-| 4 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-08: `MAIN Ver0.10 -> Ver1.15` progressed for about 3 minutes and UTILITY returned to `1.15`.)* **Real flash:** `MAIN Ver0.10 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again: the vendor file restores stock. **If it is skipped** (`MAIN Ver0.10 -> Ver1.15` at 100% at once, UTILITY still `0.10`): use the `Ver1.16` stock no-op stick, which is higher than `0.10`, and report it | Done: the unit runs the official application |
+| 4 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-08: `MAIN Ver0.10 -> Ver1.15` progressed for about 3 minutes and UTILITY returned to `1.15`.)* **Real flash:** `MAIN Ver0.10 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again: the vendor file restores stock. **If it is skipped** (`MAIN Ver0.10 -> Ver1.15` at 100% at once, UTILITY still `0.10`): use the `Ver1.16` stock no-op stick, which is higher than `0.10`, and report it | Done: the unit runs the official application. Stage 5 is an optional experiment |
+| 5 | **Beat-loop experiment, reporting `0.11`, labelled `Ver1.16`** (`patch` with `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`). **The first file that changes behaviour.** Besides the version string, one table entry differs from stock: the BEAT LOOP button labelled 16 selects the player's existing 32-beat length instead of 16. By static analysis only the PERFORM screen's BEAT LOOP touch handler reads that table, so the change acts when the button is touched, not during start-up | **Real flash:** `MAIN Ver1.15 -> Ver1.16` progressing for about 3 minutes; UTILITY shows **`0.11`**; three cold boots reach the normal screen. With an analysed track (beat grid) loaded, touch BEAT LOOP **16**: the loop should span **32 beats** (8 bars: count bars on the waveform or the beat display). Touch 1/2, 1, 2, 4 and 8: each unchanged. Exit and reloop, and loop with QUANTIZE on and off: unchanged. **16 still gives 16 beats:** the player limits this path; report it. **Anything odd** (a freeze, a wrong length, a display glitch): note it and go to stage 6. **An error:** section 6 | Stage 6 |
+| 6 | The **official** v1.15 update | **Real flash:** `MAIN Ver0.11 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again. **If it is skipped:** use the `Ver1.16` stock no-op stick, which is higher than `0.11`, and report it | Done |
 
 A no-op rebuild's application is the official one, re-compressed, so nothing should change
-functionally at any stage. Stage 3 changes only the text of the application's version string.
+functionally in it. Stage 3 changes only the text of the application's version string. Stage 5
+also changes one table entry, the first change to behaviour.
 
 The stage files built from the official v1.15 file (`XDJ700.UPD`, 17,371,335 bytes, SHA-256
 `73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c`) are always the same. All are
@@ -93,6 +96,12 @@ The stage-3 file (`--label Ver1.16 --report-version 0.10`) is 17,368,543 bytes w
 `74afbf4409242f58f11caac5142ccc220d39199f28c50155d0a2af9ed42d5ad3`. All of these files are
 cross-checked byte-identical against the reference serializer.
 
+The stage-5 file (`patch` with `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`) is 17,368,527
+bytes with SHA-256 `144f4b557127a7eec2d5d2f5fadee0e6585f05a83af321097876a0edca345e12`; its
+application has SHA-256 `dd5adad4ae531db95c9dae10d9fa534afc4e31d2ffd54daadc22da6e463f25db` and
+differs from stock in exactly three bytes (two in the version string, one table entry), as the
+owner-input tests check.
+
 ## 3. Before every flash
 
 1. **Power:** mains power. Never power off or pull the USB stick during an update.
@@ -110,10 +119,16 @@ cross-checked byte-identical against the reference serializer.
    cargo run --release -p patch-cli -- rebuild --input /path/to/XDJ700.UPD \
      --application stock --label Ver1.16 --report-version 0.10 \
      --output ~/xdj700-stage3/XDJ700.UPD
+
+   # Stage 5: the beat-loop experiment (reports 0.11)
+   mkdir -p ~/xdj700-stage5
+   cargo run --release -p patch-cli -- patch --input /path/to/XDJ700.UPD \
+     --recipe recipes/xdj700-v1.15/beat-loop-16-plays-32.json \
+     --output ~/xdj700-stage5/XDJ700.UPD
    ```
 
-   The command checks the rebuild against the official file, writes atomically, reads the file
-   back, and prints `output_sha256_hex`. It never overwrites an existing file.
+   Each command checks the result against the official file, writes atomically, reads the file
+   back, and prints `output_sha256_hex`. None overwrites an existing file.
 3. **USB stick:**
    - use a stick formatted **FAT32**. On macOS the writer refuses exFAT; copying a finished file
      onto a FAT32 stick is the supported path everywhere;
@@ -124,7 +139,7 @@ cross-checked byte-identical against the reference serializer.
    - eject the stick and plug it back in;
    - run `shasum -a 256 /Volumes/<stick>/XDJ700.UPD`;
    - it must equal the identity **for the stage you are flashing** in section 2 (stage 1b:
-     `9e1ac10e…`). **On any mismatch, stop.** The read-back done by
+     `9e1ac10e…`; stage 5: `144f4b55…`). **On any mismatch, stop.** The read-back done by
      `patch-cli` can be served from the operating system's cache, so it does not prove what is on
      the stick.
 5. **Recovery sticks ready**, each checked the same way (re-insert, then `shasum`):
@@ -158,17 +173,19 @@ cross-checked byte-identical against the reference serializer.
   `MAIN Ver1.15 -> Ver1.16`), and its progress bar runs for about 3 minutes.
 - **Skip:** the MAIN line jumps straight to 100%.
 
-Stages 0, 1b, 3 and 4 only pass if MAIN really progressed. For stage 2, a skip is the expected
+Stages 0, 1b, 3, 4, 5 and 6 only pass if MAIN really progressed. For stage 2, a skip is the expected
 outcome (section 2). **Photograph the MAIN line**: its left-hand version is what the unit reports.
 After a no-op rebuild it should be `Ver1.15` (section 1); at stage 4, after stage 3, it should be
-`Ver0.10`. Report anything else.
+`Ver0.10`, and at stage 6, after stage 5, `Ver0.11`. Report anything else.
 
 Then check each of these:
 - the update completed with no error message;
 - the UTILITY screen (hold MENU/UTILITY for over a second) shows a version; write it down. After a
-  no-op rebuild or stage 4 it shows `1.15` (section 1), after stage 3 `0.10`. Both are expected;
+  no-op rebuild or stages 4 and 6 it shows `1.15` (section 1), after stage 3 `0.10`, after stage 5
+  `0.11`. All are expected;
 - three cold boots reach the normal screen;
-- browsing, playback, cue and loop behave as before.
+- browsing, playback, cue and loop behave as before (after stage 5, except the BEAT LOOP 16
+  button, which should give 32 beats).
 
 ## 5. Recovery: what protects the unit, and what does not
 
@@ -195,7 +212,8 @@ observed.**
     was accepted and stage 3 was visibly written (UTILITY changed to `0.10`); the unit booted
     normally each time, and its update mode still worked (stage 4). Stage 3's application differs
     from stock only in its version string; an application whose code is changed yields a different
-    compressed stream and needs its own test.
+    compressed stream and needs its own test. Stage 5 is that test for a one-entry table change
+    read only by a touch handler.
   - Files that change behaviour can cause it, so every future modification must stay out of the
     code that runs early during start-up.
 - **Rules for every future modification:**

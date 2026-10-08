@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "recipe_id": "xdj700-v1.15-beat-loop-16-plays-32",
+  "description": "Experimental: the BEAT LOOP button labelled 16 sets a 32-beat loop; its label still reads 16. The application reports version 0.11, so the official v1.15 update restores stock. For staged hardware testing (docs/xdj700-flashing.md, stage 5).",
+  "target": {
+    "release": "xdj700-v1.15",
+    "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
+    "application_sha256": "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939"
+  },
+  "label": "Ver1.16",
+  "reported_version": "0.11",
+  "replacements": [
+    {
+      "offset": 877108,
+      "bytes_hex": "0d",
+      "precondition": {
+        "before": 0,
+        "after": 96,
+        "sha256": "024c5b1a7ae89d179fda00d76a8e06654b10b5598f21d93dcb849bba89b9bea1"
+      },
+      "purpose": "The last entry of the six-entry table that maps the PERFORM screen's BEAT LOOP buttons to the player's list of loop lengths. It selects the list's 16-beat entry; the replacement selects the next entry, 32 beats, which the list already holds. Only the BEAT LOOP touch handler, a PERFORM-screen callback, reads the table, so the change acts when the button is touched, never during start-up. The button keeps its 16 label."
+    }
+  ],
+  "expected": {
+    "application_sha256": "dd5adad4ae531db95c9dae10d9fa534afc4e31d2ffd54daadc22da6e463f25db",
+    "upd_sha256": "144f4b557127a7eec2d5d2f5fadee0e6585f05a83af321097876a0edca345e12"
+  }
+}

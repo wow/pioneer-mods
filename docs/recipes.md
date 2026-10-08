@@ -165,6 +165,7 @@ window rules) and check those identities.
 | Recipe | What it does | Output |
 | --- | --- | --- |
 | `xdj700-v1.15/version-marker-0.10.json` | Only the reported version, `0.10`. The unit shows `0.10` on UTILITY. | The hardware-tested stage-3 file, `84cbd263…` |
+| `xdj700-v1.15/beat-loop-16-plays-32.json` | **Experimental, not yet tested on hardware.** The BEAT LOOP button labelled 16 sets a 32-beat loop (its label still reads 16); reports `0.11`. One table entry changes: the length list the player uses already holds 32 beats, and the button table selects it instead of 16. | Stage 5, `144f4b55…` |
 
 ```bash
 cargo run --release -p patch-cli -- patch \

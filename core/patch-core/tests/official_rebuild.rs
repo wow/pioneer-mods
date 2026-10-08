@@ -288,3 +288,28 @@ fn a_window_over_real_padding_is_refused() {
         );
     }
 }
+
+/// The beat-loop experiment changes the decoded application in exactly three bytes: two in the
+/// version string (`1.15` to `0.11`) and the last entry of the BEAT LOOP button table. Compares
+/// offsets only; prints no bytes.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn the_beat_loop_experiment_changes_only_the_version_and_one_table_entry() {
+    let official = official_upd();
+    let recipe = committed_recipes()
+        .into_iter()
+        .find(|(path, _)| path.ends_with("xdj700-v1.15/beat-loop-16-plays-32.json"))
+        .expect("the beat-loop experiment is committed")
+        .1;
+
+    let rebuilt = xdj700::apply_recipe_v2(&recipe, &official).expect("apply");
+
+    let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    let output = decode_application(&parse_upd(rebuilt.bytes()).expect("parse")).expect("decode");
+    let changed: Vec<usize> = (0..stock.decoded().len())
+        .filter(|&offset| stock.decoded()[offset] != output.decoded()[offset])
+        .collect();
+    assert_eq!(output.decoded().len(), stock.decoded().len());
+    assert_eq!(changed, [0x740, 0x743, 0xd6234]);
+    assert_eq!(rebuilt.application_reported_version(), Some("0.11"));
+}
