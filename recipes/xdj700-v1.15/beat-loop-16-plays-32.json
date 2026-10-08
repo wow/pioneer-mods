@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "recipe_id": "xdj700-v1.15-beat-loop-16-plays-32",
+  "description": "Experimental: the BEAT LOOP button labelled 16 sets a 32-beat loop; its label still reads 16. The application reports version 0.11, so the official v1.15 update is expected to restore stock (observed for the version marker; stage 6 tests it here). For staged hardware testing (docs/xdj700-flashing.md, stage 5).",
+  "target": {
+    "release": "xdj700-v1.15",
+    "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
+    "application_sha256": "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939"
+  },
+  "label": "Ver1.16",
+  "reported_version": "0.11",
+  "replacements": [
+    {
+      "offset": 877108,
+      "bytes_hex": "0d",
+      "precondition": {
+        "before": 0,
+        "after": 1216,
+        "sha256": "1ef2fab950010865b384af1cd2c995d526644ce877dc8f0b01a581c9e743f117"
+      },
+      "purpose": "The last entry of the six-entry table that maps the PERFORM screen's BEAT LOOP buttons to the player's list of loop lengths. It selects the list's 16-beat entry; the replacement selects the next entry, 32 beats, which the list already holds. By static analysis only the BEAT LOOP touch handler, a PERFORM-screen callback, reads the table, so the change acts only when the button is touched, not during start-up. The button keeps its 16 label. The precondition window lies over table data, not code: a window before the entry would lie over zero bytes and text, so it covers the entry and the 1,216 bytes after it, sized to pass the value check with margin (docs/recipes.md, Known exceptions)."
+    }
+  ],
+  "expected": {
+    "application_sha256": "dd5adad4ae531db95c9dae10d9fa534afc4e31d2ffd54daadc22da6e463f25db",
+    "upd_sha256": "144f4b557127a7eec2d5d2f5fadee0e6585f05a83af321097876a0edca345e12"
+  }
+}

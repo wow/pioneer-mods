@@ -13,10 +13,13 @@ mod common;
 #[path = "../../patch-core/tests/common/official_pins.rs"]
 mod official_pins;
 
-use common::{committed_recipe, recipes_dir, version_marker_path};
+use common::{
+    committed_recipe, recipes_dir, run_patch_command_with_args_in_dir, version_marker_path,
+};
 use official_pins::{
     NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES, STAGE3_APPLICATION_SHA256, STAGE3_LABEL,
-    STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STOCK_APPLICATION_SHA256, UPD_ENV,
+    STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STAGE5_RECIPE, STAGE5_UPD_LEN,
+    STAGE5_UPD_SHA256, STOCK_APPLICATION_SHA256, UPD_ENV,
 };
 use patch_core::{parse_upd, sha256_hex, xdj700};
 use std::path::{Path, PathBuf};
@@ -205,6 +208,15 @@ fn rebuild_writes_the_pinned_stage3_reported_version_file() {
     );
 }
 
+/// Checks that a `patch` run succeeded and wrote the file pinned as `len` bytes with `sha256`.
+fn assert_wrote(result: &Output, output: &Path, len: usize, sha256: &str) {
+    assert!(result.status.success(), "{}", text(&result.stderr));
+    assert!(text(&result.stdout).contains(&format!("output_sha256_hex: {sha256}")));
+    let written = std::fs::read(output).expect("read output");
+    assert_eq!(written.len(), len);
+    assert_eq!(sha256_hex(&written), sha256);
+}
+
 /// `patch` with the committed version-marker recipe writes the stage-3 file.
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
@@ -212,15 +224,26 @@ fn patch_with_the_version_marker_recipe_writes_the_stage3_file() {
     let input = official_input();
     let dir = tempfile::tempdir().expect("tempdir");
     let output = dir.path().join("XDJ700.UPD");
-    let recipe = version_marker_path();
 
-    let result = run_patch(&input, &recipe, &output);
+    let result = run_patch(&input, &version_marker_path(), &output);
 
-    assert!(result.status.success(), "{}", text(&result.stderr));
-    assert!(text(&result.stdout).contains(&format!("output_sha256_hex: {STAGE3_UPD_SHA256}")));
-    let written = std::fs::read(&output).expect("read output");
-    assert_eq!(written.len(), STAGE3_UPD_LEN);
-    assert_eq!(sha256_hex(&written), STAGE3_UPD_SHA256);
+    assert_wrote(&result, &output, STAGE3_UPD_LEN, STAGE3_UPD_SHA256);
+}
+
+/// `patch` with the committed beat-loop recipe writes the stage-5 file, run as the flashing guide
+/// gives it: from the repository root, with the recipe's relative path.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn patch_with_the_beat_loop_recipe_writes_the_stage5_file() {
+    let input = std::fs::canonicalize(official_input()).expect("input path");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let output = dir.path().join("XDJ700.UPD");
+    let root = recipes_dir().join("..");
+    let recipe = Path::new("recipes").join(STAGE5_RECIPE);
+
+    let result = run_patch_command_with_args_in_dir(&input, &recipe, &output, &[], Some(&root));
+
+    assert_wrote(&result, &output, STAGE5_UPD_LEN, STAGE5_UPD_SHA256);
 }
 
 /// The stock application of the official file, and the offset of a 2-byte span in the code after
