@@ -92,8 +92,8 @@ Notes:
   CRCs, S-record checksums, or compressed-section checksums, so it cannot produce an installable
   update yet. Do not flash its output.
 
-Rebuild the official XDJ-700 v1.15 update around its own, unchanged application (a no-op
-rebuild, the first hardware test candidate):
+Rebuild the official XDJ-700 v1.15 update around its own application: unchanged (a no-op
+rebuild), or with only its reported version changed (`--report-version`):
 
 ```bash
 cargo run --release -p patch-cli -- rebuild \
@@ -118,11 +118,12 @@ Notes:
   (on macOS the writer refuses exFAT).
 - The updater only writes a document whose version is higher than the installed one; equal and
   lower versions are skipped, as observed on an owner's unit. A unit on v1.15 therefore needs
-  `--label Ver1.16`, the smallest higher label. Its output is always 17,368,545 bytes with
-  SHA-256 `9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08`. It was flashed
-  and booted on an owner's unit. Labels do not stick: the unit reports the application's own
-  version string (observed), so future official releases are expected to install normally; see
-  the guide.
+  `--label Ver1.16`, the smallest higher label. Without `--report-version` its output is always
+  17,368,545 bytes with SHA-256
+  `9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08`; with `--report-version 0.10`
+  it is the guide's stage-3 file (17,368,543 bytes, `84cbd263…`). It was flashed and booted on an
+  owner's unit. Labels do not stick: the unit reports the application's own version string
+  (observed), so future official releases are expected to install normally; see the guide.
 - Flashing any rebuilt file is at your own risk. Read
   [docs/xdj700-flashing.md](./docs/xdj700-flashing.md) first: it covers the stages, how to check
   the file on the USB stick itself, and recovery.

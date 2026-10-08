@@ -242,6 +242,7 @@ fn rebuild_clamps_the_size_bound_to_24_bit_addresses() {
         upd_len: stock.len(),
         upd_sha256: &sha256,
         max_main_image_len: usize::MAX,
+        version_block: None,
     };
 
     let result = rebuild_with_application(&stock, &unbounded, &decoded, "Ver1.22");

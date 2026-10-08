@@ -304,6 +304,18 @@ pub enum RebuildError {
     MissingVersionString { offset: usize },
 
     #[error(
+        "a modified application must report a version lower than the official {official} (it \
+         reports {reported:?}), so that the official update can restore it"
+    )]
+    ModifiedApplicationVersion {
+        reported: Option<String>,
+        official: String,
+    },
+
+    #[error("the release pins no application version block, so no reported version can be set")]
+    NoVersionBlock,
+
+    #[error(
         "stock MAIN image has data after the application section (only 0xFF padding is allowed)"
     )]
     DataAfterSection,

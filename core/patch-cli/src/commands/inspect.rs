@@ -54,8 +54,8 @@ enum ApplicationReport {
         checksum: String,
         decoded_len: usize,
         decoded_sha256: String,
-        /// The version string the application reports about itself, when it holds one.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        /// The version string the application reports about itself (`null` when it holds no
+        /// well-formed one).
         reported_version: Option<String>,
     },
     /// Neither the MAIN version nor its loader region has a verified section layout, so nothing
@@ -184,13 +184,11 @@ fn print_text(report: &InspectReport) {
             decoded_sha256,
             reported_version,
         }) => {
-            let reported = reported_version
-                .as_deref()
-                .map(|version| format!(" reported_version={version}"))
-                .unwrap_or_default();
+            let reported = reported_version.as_deref().unwrap_or("none");
             println!(
                 "application: offset={offset} compressed_len={compressed_len} checksum={checksum} \
-                 (ok) decoded_len={decoded_len} decoded_sha256={decoded_sha256}{reported}"
+                 (ok) decoded_len={decoded_len} decoded_sha256={decoded_sha256} \
+                 reported_version={reported}"
             );
         }
         Some(ApplicationReport::Unsupported { reason }) => {

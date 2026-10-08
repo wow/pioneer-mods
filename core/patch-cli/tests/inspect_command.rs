@@ -267,8 +267,8 @@ fn inspect_structure_decodes_xdj700_application_section() {
     decoded.extend(1..=8);
     assert_eq!(application["decoded_sha256"], sha256_hex(&decoded));
     assert!(
-        application.get("reported_version").is_none(),
-        "a 27-byte application holds no version string: {application}"
+        application["reported_version"].is_null() && application.get("reported_version").is_some(),
+        "a 27-byte application holds no version string, reported as null: {application}"
     );
 }
 

@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
 use patch_core::xdj700::{
-    OFFICIAL_V115, OFFICIAL_V115_LABEL, is_label_higher, rebuild_with_stock_application,
-    rebuild_with_stock_application_reporting, validate_reported_version,
+    OFFICIAL_V115, OFFICIAL_V115_LABEL, OFFICIAL_V115_VERSION_BLOCK, is_label_higher,
+    rebuild_with_stock_application, rebuild_with_stock_application_reporting,
 };
 use patch_core::{RebuildError, firmware_file_name, open_regular_file};
 use std::io::Read;
@@ -54,7 +54,7 @@ pub fn rebuild(args: RebuildArgs) -> Result<()> {
         );
     }
     if let Some(version) = &args.report_version {
-        validate_reported_version(version)?;
+        OFFICIAL_V115_VERSION_BLOCK.validate_reported_version(version)?;
     }
     ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;
     let input = read_official_input(&args.input)?;

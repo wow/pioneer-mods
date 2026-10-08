@@ -156,10 +156,20 @@ fn stage3_reported_version_file_is_pinned() {
     let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
     assert_eq!(xdj700::reported_version(stock.decoded()), Some("1.15"));
 
-    let modified = xdj700::with_reported_version(stock.decoded(), STAGE3_REPORTED_VERSION)
+    let mut modified = stock.decoded().to_vec();
+    xdj700::OFFICIAL_V115_VERSION_BLOCK
+        .set_reported_version(&mut modified, STAGE3_REPORTED_VERSION)
         .expect("lower version");
     let rebuilt = rebuild_with_application(&official, &OFFICIAL_V115, &modified, STAGE3_LABEL)
         .expect("rebuild");
+    let reporting = xdj700::rebuild_with_stock_application_reporting(
+        &official,
+        &OFFICIAL_V115,
+        STAGE3_REPORTED_VERSION,
+        STAGE3_LABEL,
+    )
+    .expect("reporting rebuild");
+    assert_eq!(reporting, rebuilt, "both paths give the same verified file");
 
     assert_eq!(rebuilt.application_sha256(), STAGE3_APPLICATION_SHA256);
     assert_eq!(rebuilt.main_image_len(), STAGE3_MAIN_LEN);
@@ -171,5 +181,29 @@ fn stage3_reported_version_file_is_pinned() {
     assert_eq!(
         xdj700::reported_version(application.decoded()),
         Some(STAGE3_REPORTED_VERSION)
+    );
+}
+
+/// The release rule on the real file: a modified application must report a version lower than
+/// 1.15, whichever public entry point builds or verifies it.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn a_modified_application_reporting_1_16_is_refused() {
+    let official = official_upd();
+    let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    assert_eq!(
+        xdj700::OFFICIAL_V115_VERSION_BLOCK.stock_application_sha256,
+        STOCK_APPLICATION_SHA256
+    );
+    let mut higher = stock.decoded().to_vec();
+    let offset = xdj700::VERSION_STRING_OFFSET;
+    higher[offset..offset + 4].copy_from_slice(b"1.16");
+
+    assert_eq!(
+        rebuild_with_application(&official, &OFFICIAL_V115, &higher, "Ver1.17"),
+        Err(RebuildError::ModifiedApplicationVersion {
+            reported: Some("1.16".to_owned()),
+            official: "1.15".to_owned()
+        })
     );
 }

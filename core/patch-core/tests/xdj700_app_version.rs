@@ -1,12 +1,14 @@
-//! The application's reported version (`xdj700::app_version`), on synthetic applications.
+//! The application's reported version (`xdj700::app_version`) and the release rule for modified
+//! applications, on synthetic applications.
 
 mod common;
 
-use common::xdj700::{rebuild, release, stock_update};
+use common::xdj700::{release, stock_update};
 use patch_core::xdj700::{
-    APPLICATION_SECTION_OFFSET, VERSION_STRING_OFFSET, decode_section, main_document,
-    rebuild_with_stock_application_reporting, reported_version, validate_reported_version,
-    with_reported_version,
+    APPLICATION_SECTION_OFFSET, OFFICIAL_V115_VERSION_BLOCK, StockRelease, VERSION_STRING_OFFSET,
+    VersionBlock, decode_section, main_document, rebuild_with_application,
+    rebuild_with_stock_application_reporting, reported_version, reported_version_at,
+    verify_rebuild,
 };
 use patch_core::{RebuildError, parse_upd, sha256_hex};
 
@@ -19,10 +21,35 @@ fn application(field: &[u8]) -> Vec<u8> {
     decoded
 }
 
+/// A synthetic version block whose stock application has SHA-256 `stock_sha256`.
+fn block(stock_sha256: &str) -> VersionBlock<'_> {
+    VersionBlock {
+        offset: VERSION_STRING_OFFSET,
+        stock_version: "1.15",
+        stock_application_sha256: stock_sha256,
+    }
+}
+
+/// The synthetic release of `update`, with `block`.
+fn release_with<'a>(update: &[u8], sha256: &'a str, block: VersionBlock<'a>) -> StockRelease<'a> {
+    StockRelease {
+        version_block: Some(block),
+        ..release(update.len(), sha256)
+    }
+}
+
+fn not_lower(version: &str) -> RebuildError {
+    RebuildError::ReportedVersionNotLower {
+        version: version.to_owned(),
+        official: "1.15".to_owned(),
+    }
+}
+
 #[test]
 fn reads_the_version_string() {
     assert_eq!(reported_version(&application(b"1.15\0")), Some("1.15"));
     assert_eq!(reported_version(&application(b"0.10\0")), Some("0.10"));
+    assert_eq!(reported_version_at(b"xx0.10\0", 2), Some("0.10"));
 }
 
 #[test]
@@ -45,16 +72,23 @@ fn reads_nothing_without_a_well_formed_version_string() {
         None,
         "too short"
     );
+    assert_eq!(
+        reported_version_at(b"0.10\0", usize::MAX),
+        None,
+        "offset overflow"
+    );
 }
 
 #[test]
 fn sets_a_lower_version_and_changes_nothing_outside_the_field() {
     let stock = application(b"1.15\0");
+    let mut modified = stock.clone();
 
-    let modified = with_reported_version(&stock, "0.10").expect("lower version");
+    OFFICIAL_V115_VERSION_BLOCK
+        .set_reported_version(&mut modified, "0.10")
+        .expect("lower version");
 
     assert_eq!(reported_version(&modified), Some("0.10"));
-    assert_eq!(modified.len(), stock.len());
     let changed: Vec<usize> = (0..stock.len())
         .filter(|&i| stock[i] != modified[i])
         .collect();
@@ -63,32 +97,33 @@ fn sets_a_lower_version_and_changes_nothing_outside_the_field() {
         [VERSION_STRING_OFFSET, VERSION_STRING_OFFSET + 3],
         "1.15 -> 0.10 differs only in its first and last digits; nothing outside the field"
     );
-    assert_eq!(
-        with_reported_version(&stock, "1.14").map(|m| reported_version(&m).map(str::to_owned)),
-        Ok(Some("1.14".to_owned()))
-    );
 }
 
 #[test]
-fn refuses_a_version_not_lower_than_the_official_one() {
+fn refuses_a_version_not_lower_than_the_stock_one() {
     for version in ["1.15", "1.16", "9.99"] {
-        let expected = Err(RebuildError::ReportedVersionNotLower {
-            version: version.to_owned(),
-            official: "1.15".to_owned(),
-        });
-        assert_eq!(validate_reported_version(version), expected);
+        let mut decoded = application(b"1.15\0");
         assert_eq!(
-            with_reported_version(&application(b"1.15\0"), version),
-            expected.map(|()| Vec::new())
+            OFFICIAL_V115_VERSION_BLOCK.validate_reported_version(version),
+            Err(not_lower(version))
         );
+        assert_eq!(
+            OFFICIAL_V115_VERSION_BLOCK.set_reported_version(&mut decoded, version),
+            Err(not_lower(version))
+        );
+        assert_eq!(reported_version(&decoded), Some("1.15"), "unchanged");
     }
+    assert_eq!(
+        OFFICIAL_V115_VERSION_BLOCK.validate_reported_version("1.14"),
+        Ok(())
+    );
 }
 
 #[test]
 fn refuses_a_malformed_version() {
     for version in ["1.5", "0.100", "a.bc", "x.10", "Ver0.10", "0,10", ""] {
         assert_eq!(
-            validate_reported_version(version),
+            OFFICIAL_V115_VERSION_BLOCK.validate_reported_version(version),
             Err(RebuildError::InvalidReportedVersion {
                 version: version.to_owned()
             }),
@@ -98,9 +133,9 @@ fn refuses_a_malformed_version() {
 }
 
 #[test]
-fn refuses_an_application_without_a_version_string() {
+fn refuses_to_set_a_version_without_a_version_string() {
     assert_eq!(
-        with_reported_version(&application(b"1x15\0"), "0.10"),
+        OFFICIAL_V115_VERSION_BLOCK.set_reported_version(&mut application(b"1x15\0"), "0.10"),
         Err(RebuildError::MissingVersionString {
             offset: VERSION_STRING_OFFSET
         })
@@ -108,20 +143,82 @@ fn refuses_an_application_without_a_version_string() {
 }
 
 #[test]
+fn the_rule_accepts_the_stock_application_and_lower_reporting_modifications() {
+    let stock = application(b"1.15\0");
+    let stock_sha256 = sha256_hex(&stock);
+    let block = block(&stock_sha256);
+
+    assert_eq!(block.check_application(&stock), Ok(()));
+    assert_eq!(block.check_application(&application(b"0.10\0")), Ok(()));
+    assert_eq!(block.check_application(&application(b"1.14\0")), Ok(()));
+}
+
+#[test]
+fn the_rule_refuses_a_modification_reporting_no_lower_version() {
+    let stock_sha256 = sha256_hex(&application(b"1.15\0"));
+    let block = block(&stock_sha256);
+    let mut modified_code = application(b"1.15\0");
+    modified_code[0x800] ^= 1;
+
+    for (decoded, reported) in [
+        (modified_code, Some("1.15")),
+        (application(b"1.16\0"), Some("1.16")),
+        (application(b"1x15\0"), None),
+    ] {
+        assert_eq!(
+            block.check_application(&decoded),
+            Err(RebuildError::ModifiedApplicationVersion {
+                reported: reported.map(str::to_owned),
+                official: "1.15".to_owned()
+            }),
+            "{reported:?}"
+        );
+    }
+}
+
+#[test]
+fn rebuild_and_verify_enforce_the_rule() {
+    let stock_application = application(b"1.15\0");
+    let stock = stock_update(&stock_application);
+    let (upd_sha256, stock_sha256) = (sha256_hex(&stock), sha256_hex(&stock_application));
+    let with_rule = release_with(&stock, &upd_sha256, block(&stock_sha256));
+    let without_rule = release(stock.len(), &upd_sha256);
+    let higher = application(b"1.16\0");
+    let refused = Err(RebuildError::ModifiedApplicationVersion {
+        reported: Some("1.16".to_owned()),
+        official: "1.15".to_owned(),
+    });
+
+    assert_eq!(
+        rebuild_with_application(&stock, &with_rule, &higher, "Ver1.17").map(|_| ()),
+        refused
+    );
+    let output = rebuild_with_application(&stock, &without_rule, &higher, "Ver1.17")
+        .expect("a synthetic release without a version block has no rule");
+    assert_eq!(
+        verify_rebuild(&stock, &with_rule, output.bytes(), &higher, "Ver1.17"),
+        refused
+    );
+    assert_eq!(
+        verify_rebuild(&stock, &without_rule, output.bytes(), &higher, "Ver1.17"),
+        Ok(())
+    );
+}
+
+#[test]
 fn rebuilds_the_stock_application_reporting_a_lower_version() {
     let decoded = application(b"1.15\0");
     let stock = stock_update(&decoded);
-    let sha256 = sha256_hex(&stock);
+    let (upd_sha256, stock_sha256) = (sha256_hex(&stock), sha256_hex(&decoded));
+    let with_rule = release_with(&stock, &upd_sha256, block(&stock_sha256));
 
-    let rebuilt = rebuild_with_stock_application_reporting(
-        &stock,
-        &release(stock.len(), &sha256),
-        "0.10",
-        "Ver1.16",
-    )
-    .expect("rebuild");
+    let rebuilt = rebuild_with_stock_application_reporting(&stock, &with_rule, "0.10", "Ver1.16")
+        .expect("rebuild");
 
-    let expected = with_reported_version(&decoded, "0.10").expect("lower version");
+    let mut expected = decoded.clone();
+    block(&stock_sha256)
+        .set_reported_version(&mut expected, "0.10")
+        .expect("lower version");
     assert_eq!(rebuilt.application_reported_version(), Some("0.10"));
     assert_eq!(rebuilt.application_sha256(), sha256_hex(&expected));
     // The synthetic loader is not a verified one, so decode the section directly.
@@ -132,59 +229,56 @@ fn rebuilds_the_stock_application_reporting_a_lower_version() {
         .expect("image");
     let output = decode_section(image.bytes(), APPLICATION_SECTION_OFFSET).expect("decode");
     assert_eq!(output.decoded(), expected.as_slice());
-    let plain = rebuild(&stock, &decoded, "Ver1.16").expect("no-op rebuild");
-    assert_eq!(plain.application_reported_version(), Some("1.15"));
-    assert_ne!(plain.sha256(), rebuilt.sha256());
+    let same = rebuild_with_application(&stock, &with_rule, &expected, "Ver1.16").expect("same");
+    assert_eq!(same, rebuilt);
 }
 
 #[test]
-fn reporting_rebuild_validates_the_version_then_pins_the_input_before_decoding() {
-    let not_a_update = b"not an update".to_vec();
-    let pinned_elsewhere = release(not_a_update.len(), "00");
+fn reporting_rebuild_checks_its_arguments_then_pins_the_input_before_decoding() {
+    let not_an_update = b"not an update".to_vec();
+    let stock_sha256 = sha256_hex(b"stock");
+    let pinned_elsewhere = release_with(&not_an_update, "00", block(&stock_sha256));
+    let reporting = |release: &StockRelease<'_>, version: &str, label: &str| {
+        rebuild_with_stock_application_reporting(&not_an_update, release, version, label)
+            .map(|_| ())
+    };
 
     assert_eq!(
-        rebuild_with_stock_application_reporting(
-            &not_a_update,
-            &pinned_elsewhere,
-            "1.15",
-            "Ver1.16"
-        ),
-        Err(RebuildError::ReportedVersionNotLower {
-            version: "1.15".to_owned(),
-            official: "1.15".to_owned()
-        })
-    );
-    assert_eq!(
-        rebuild_with_stock_application_reporting(&not_a_update, &pinned_elsewhere, "0.10", "1.16"),
+        reporting(&pinned_elsewhere, "0.10", "1.16"),
         Err(RebuildError::InvalidVersionLabel {
             label: "1.16".to_owned()
         })
     );
     assert_eq!(
-        rebuild_with_stock_application_reporting(
-            &not_a_update,
-            &pinned_elsewhere,
-            "0.10",
-            "Ver1.16"
-        ),
+        reporting(&release(not_an_update.len(), "00"), "0.10", "Ver1.16"),
+        Err(RebuildError::NoVersionBlock)
+    );
+    assert_eq!(
+        reporting(&pinned_elsewhere, "1.15", "Ver1.16"),
+        Err(not_lower("1.15"))
+    );
+    assert_eq!(
+        reporting(&pinned_elsewhere, "0.10", "Ver1.16"),
         Err(RebuildError::UnpinnedInput {
-            sha256: sha256_hex(&not_a_update)
+            sha256: sha256_hex(&not_an_update)
         })
     );
 }
 
 #[test]
 fn reporting_rebuild_refuses_an_application_without_a_version_string() {
-    let stock = stock_update(&application(b"1x15\0"));
-    let sha256 = sha256_hex(&stock);
+    let decoded = application(b"1x15\0");
+    let stock = stock_update(&decoded);
+    let (upd_sha256, stock_sha256) = (sha256_hex(&stock), sha256_hex(&decoded));
 
     assert_eq!(
         rebuild_with_stock_application_reporting(
             &stock,
-            &release(stock.len(), &sha256),
+            &release_with(&stock, &upd_sha256, block(&stock_sha256)),
             "0.10",
             "Ver1.16"
-        ),
+        )
+        .map(|_| ()),
         Err(RebuildError::MissingVersionString {
             offset: VERSION_STRING_OFFSET
         })

@@ -16,6 +16,7 @@
 //! The output is then re-parsed and checked by the same verification [`verify_rebuild`] runs.
 
 use super::grid::{S2_ADDRESS_SPACE, follows_grid, grid_records};
+use super::release::StockRelease;
 use super::{
     APPLICATION_SECTION_OFFSET, decode_section, encode_section, main_document, section_frame,
     validate_version_label, verify_main_layout,
@@ -27,38 +28,6 @@ use crate::upd::{
     verify_roundtrip,
 };
 use std::ops::Range;
-
-/// Most a rebuilt MAIN image may grow beyond the official one. The fallback updater lies in the
-/// loader region, which every rebuild keeps byte-identical (see
-/// [`FALLBACK_SECTION_OFFSET`](super::FALLBACK_SECTION_OFFSET)), but the size of the application
-/// flash region is unconfirmed, so growth is bounded. The hardware-tested reference alpha.2
-/// build grows by 44,399 bytes. Raise this only with evidence about the flash layout.
-pub const MAX_MAIN_GROWTH: usize = 256 * 1024;
-
-/// An official release a rebuild may start from.
-///
-/// The library guarantees that the input matches the release passed in. The fields are public so
-/// that tests can pin synthetic files, so the flash-safety bound ([`MAX_MAIN_GROWTH`] over the
-/// official image) holds only when callers use a pinned constant such as [`OFFICIAL_V115`].
-/// Production code, including the CLI, must never construct a release from user input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StockRelease<'a> {
-    /// Length of the complete official `.UPD`, checked before its hash (and before reading, by
-    /// callers that can).
-    pub upd_len: usize,
-    /// SHA-256 of the complete official `.UPD` (lowercase hex). Only this exact file is accepted
-    /// as input, so the loader, PANL and framing a rebuild keeps are the vendor's own.
-    pub upd_sha256: &'a str,
-    /// Largest MAIN image (loader plus section) a rebuild of this release may produce.
-    pub max_main_image_len: usize,
-}
-
-/// Official XDJ-700 v1.15 (`XDJ700.UPD`, 17,371,335 bytes; MAIN image 7,251,904 bytes).
-pub const OFFICIAL_V115: StockRelease<'static> = StockRelease {
-    upd_len: 17_371_335,
-    upd_sha256: "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
-    max_main_image_len: 0x6E_A7C0 + MAX_MAIN_GROWTH,
-};
 
 const SECTION_FRAMING_LEN: usize = 4 + 2;
 
@@ -120,9 +89,13 @@ impl RebuiltUpdate {
 /// - Input refusals: [`RebuildError::UnpinnedInput`], [`RebuildError::Input`],
 ///   [`RebuildError::InputSection`], [`RebuildError::DataAfterSection`] or
 ///   [`RebuildError::NonCanonicalRecordLayout`].
+/// - [`RebuildError::ModifiedApplicationVersion`] if `decoded` is a modified application that
+///   does not report a version lower than the release's ([`VersionBlock::check_application`]).
 /// - [`RebuildError::Encode`] if `decoded` cannot be encoded, or [`RebuildError::ImageTooLarge`]
 ///   beyond the release's bound (and 24-bit addresses).
 /// - Any [`verify_rebuild`] error, which would indicate a defect in this library.
+///
+/// [`VersionBlock::check_application`]: super::VersionBlock::check_application
 pub fn rebuild_with_application(
     input: &[u8],
     release: &StockRelease<'_>,
@@ -131,7 +104,37 @@ pub fn rebuild_with_application(
 ) -> Result<RebuiltUpdate, RebuildError> {
     validate_version_label(version)?;
     let stock = StockMain::load(input, release)?;
+    check_application_version(release, decoded)?;
     rebuild_from(&stock, input, decoded, version)
+}
+
+/// [`rebuild_with_application`] with the input's own application changed only to report
+/// `reported_version` (see [`VersionBlock::set_reported_version`]). The input is loaded once.
+///
+/// # Errors
+///
+/// [`RebuildError::InvalidVersionLabel`], [`RebuildError::NoVersionBlock`] or a
+/// [`VersionBlock::validate_reported_version`] error before the input is examined; then as
+/// [`rebuild_with_stock_application`], plus [`RebuildError::MissingVersionString`].
+///
+/// [`VersionBlock::set_reported_version`]: super::VersionBlock::set_reported_version
+/// [`VersionBlock::validate_reported_version`]: super::VersionBlock::validate_reported_version
+pub fn rebuild_with_stock_application_reporting(
+    input: &[u8],
+    release: &StockRelease<'_>,
+    reported_version: &str,
+    label: &str,
+) -> Result<RebuiltUpdate, RebuildError> {
+    validate_version_label(label)?;
+    let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
+    block.validate_reported_version(reported_version)?;
+    let stock = StockMain::load(input, release)?;
+    let mut decoded = decode_section(stock.image.bytes(), APPLICATION_SECTION_OFFSET)
+        .map_err(RebuildError::InputSection)?
+        .into_decoded();
+    // A version lower than the release's, so `check_application_version` would pass.
+    block.set_reported_version(&mut decoded, reported_version)?;
+    rebuild_from(&stock, input, &decoded, label)
 }
 
 /// [`rebuild_with_application`] with the input's own application, unchanged: a no-op rebuild
@@ -228,9 +231,19 @@ pub fn verify_rebuild(
     version: &str,
 ) -> Result<(), RebuildError> {
     validate_version_label(version)?;
-    StockMain::load(input, release)?
-        .verify(input, output, decoded, version)
-        .map(|_| ())
+    let stock = StockMain::load(input, release)?;
+    check_application_version(release, decoded)?;
+    stock.verify(input, output, decoded, version).map(|_| ())
+}
+
+/// The release's rule for modified applications, when it pins a version block.
+fn check_application_version(
+    release: &StockRelease<'_>,
+    decoded: &[u8],
+) -> Result<(), RebuildError> {
+    release
+        .version_block
+        .map_or(Ok(()), |block| block.check_application(decoded))
 }
 
 /// Identity of a verified output's MAIN image.

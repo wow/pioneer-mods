@@ -84,14 +84,14 @@ The stage files built from the official v1.15 file (`XDJ700.UPD`, 17,371,335 byt
 The `Ver1.17` file was prepared in case labels stuck. They do not (section 1), so the stage-1b
 file is also the recovery file, and `Ver1.17` is not needed.
 
+(The no-op rebuild with `--label Ver1.15` has SHA-256
+`f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c`, but on a v1.15 unit that
+file is skipped.)
+
 The stage-3 file (`--label Ver1.16 --report-version 0.10`) is 17,368,543 bytes with SHA-256
 `84cbd2637b167893c6ad3ff8bc4a0b4cfb7cf5984dc399f6b018a8b5ddb0be5c`; its application has SHA-256
 `74afbf4409242f58f11caac5142ccc220d39199f28c50155d0a2af9ed42d5ad3`. All of these files are
 cross-checked byte-identical against the reference serializer.
-
-(With `--label Ver1.15` the SHA-256 is
-`f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c`, but on a v1.15 unit that
-file is skipped.)
 
 ## 3. Before every flash
 
