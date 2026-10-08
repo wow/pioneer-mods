@@ -25,6 +25,11 @@ const APPLICATION_DECODED_SHA256: &str =
 /// Re-encoding of the stock application (not the stock packer's bytes). Verified byte-identical
 /// to the reference encoder's output for the same input (2026-10-07), and pinned so any
 /// encoder drift is noticed.
+/// The loader's fallback updater section (decoded), run on an application checksum mismatch.
+const FALLBACK_COMPRESSED_LEN: usize = 127_776;
+const FALLBACK_DECODED_LEN: usize = 222_684;
+const FALLBACK_DECODED_SHA256: &str =
+    "ef2e0aaabb2400bd7938ac0c2d737545db276f53ba257a12ed83063eed0cf9a2";
 const REENCODED_STREAM_LEN: usize = 6_988_604;
 const REENCODED_STREAM_SHA256: &str =
     "00b29057b9b92e20de9b5c899ac36095bbd1128f94e7aa1dd5b8314c8b0c8063";
@@ -84,6 +89,12 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
     assert_eq!(application.decoded().len(), APPLICATION_DECODED_LEN);
     assert_eq!(application.decoded_sha256(), APPLICATION_DECODED_SHA256);
     assert_eq!(&application.decoded()[..19], &[0; 19]);
+
+    let fallback = xdj700::decode_section(main_image.bytes(), xdj700::FALLBACK_SECTION_OFFSET)
+        .expect("fallback updater section");
+    assert_eq!(fallback.compressed_len(), FALLBACK_COMPRESSED_LEN);
+    assert_eq!(fallback.decoded().len(), FALLBACK_DECODED_LEN);
+    assert_eq!(fallback.decoded_sha256(), FALLBACK_DECODED_SHA256);
 
     let reencoded = xdj700::encode_section(application.decoded()).expect("re-encode");
     let stream = &reencoded[4..reencoded.len() - 2];

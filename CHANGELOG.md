@@ -7,6 +7,16 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `patch_core::xdj700::FALLBACK_SECTION_OFFSET` (`0x10000`) records the loader's fallback
+  updater section. Static analysis of the v1.15 loader shows it runs this section instead of the
+  application when the application section's checksum does not match, which is the device's
+  recovery path after an interrupted update. The owner-input tests pin its decoded identity and
+  check that a rebuild keeps it intact. They also pin the stage-1 hardware file (the no-op
+  rebuild labelled `Ver1.90`).
+- The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
+  a document whose version equals the installed one is skipped. Stage 1 therefore uses
+  `Ver1.90`. The guide also covers the official update procedure and what does and does not
+  protect the unit.
 - Initial project documentation for versioning, releasing, and safety disclaimers.
 - Open-source baseline docs: `LICENSE` and `CONTRIBUTING.md`.
 - Rust workspace scaffolding with:

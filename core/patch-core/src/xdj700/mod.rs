@@ -27,6 +27,13 @@ use crate::upd::{DocumentImage, UpdContainer, UpdDocument};
 /// Offset of the compressed application section inside the MAIN image.
 pub const APPLICATION_SECTION_OFFSET: usize = 0x40000;
 
+/// Offset of the loader's fallback updater section inside the MAIN image (v1.15). It has the
+/// application section's format. The loader decompresses and runs it instead of the application
+/// when the application section's checksum does not match, which is the device's recovery path
+/// after an interrupted update. It lies in the loader region that every rebuild keeps
+/// byte-identical.
+pub const FALLBACK_SECTION_OFFSET: usize = 0x10000;
+
 /// MAIN versions whose application-section layout has been verified against an official file.
 /// Other versions are refused rather than decoded at a guessed offset.
 pub const VERIFIED_MAIN_VERSIONS: &[&str] = &["Ver1.15"];

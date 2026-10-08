@@ -19,7 +19,7 @@ use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115, decode_application, rebuild_with_application,
     rebuild_with_stock_application, verify_rebuild,
 };
-use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex};
+use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex, xdj700};
 use std::path::PathBuf;
 
 const UPD_ENV: &str = "PIONEER_XDJ700_V115_UPD";
@@ -32,6 +32,13 @@ const NOOP_UPD_LEN: usize = 17_368_545;
 const NOOP_UPD_SHA256: &str = "f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c";
 const NOOP_MAIN_LEN: usize = 7_250_754;
 const NOOP_MAIN_SHA256: &str = "c03360e5e93493d2d3a292707c74d7889e503ac4f7e7bfa81cbe8d9af88e9eef";
+/// The same no-op rebuild labelled `Ver1.90`, the hardware stage-1 file. The updater skips a
+/// document whose version equals the installed one, so stage 1 on a v1.15 unit needs another
+/// label. The MAIN image is unchanged; only the descriptor and the CRCs differ.
+const NOOP_VER190_UPD_SHA256: &str =
+    "aff3a1b9f887dc6d6e35f5686d0edfa644ce9e661011775489315ddbcf928f99";
+const FALLBACK_DECODED_SHA256: &str =
+    "ef2e0aaabb2400bd7938ac0c2d737545db276f53ba257a12ed83063eed0cf9a2";
 
 const ALPHA2_DECODED_LEN: usize = 18_655_132;
 const ALPHA2_DECODED_SHA256: &str =
@@ -116,4 +123,24 @@ fn rebuild_reproduces_the_reference_alpha2_pins() {
     assert_eq!(rebuilt.main_image_sha256(), ALPHA2_MAIN_SHA256);
     assert_eq!(rebuilt.bytes().len(), ALPHA2_UPD_LEN);
     assert_eq!(rebuilt.sha256(), ALPHA2_UPD_SHA256);
+}
+
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn stage1_noop_rebuild_labelled_ver190_is_pinned_and_keeps_the_fallback_updater() {
+    let official = official_upd();
+
+    let rebuilt =
+        rebuild_with_stock_application(&official, &OFFICIAL_V115, "Ver1.90").expect("rebuild");
+
+    assert_eq!(rebuilt.bytes().len(), NOOP_UPD_LEN);
+    assert_eq!(rebuilt.sha256(), NOOP_VER190_UPD_SHA256);
+    assert_eq!(rebuilt.main_image_sha256(), NOOP_MAIN_SHA256);
+    let parsed = parse_upd(rebuilt.bytes()).expect("parse");
+    let main = xdj700::main_document(&parsed).expect("main");
+    assert_eq!(main.descriptor().version(), "Ver1.90");
+    let image = main.image().expect("image");
+    let fallback = xdj700::decode_section(image.bytes(), xdj700::FALLBACK_SECTION_OFFSET)
+        .expect("fallback updater section survives the rebuild");
+    assert_eq!(fallback.decoded_sha256(), FALLBACK_DECODED_SHA256);
 }
