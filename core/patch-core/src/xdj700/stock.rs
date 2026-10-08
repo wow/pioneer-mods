@@ -50,7 +50,7 @@ impl<'a> StockMain<'a> {
             let base = image.base();
             return Err(RebuildError::InputSection(SectionError::ImageBase { base }));
         }
-        // Framing only: the stock application itself is never used, so it is not decompressed.
+        // Framing only here; callers that need the stock application decode it themselves.
         let frame = section_frame(image.bytes(), APPLICATION_SECTION_OFFSET)
             .map_err(RebuildError::InputSection)?;
         if image.bytes()[frame.end()..]

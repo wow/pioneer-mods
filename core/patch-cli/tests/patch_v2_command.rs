@@ -198,3 +198,29 @@ fn refuses_an_unsupported_schema_version() {
         "unsupported schema_version 3; supported: 1, 2",
     );
 }
+
+#[test]
+fn refuses_a_recipe_that_is_not_a_small_regular_file() {
+    let (dir, missing_input, output) = paths();
+    let huge = dir.path().join("huge.json");
+    let file = std::fs::File::create(&huge).expect("create");
+    file.set_len(1024 * 1024 + 1).expect("grow");
+
+    for (recipe, message) in [
+        (huge.as_path(), "larger than any recipe"),
+        (dir.path(), "failed to read recipe manifest"),
+    ] {
+        let result = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
+            .arg("patch")
+            .arg("--input")
+            .arg(&missing_input)
+            .arg("--recipe")
+            .arg(recipe)
+            .arg("--output")
+            .arg(&output)
+            .output()
+            .expect("run patch-cli patch");
+
+        assert_refused(&result, &output, message);
+    }
+}

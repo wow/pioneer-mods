@@ -50,6 +50,7 @@ This repository currently includes:
 cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-targets --all-features
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
 cargo install cargo-audit --version 0.22.2 --locked
 cargo audit
 python scripts/check_file_size_caps.py

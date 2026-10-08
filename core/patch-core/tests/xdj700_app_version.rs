@@ -7,8 +7,9 @@ use common::xdj700::{release, stock_update};
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115_VERSION_BLOCK, StockRelease, VERSION_STRING_OFFSET,
     VersionBlock, decode_section, main_document, rebuild_with_application,
-    rebuild_with_stock_application, rebuild_with_stock_application_reporting, reported_version,
-    reported_version_at, verify_rebuild,
+    rebuild_with_edited_stock_application, rebuild_with_stock_application,
+    rebuild_with_stock_application_reporting, reported_version, reported_version_at,
+    verify_rebuild,
 };
 use patch_core::{RebuildError, parse_upd, sha256_hex};
 
@@ -352,5 +353,31 @@ fn the_rule_lets_the_stock_application_through_every_path() {
             "Ver1.16"
         ),
         Ok(())
+    );
+}
+
+#[test]
+fn the_edit_entry_point_refuses_a_change_outside_the_declared_ranges() {
+    let decoded = application(b"1.15\0");
+    let stock = stock_update(&decoded);
+    let sha256 = sha256_hex(&stock);
+
+    let result = rebuild_with_edited_stock_application(
+        &stock,
+        &release(stock.len(), &sha256),
+        "Ver1.16",
+        |decoded| {
+            decoded[0x900] ^= 1;
+            decoded[0x904] ^= 1;
+            Ok::<_, RebuildError>(vec![std::ops::Range {
+                start: 0x900,
+                end: 0x901,
+            }])
+        },
+    );
+
+    assert_eq!(
+        result.map(|_| ()),
+        Err(RebuildError::UndeclaredChange { byte_offset: 0x904 })
     );
 }

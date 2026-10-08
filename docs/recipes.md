@@ -44,7 +44,7 @@ updater installs. Read [xdj700-flashing.md](./xdj700-flashing.md) before you fla
 | `label` | The MAIN label of the output, `VerX.YY`. It must be **higher** than the release's own version, or the updater skips the file. |
 | `reported_version` | The version the modified application reports, `X.YY`. It must be **lower** than the release's own version, so that the official update restores stock. |
 | `replacements` | Same-length replacements in the decoded application, in ascending order and not overlapping. May be empty. |
-| `precondition` | The stock bytes around the span, `before` it and `after` it (at least 32 bytes in all), identified by their SHA-256. The window moves with `offset`, so a mistyped offset fails the check. A recipe never contains vendor bytes. A hash of only a few bytes could be inverted by brute force (four bytes take minutes), which would publish them; over 32 or more bytes that is impractical unless most of the window is predictable, so choose windows over code, not over padding or known strings. Windows are checked on the stock application before anything is replaced, so they may overlap other spans. |
+| `precondition` | The stock bytes around the span, `before` it and `after` it (at least 32 bytes in all), identified by their SHA-256. The window moves with `offset`, so a mistyped offset fails the check. A recipe never contains vendor bytes. A hash of only a few bytes could be inverted by brute force (four bytes take minutes), which would publish them; over 32 or more bytes that is impractical unless most of the window is predictable, so choose windows over code, not over padding or known strings. Windows are 32 to 4096 bytes, **may not overlap each other** (overlapping windows would share all but a few bytes, and each hash would reveal the difference), may not reach into a protected range (it holds known strings), and are refused when one byte value fills more than half of them. For nearby spans, extend the first window before its span and the second after its own. All windows are checked on the stock application before anything is replaced. |
 | `bytes_hex` | The project's own replacement bytes. Their length is the span length. |
 | `purpose` | Required. A reviewer must be able to tell what each span changes. |
 | `expected` | Optional, but every committed recipe pins both identities. |
@@ -52,19 +52,21 @@ updater installs. Read [xdj700-flashing.md](./xdj700-flashing.md) before you fla
 ## What the engine checks
 
 Before the input is read (`check_recipe_v2`):
-1. The recipe's static checks: fields, hex, order, no overlaps, precondition windows of at least
-   32 bytes that start inside the application.
+1. The recipe's static checks: fields, hex, order, no overlapping spans, precondition windows of
+   32 to 4096 bytes that start inside the application and do not overlap each other.
 2. The release is known, and the recipe repeats its id and pins exactly.
 3. The label is higher, and the reported version lower, than the release's own version.
-4. No replacement overlaps a protected range. For v1.15 that is `[0, 0x800)`: the application
-   header and its version block. The version changes only through `reported_version`.
+4. Every precondition window ends inside the application (its length is pinned).
+5. No replacement or precondition window overlaps a protected range. For v1.15 that is
+   `[0, 0x800)`: the application header and its version block. The version changes only through
+   `reported_version`.
 
 Then, on the official file:
 1. The input is pinned by length (checked before reading) and by SHA-256.
-2. Each precondition window lies inside the application and matches its SHA-256 on the stock
-   application.
+2. On the stock application, before anything is replaced, no precondition window is mostly one
+   repeated byte, and each matches its SHA-256.
 3. The modified application differs from stock **only** in the declared spans and the version
-   string (a byte-by-byte check).
+   string (a byte-by-byte check that the rebuild entry point runs for every edit).
 4. The rebuild runs its full verification, including the release rule: a modified application
    must report a lower version.
 5. The output matches `expected`, when declared.
@@ -88,8 +90,8 @@ into place.
 ## The committed recipes
 
 `recipes/<release>/` holds the project's recipes. CI checks that each one passes every check
-that needs no firmware and pins its output identities. The owner-input tests apply them to the
-official file.
+that needs no firmware and pins its output identities. The owner-input tests apply every one of
+them to the official file and check those identities.
 
 | Recipe | What it does | Output |
 | --- | --- | --- |

@@ -19,9 +19,11 @@ use super::grid::grid_records;
 use super::release::StockRelease;
 use super::stock::StockMain;
 use super::{APPLICATION_SECTION_OFFSET, decode_section, encode_section, validate_version_label};
-use crate::error::{RebuildCheck, RebuildError};
+use crate::engine::verify_bounded_diff;
+use crate::error::{PatchEngineError, RebuildCheck, RebuildError};
 use crate::identity::sha256_hex;
 use crate::upd::{self, DocumentParts};
+use std::ops::Range;
 
 /// A rebuilt update that passed verification against its input.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,31 +126,41 @@ pub fn rebuild_with_stock_application_reporting(
     let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
     block.validate_reported_version(reported_version)?;
     rebuild_with_edited_stock_application(input, release, label, |decoded| {
-        block.set_reported_version(decoded, reported_version)
+        block.set_reported_version(decoded, reported_version)?;
+        Ok::<_, RebuildError>(vec![block.text_range()])
     })
 }
 
 /// [`rebuild_with_application`] with the input's own application changed in place by `edit`
-/// (for example by a recipe). The input is loaded and pinned before `edit` sees the stock
-/// application, and the result goes through the same checks, including the release's version
-/// rule. The input is loaded once.
+/// (for example by a recipe). `edit` returns the ranges it declares it changed; the application
+/// may differ from stock only inside them (a bounded diff, checked here for every caller). The
+/// input is loaded and pinned before `edit` sees the stock application, and the result goes
+/// through the same checks, including the release's version rule. The input is loaded once.
 ///
 /// # Errors
 ///
 /// [`RebuildError::InvalidVersionLabel`] before the input is examined; then as
-/// [`rebuild_with_stock_application`] or [`rebuild_with_application`], or the error of `edit`.
+/// [`rebuild_with_stock_application`] or [`rebuild_with_application`], the error of `edit`, or
+/// [`RebuildError::UndeclaredChange`] for a byte changed outside the declared ranges.
 pub fn rebuild_with_edited_stock_application<E: From<RebuildError>>(
     input: &[u8],
     release: &StockRelease<'_>,
     label: &str,
-    edit: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    edit: impl FnOnce(&mut [u8]) -> Result<Vec<Range<usize>>, E>,
 ) -> Result<RebuiltUpdate, E> {
     validate_version_label(label)?;
     let stock = StockMain::load(input, release)?;
-    let mut decoded = decode_section(stock.image.bytes(), APPLICATION_SECTION_OFFSET)
+    let original = decode_section(stock.image.bytes(), APPLICATION_SECTION_OFFSET)
         .map_err(RebuildError::InputSection)?
         .into_decoded();
-    edit(&mut decoded)?;
+    let mut decoded = original.clone();
+    let declared = edit(&mut decoded)?;
+    verify_bounded_diff(&original, &decoded, &declared).map_err(|error| match error {
+        PatchEngineError::MutationOutsideDeclaredRegions { byte_offset } => {
+            RebuildError::UndeclaredChange { byte_offset }
+        }
+        other => unreachable!("`edit` sees a slice, so the length cannot change: {other}"),
+    })?;
     // Fail fast, before encoding; `verify` enforces the same rule for every path.
     release.check_application(&decoded)?;
     Ok(rebuild_from(&stock, input, &decoded, label)?)

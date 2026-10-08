@@ -3,25 +3,26 @@
 //!
 //! Before the input is read, the recipe must pass its static checks, name a known release whose
 //! pins it repeats exactly, declare a label higher and a reported version lower than the release's
-//! own version, and keep every replacement out of the release's protected ranges. On the stock
-//! application, the precondition window around each replacement (defined relative to its
-//! offset, so a wrong offset moves the window) must match its declared SHA-256. The output
-//! application may differ from stock only in the declared replacements and the version string,
-//! the rebuild then runs its own verification (including the version rule), and any declared
-//! output identities must match.
+//! own version, and keep every replacement and its precondition window inside the application and
+//! out of the release's protected ranges. On the stock application, before anything changes, each
+//! precondition window (defined relative to its offset, so a wrong offset moves the window) must
+//! not be mostly one repeated byte and must match its declared SHA-256. The output application may
+//! differ from stock only in the declared replacements and the version string (checked by the
+//! rebuild entry point), the rebuild then runs its own verification (including the version
+//! rule), and any declared output identities must match.
 
+use super::app_version::VERSION_TEXT_LEN;
 use super::is_label_higher;
 use super::rebuild::{RebuiltUpdate, rebuild_with_edited_stock_application};
 use super::release::{OFFICIAL_V115, StockRelease};
-use crate::engine::verify_bounded_diff;
-use crate::error::{PatchEngineError, RebuildError};
+use crate::error::RebuildError;
 use crate::identity::sha256_hex;
-use patch_schema::{RecipeV2, RecipeV2Error, Replacement};
+use patch_schema::{RecipeV2, RecipeV2Error};
 use std::ops::Range;
 use thiserror::Error;
 
-/// A release recipes may target: its identifier, its pins, and the decoded-application ranges no
-/// replacement may touch.
+/// A release recipes may target: its identifier, its pins, the length of its stock decoded
+/// application, and the decoded-application ranges no replacement or precondition may touch.
 ///
 /// The fields are public so that tests can use synthetic targets. Like [`StockRelease`], the
 /// safety guarantees hold only for the pinned constants in [`RECIPE_TARGETS`]; production code
@@ -31,7 +32,11 @@ pub struct RecipeTarget<'a> {
     /// The identifier recipes name in `target.release`.
     pub id: &'a str,
     pub release: StockRelease<'a>,
-    /// Ranges of the decoded application that replacements may not overlap.
+    /// Length of the stock decoded application (fixed by its pinned SHA-256), so that every
+    /// window is bounds-checked before the input is read.
+    pub application_len: usize,
+    /// Ranges of the decoded application that replacements and their precondition windows may
+    /// not overlap (they hold known strings, which would make a window's hash invertible).
     pub protected: &'a [Range<usize>],
 }
 
@@ -44,6 +49,7 @@ pub struct RecipeTarget<'a> {
 pub const RECIPE_TARGETS: &[RecipeTarget<'static>] = &[RecipeTarget {
     id: "xdj700-v1.15",
     release: OFFICIAL_V115,
+    application_len: 18_601_864,
     protected: &[Range {
         start: 0,
         end: 0x800,
@@ -63,8 +69,8 @@ const _: () = {
         let mut range = 0;
         while range < target.protected.len() {
             let protected = &target.protected[range];
-            covered |= protected.start <= block.offset
-                && block.offset + VERSION_FIELD_TEXT_LEN < protected.end;
+            covered |=
+                protected.start <= block.offset && block.offset + VERSION_TEXT_LEN < protected.end;
             range += 1;
         }
         assert!(covered, "a protected range must cover the version string");
@@ -96,11 +102,12 @@ pub enum RecipeError {
     LabelNotHigher { label: String, stock: String },
 
     #[error(
-        "replacements[{index}] at {start:#x}..{end:#x} overlaps protected range \
+        "replacements[{index}] {what} at {start:#x}..{end:#x} overlaps protected range \
          {protected_start:#x}..{protected_end:#x}"
     )]
     Protected {
         index: usize,
+        what: &'static str,
         start: u64,
         end: u64,
         protected_start: usize,
@@ -114,6 +121,18 @@ pub enum RecipeError {
     OutOfBounds { index: usize, end: u64, len: usize },
 
     #[error(
+        "replacements[{index}]: {count} of the {len} bytes in the precondition window are \
+         {byte:#04x}; a window that predictable could be inverted to recover the rest, so choose a \
+         window over code"
+    )]
+    PredictableWindow {
+        index: usize,
+        byte: u8,
+        count: usize,
+        len: usize,
+    },
+
+    #[error(
         "replacements[{index}]: the precondition window has SHA-256 {actual}, not {expected}; \
          the recipe does not match this application"
     )]
@@ -122,9 +141,6 @@ pub enum RecipeError {
         expected: String,
         actual: String,
     },
-
-    #[error("the application changed outside the declared spans: {0}")]
-    UndeclaredChange(PatchEngineError),
 
     #[error("{field} is {actual}, but the recipe expects {expected}")]
     UnexpectedOutput {
@@ -143,7 +159,6 @@ pub enum RecipeError {
 ///
 /// [`RecipeError::UnknownRelease`], or any [`apply_recipe_v2_to`] error.
 pub fn apply_recipe_v2(recipe: &RecipeV2, input: &[u8]) -> Result<RebuiltUpdate, RecipeError> {
-    recipe.validate()?;
     let target = recipe_target(&recipe.target.release)
         .ok_or_else(|| unknown_release(&recipe.target.release))?;
     apply_recipe_v2_to(recipe, target, input)
@@ -163,47 +178,52 @@ pub fn recipe_target(id: &str) -> Option<&'static RecipeTarget<'static>> {
     RECIPE_TARGETS.iter().find(|target| target.id == id)
 }
 
-/// Every check that needs no firmware: the static recipe checks, the release pins, the label and
-/// reported-version order, and the protected ranges. [`apply_recipe_v2_to`] runs it first; front
-/// ends can run it before reading the input.
+/// Every check that needs no firmware: the static recipe checks, the release id and pins, the
+/// label and reported-version order, and the bounds and protected ranges of every replacement and
+/// precondition window. [`apply_recipe_v2_to`] runs it first; front ends can run it before reading
+/// the input.
 ///
 /// # Errors
 ///
 /// [`RecipeError::Invalid`], [`RecipeError::TargetMismatch`], [`RecipeError::LabelNotHigher`],
-/// [`RecipeError::Protected`], or a [`RecipeError::Rebuild`] for a release without a version
-/// block or a reported version that is not lower.
+/// [`RecipeError::OutOfBounds`], [`RecipeError::Protected`], or a [`RecipeError::Rebuild`] for a
+/// release without a version block or a reported version that is not lower.
 pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(), RecipeError> {
     recipe.validate()?;
     let release = &target.release;
     let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
-    let pin = |field, recipe: &str, pinned: &str| {
-        let same = if field == "target.release" {
-            recipe == pinned
-        } else {
-            recipe.eq_ignore_ascii_case(pinned)
-        };
-        if same {
-            Ok(())
-        } else {
-            Err(RecipeError::TargetMismatch {
-                field,
-                release: target.id.to_owned(),
-                recipe: recipe.to_owned(),
-                pinned: pinned.to_owned(),
-            })
-        }
+    let mismatch = |field, recipe: &str, pinned: &str| RecipeError::TargetMismatch {
+        field,
+        release: target.id.to_owned(),
+        recipe: recipe.to_owned(),
+        pinned: pinned.to_owned(),
     };
-    pin("target.release", &recipe.target.release, target.id)?;
-    pin(
-        "target.upd_sha256",
-        &recipe.target.upd_sha256,
-        release.upd_sha256,
-    )?;
-    pin(
-        "target.application_sha256",
-        &recipe.target.application_sha256,
-        block.stock_application_sha256,
-    )?;
+    // An identifier, compared exactly.
+    if recipe.target.release != target.id {
+        return Err(mismatch(
+            "target.release",
+            &recipe.target.release,
+            target.id,
+        ));
+    }
+    // SHA-256 pins, compared without regard to case.
+    let pins = [
+        (
+            "target.upd_sha256",
+            &recipe.target.upd_sha256,
+            release.upd_sha256,
+        ),
+        (
+            "target.application_sha256",
+            &recipe.target.application_sha256,
+            block.stock_application_sha256,
+        ),
+    ];
+    for (field, recipe_value, pinned) in pins {
+        if !recipe_value.eq_ignore_ascii_case(pinned) {
+            return Err(mismatch(field, recipe_value, pinned));
+        }
+    }
     let stock_label = format!("Ver{}", block.stock_version);
     if !is_label_higher(&recipe.label, &stock_label)? {
         return Err(RecipeError::LabelNotHigher {
@@ -213,28 +233,31 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
     }
     block.validate_reported_version(&recipe.reported_version)?;
     for (index, replacement) in recipe.replacements.iter().enumerate() {
-        let start = replacement.offset;
+        let window = window(index, replacement, target.application_len)?;
         // `validate` has checked that this cannot overflow.
-        let end = start.saturating_add(replacement.len());
-        let overlap = |protected: &&Range<usize>| {
-            start < protected.end as u64 && (protected.start as u64) < end
-        };
-        if let Some(protected) = target.protected.iter().find(overlap) {
-            return Err(RecipeError::Protected {
-                index,
-                start,
-                end,
-                protected_start: protected.start,
-                protected_end: protected.end,
-            });
+        let span = replacement.offset..replacement.offset.saturating_add(replacement.len());
+        let window = window.start as u64..window.end as u64;
+        for (what, range) in [("span", span), ("precondition window", window)] {
+            let overlap = |protected: &&Range<usize>| {
+                range.start < protected.end as u64 && (protected.start as u64) < range.end
+            };
+            if let Some(protected) = target.protected.iter().find(overlap) {
+                return Err(RecipeError::Protected {
+                    index,
+                    what,
+                    start: range.start,
+                    end: range.end,
+                    protected_start: protected.start,
+                    protected_end: protected.end,
+                });
+            }
         }
     }
-
     Ok(())
 }
 
 /// Applies `recipe` to `input` for an explicit `target` (tests pass synthetic targets; production
-/// code uses [`apply_recipe_v2`]).
+/// code uses [`apply_recipe_v2`] or a target from [`recipe_target`]).
 ///
 /// # Errors
 ///
@@ -249,24 +272,22 @@ pub fn apply_recipe_v2_to(
     let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
     let rebuilt =
         rebuild_with_edited_stock_application(input, release, &recipe.label, |decoded| {
-            let stock = decoded.to_vec();
-            // Every precondition is checked on the stock application before anything changes,
-            // since windows may overlap other replacements.
+            // Every precondition is checked on the stock application before anything changes.
             for (index, replacement) in recipe.replacements.iter().enumerate() {
-                let precondition = &replacement.precondition;
-                let window = window(index, replacement, stock.len())?;
-                let actual = sha256_hex(&stock[window]);
-                if !actual.eq_ignore_ascii_case(&precondition.sha256) {
+                let window = &decoded[window(index, replacement, decoded.len())?];
+                check_unpredictable(index, window)?;
+                let actual = sha256_hex(window);
+                if !actual.eq_ignore_ascii_case(&replacement.precondition.sha256) {
                     return Err(RecipeError::Precondition {
                         index,
-                        expected: precondition.sha256.clone(),
+                        expected: replacement.precondition.sha256.clone(),
                         actual,
                     });
                 }
             }
             // The version string, then every replaced span.
             let mut declared = Vec::with_capacity(recipe.replacements.len() + 1);
-            declared.push(block.offset..block.offset + VERSION_FIELD_TEXT_LEN);
+            declared.push(block.text_range());
             for replacement in &recipe.replacements {
                 // Inside its precondition window, which is inside the application.
                 let start = usize::try_from(replacement.offset).expect("inside the window");
@@ -276,7 +297,7 @@ pub fn apply_recipe_v2_to(
                 declared.push(span);
             }
             block.set_reported_version(decoded, &recipe.reported_version)?;
-            verify_bounded_diff(&stock, decoded, &declared).map_err(RecipeError::UndeclaredChange)
+            Ok::<_, RecipeError>(declared)
         })?;
 
     if let Some(expected) = &recipe.expected {
@@ -303,17 +324,14 @@ pub fn apply_recipe_v2_to(
     Ok(rebuilt)
 }
 
-/// The four characters of `X.YY`; the NUL after them never changes.
-const VERSION_FIELD_TEXT_LEN: usize = 4;
-
-/// The replacement's precondition window, if it lies inside the application.
+/// The replacement's precondition window, if it lies inside an application of `application_len`.
 fn window(
     index: usize,
-    replacement: &Replacement,
+    replacement: &patch_schema::Replacement,
     application_len: usize,
 ) -> Result<Range<usize>, RecipeError> {
     // `validate` has checked that the window neither starts before 0 nor overflows.
-    let Range { start: offset, end } = replacement
+    let Range { start, end } = replacement
         .precondition_window()
         .unwrap_or(u64::MAX..u64::MAX);
     let out_of_bounds = || RecipeError::OutOfBounds {
@@ -321,10 +339,33 @@ fn window(
         end,
         len: application_len,
     };
-    let start = usize::try_from(offset).map_err(|_| out_of_bounds())?;
+    let start = usize::try_from(start).map_err(|_| out_of_bounds())?;
     let end_usize = usize::try_from(end).map_err(|_| out_of_bounds())?;
     if end_usize > application_len {
         return Err(out_of_bounds());
     }
     Ok(start..end_usize)
+}
+
+/// Refuses a window in which one byte value fills more than half: padding, fill or a zeroed table,
+/// whose hash would reveal the few other bytes by brute force.
+fn check_unpredictable(index: usize, window: &[u8]) -> Result<(), RecipeError> {
+    let mut counts = [0usize; 256];
+    for &byte in window {
+        counts[usize::from(byte)] += 1;
+    }
+    let (byte, &count) = counts
+        .iter()
+        .enumerate()
+        .max_by_key(|&(_, count)| *count)
+        .expect("256 counts");
+    if count * 2 > window.len() {
+        return Err(RecipeError::PredictableWindow {
+            index,
+            byte: byte as u8,
+            count,
+            len: window.len(),
+        });
+    }
+    Ok(())
 }

@@ -2,11 +2,14 @@
 //! into a complete, installable update.
 //!
 //! A v2 recipe never carries vendor bytes. Each replacement declares a precondition: the SHA-256
-//! of the stock bytes in a window around the replaced span, at least [`MIN_PRECONDITION_LEN`]
-//! bytes long. The window is defined relative to the span (`before` and `after` it), so a wrong
-//! `offset` moves the window and fails the hash. A hash of only a few bytes could be inverted by
-//! brute force, which would publish them; over a window this long that is impractical unless
-//! most of the window is predictable, so windows belong over code, not padding or known strings.
+//! of the stock bytes in a window around the replaced span, [`MIN_PRECONDITION_LEN`] to
+//! [`MAX_PRECONDITION_LEN`] bytes long. The window is defined relative to the span (`before` and
+//! `after` it), so a wrong `offset` moves the window and fails the hash. A hash of only a few
+//! bytes could be inverted by brute force, which would publish them; over a window this long that
+//! is impractical unless most of the window is predictable. So windows may not overlap each other
+//! (overlapping windows would share all but a few bytes, and each hash would reveal the
+//! difference), the engine refuses windows in protected ranges and windows that are mostly one
+//! repeated byte, and windows belong over code, not padding or known strings.
 //! Only the project's own replacement bytes are written. The static checks here need no
 //! firmware; the release-specific rules (protected ranges, label and reported-version order,
 //! preconditions) are enforced by the engine in `patch-core`.
@@ -19,6 +22,9 @@ pub const SCHEMA_VERSION_V2: u32 = 2;
 
 /// Shortest precondition window, so that its hash cannot be inverted to recover vendor bytes.
 pub const MIN_PRECONDITION_LEN: u64 = 32;
+
+/// Longest precondition window, so that a recipe stays local and cheap to check.
+pub const MAX_PRECONDITION_LEN: u64 = 4096;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -88,7 +94,7 @@ impl Replacement {
 
     /// Whether the span is empty (never true for a validated recipe).
     pub fn is_empty(&self) -> bool {
-        self.bytes_hex.is_empty()
+        self.len() == 0
     }
 
     /// The replacement bytes, or `None` unless `bytes_hex` is valid, non-empty hex.
@@ -148,6 +154,13 @@ pub enum RecipeV2Error {
     PreconditionTooShort { index: usize },
     #[error("replacements[{index}].precondition.before reaches before the application's start")]
     PreconditionBeforeStart { index: usize },
+    #[error("replacements[{index}].precondition must be at most {MAX_PRECONDITION_LEN} bytes long")]
+    PreconditionTooLong { index: usize },
+    #[error(
+        "replacements[{index}].precondition overlaps the window of replacements[{previous}]; \
+         overlapping windows would reveal stock bytes one hash at a time"
+    )]
+    OverlappingPreconditions { index: usize, previous: usize },
     #[error("expected must pin at least one identity when present")]
     EmptyExpected,
 }
@@ -179,6 +192,7 @@ impl RecipeV2 {
             ));
         }
         let mut previous_end: Option<(usize, u64)> = None;
+        let mut previous_window_end: Option<(usize, u64)> = None;
         for (index, replacement) in self.replacements.iter().enumerate() {
             let precondition = &replacement.precondition;
             check_sha256(
@@ -200,6 +214,9 @@ impl RecipeV2 {
             if window.end - window.start < MIN_PRECONDITION_LEN {
                 return Err(RecipeV2Error::PreconditionTooShort { index });
             }
+            if window.end - window.start > MAX_PRECONDITION_LEN {
+                return Err(RecipeV2Error::PreconditionTooLong { index });
+            }
             // Inside the window, so it cannot overflow.
             let end = replacement.offset + replacement.len();
             if let Some((previous, previous_end)) = previous_end
@@ -208,6 +225,12 @@ impl RecipeV2 {
                 return Err(RecipeV2Error::UnorderedOrOverlapping { index, previous });
             }
             previous_end = Some((index, end));
+            if let Some((previous, previous_window_end)) = previous_window_end
+                && window.start < previous_window_end
+            {
+                return Err(RecipeV2Error::OverlappingPreconditions { index, previous });
+            }
+            previous_window_end = Some((index, window.end));
         }
         if let Some(expected) = &self.expected {
             if expected.application_sha256.is_none() && expected.upd_sha256.is_none() {
@@ -231,7 +254,7 @@ pub struct SchemaVersionProbe {
 }
 
 fn check_sha256(field: &str, value: &str) -> Result<(), RecipeV2Error> {
-    if value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    if crate::is_valid_sha256_hex(value) {
         Ok(())
     } else {
         Err(RecipeV2Error::InvalidSha256 {
@@ -240,10 +263,24 @@ fn check_sha256(field: &str, value: &str) -> Result<(), RecipeV2Error> {
     }
 }
 
-/// `X.YY`: one digit, a dot, two digits.
+/// `X.YY` (one digit, a dot, two digits) as `X * 100 + YY`, or `None` for any other form. The one
+/// parser for MAIN labels (after `Ver`) and reported versions, here and in `patch-core`.
+pub fn bare_version_number(version: &str) -> Option<u16> {
+    match version.as_bytes() {
+        [major, b'.', tens, units]
+            if [major, tens, units]
+                .iter()
+                .all(|digit| digit.is_ascii_digit()) =>
+        {
+            let digit = |byte: &u8| u16::from(byte - b'0');
+            Some(digit(major) * 100 + digit(tens) * 10 + digit(units))
+        }
+        _ => None,
+    }
+}
+
 fn is_bare_version(value: &str) -> bool {
-    matches!(value.as_bytes(), [major, b'.', tens, units]
-        if [major, tens, units].iter().all(|digit| digit.is_ascii_digit()))
+    bare_version_number(value).is_some()
 }
 
 fn decode_hex(hex: &str) -> Option<Vec<u8>> {

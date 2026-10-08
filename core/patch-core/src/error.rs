@@ -317,6 +317,11 @@ pub enum RebuildError {
     NoVersionBlock,
 
     #[error(
+        "the edit changed byte {byte_offset:#x} of the application, outside its declared ranges"
+    )]
+    UndeclaredChange { byte_offset: usize },
+
+    #[error(
         "stock MAIN image has data after the application section (only 0xFF padding is allowed)"
     )]
     DataAfterSection,

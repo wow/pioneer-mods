@@ -14,13 +14,16 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   a window of code the hash is impractical to invert to recover vendor bytes. A recipe declares a
   label higher and a reported version lower than the release's own, and may pin its output
   identities (an empty `expected` is refused). `patch` refuses any `schema_version` other than 1
-  and 2.
+  and 2. Precondition windows are 32 to 4096 bytes and may not overlap each other or a
+  protected range; the engine also refuses a window mostly filled by one byte value (padding), so a
+  recipe cannot reveal stock bytes one hash at a time.
 - **Recipe engine** (`xdj700::apply_recipe_v2`, `check_recipe_v2`, `RECIPE_TARGETS`). Before
   reading the input it checks the recipe, the release pins, the version order and the protected
   ranges (v1.15: `[0, 0x800)`, the header and version block). On the official file it checks each
   precondition, that only the declared spans and the version string changed, the rebuild's own
   verification and the expected identities. It is built on the new
-  `xdj700::rebuild_with_edited_stock_application`.
+  `xdj700::rebuild_with_edited_stock_application`, whose `edit` returns its declared ranges: the
+  entry point checks the bounded diff for every caller (`RebuildError::UndeclaredChange`).
 - `patch-cli patch` chooses the engine by `schema_version`. A v2 recipe is checked before the
   input is read; the input is length-checked before reading; the output is never overwritten.
 - `recipes/xdj700-v1.15/version-marker-0.10.json`, the first committed recipe. It reproduces the

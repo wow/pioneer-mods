@@ -18,8 +18,11 @@ use crate::identity::sha256_hex;
 /// Decoded-application offset of the NUL-terminated version string (`X.YY`) in v1.15.
 pub const VERSION_STRING_OFFSET: usize = 0x740;
 
+/// The four characters of `X.YY`; the NUL after them never changes.
+pub(crate) const VERSION_TEXT_LEN: usize = 4;
+
 /// `X.YY` plus the terminating NUL.
-const VERSION_FIELD_LEN: usize = 5;
+const VERSION_FIELD_LEN: usize = VERSION_TEXT_LEN + 1;
 
 /// The version string a decoded v1.15 application reports, if it holds one of the form `X.YY` at
 /// [`VERSION_STRING_OFFSET`].
@@ -36,6 +39,11 @@ pub fn reported_version_at(decoded: &[u8], offset: usize) -> Option<&str> {
 }
 
 impl VersionBlock<'_> {
+    /// The bytes [`Self::set_reported_version`] may change: the four characters of `X.YY`.
+    pub fn text_range(&self) -> std::ops::Range<usize> {
+        self.offset..self.offset + VERSION_TEXT_LEN
+    }
+
     /// Checks that a modified application may report `version`: of the form `X.YY` and lower than
     /// [`Self::stock_version`].
     ///

@@ -2,6 +2,7 @@
 // Each test crate uses a different subset of these helpers.
 #![allow(dead_code)]
 
+pub mod recipe;
 pub mod xdj700;
 
 use patch_core::upd::crc16_xmodem;

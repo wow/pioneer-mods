@@ -4,8 +4,8 @@ use thiserror::Error;
 pub mod v2;
 
 pub use v2::{
-    ExpectedV2, MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error, Replacement,
-    SCHEMA_VERSION_V2, SchemaVersionProbe, TargetV2,
+    ExpectedV2, MAX_PRECONDITION_LEN, MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error,
+    Replacement, SCHEMA_VERSION_V2, SchemaVersionProbe, TargetV2, bare_version_number,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -150,6 +150,6 @@ pub enum SchemaValidationError {
     ZeroLengthOwnerCopyWindow,
 }
 
-fn is_valid_sha256_hex(value: &str) -> bool {
+pub(crate) fn is_valid_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.as_bytes().iter().all(u8::is_ascii_hexdigit)
 }

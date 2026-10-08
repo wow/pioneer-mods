@@ -1,7 +1,8 @@
 //! Static validation of schema-v2 recipes (no firmware needed).
 
 use patch_schema::{
-    MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error, Replacement, SchemaVersionProbe,
+    MAX_PRECONDITION_LEN, MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error, Replacement,
+    SchemaVersionProbe,
 };
 use serde_json::json;
 
@@ -176,7 +177,11 @@ fn replacement_fields_are_checked() {
 #[test]
 fn replacements_must_be_ascending_and_disjoint() {
     let mut recipe = recipe();
-    recipe.replacements = vec![replacement(0x800, "0000"), replacement(0x802, "00")];
+    // Adjacent spans with windows reaching outward (before the first, after the second).
+    let mut first = replacement(0x800, "0000");
+    first.precondition.before = 30;
+    first.precondition.after = 0;
+    recipe.replacements = vec![first, replacement(0x802, "00")];
     assert_eq!(recipe.validate(), Ok(()), "adjacent spans are fine");
 
     for second in [0x801, 0x700] {
@@ -227,4 +232,66 @@ fn the_precondition_window_is_relative_and_long_enough() {
         recipe.validate(),
         Err(RecipeV2Error::OffsetOverflow { index: 0 })
     );
+}
+
+/// The leak a reviewer demonstrated: 1-byte replacements whose 32-byte windows slide one byte at
+/// a time share 31 bytes, so each hash would reveal one more stock byte. Windows must not overlap.
+#[test]
+fn overlapping_precondition_windows_are_refused() {
+    let mut recipe = recipe();
+    recipe.replacements = (0..4)
+        .map(|i| Replacement {
+            precondition: Precondition {
+                before: 31,
+                after: 0,
+                sha256: "ab".repeat(32),
+            },
+            ..replacement(0x900 + i, "00")
+        })
+        .collect();
+
+    assert_eq!(
+        recipe.validate(),
+        Err(RecipeV2Error::OverlappingPreconditions {
+            index: 1,
+            previous: 0
+        })
+    );
+
+    // Touching windows are fine: each byte is in exactly one window.
+    recipe.replacements = vec![
+        Replacement {
+            precondition: Precondition {
+                before: 31,
+                after: 0,
+                sha256: "ab".repeat(32),
+            },
+            ..replacement(0x900, "00")
+        },
+        replacement(0x901, "00"),
+    ];
+    assert_eq!(recipe.validate(), Ok(()));
+}
+
+#[test]
+fn precondition_windows_are_capped() {
+    let mut recipe = recipe();
+    let mut long = replacement(0x800, "00");
+    long.precondition.after = MAX_PRECONDITION_LEN;
+    recipe.replacements = vec![long.clone()];
+    assert_eq!(
+        recipe.validate(),
+        Err(RecipeV2Error::PreconditionTooLong { index: 0 })
+    );
+
+    long.precondition.after = MAX_PRECONDITION_LEN - 1;
+    recipe.replacements = vec![long];
+    assert_eq!(recipe.validate(), Ok(()), "exactly the cap");
+}
+
+#[test]
+fn is_empty_agrees_with_len() {
+    let odd = replacement(0x800, "a");
+    assert_eq!(odd.len(), 0);
+    assert!(odd.is_empty());
 }

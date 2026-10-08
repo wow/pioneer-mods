@@ -210,24 +210,85 @@ fn a_modified_application_reporting_1_16_is_refused() {
     );
 }
 
-/// The committed version-marker recipe reproduces the hardware-tested stage-3 file exactly.
+/// Every committed recipe applies to the official file and produces its pinned identities (the
+/// engine checks `expected`); the version marker reproduces the hardware-tested stage-3 file.
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
-fn the_version_marker_recipe_reproduces_the_stage3_file() {
+fn every_committed_recipe_applies_and_the_version_marker_reproduces_stage3() {
     let official = official_upd();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../recipes");
+    let mut files = Vec::new();
+    let mut directories = vec![root];
+    while let Some(directory) = directories.pop() {
+        for entry in std::fs::read_dir(&directory).expect("read recipes directory") {
+            let path = entry.expect("entry").path();
+            if path.is_dir() {
+                directories.push(path);
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension == "json")
+            {
+                files.push(path);
+            }
+        }
+    }
+    assert!(!files.is_empty());
+
+    for path in files {
+        let name = path.display();
+        let recipe: patch_schema::RecipeV2 =
+            serde_json::from_slice(&std::fs::read(&path).expect("read")).expect("recipe JSON");
+        let rebuilt = xdj700::apply_recipe_v2(&recipe, &official)
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert!(recipe.expected.is_some(), "{name}: pins its outputs");
+
+        if path.ends_with("xdj700-v1.15/version-marker-0.10.json") {
+            assert_eq!(rebuilt.application_sha256(), STAGE3_APPLICATION_SHA256);
+            assert_eq!(rebuilt.main_image_sha256(), STAGE3_MAIN_SHA256);
+            assert_eq!(rebuilt.bytes().len(), STAGE3_UPD_LEN);
+            assert_eq!(rebuilt.sha256(), STAGE3_UPD_SHA256);
+            assert_eq!(
+                rebuilt.application_reported_version(),
+                Some(STAGE3_REPORTED_VERSION)
+            );
+        }
+    }
+}
+
+/// On the real application, a precondition window over zero padding is refused before its hash
+/// is compared, so a recipe cannot publish the few bytes next to padding. Prints no bytes.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn a_window_over_real_padding_is_refused() {
+    let official = official_upd();
+    let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    let decoded = stock.decoded();
+    let padding = (0x800..decoded.len() - 40)
+        .find(|&start| decoded[start..start + 32].iter().all(|&byte| byte == 0))
+        .expect("the application has zero padding after its header");
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../recipes/xdj700-v1.15/version-marker-0.10.json");
-    let recipe: patch_schema::RecipeV2 =
-        serde_json::from_slice(&std::fs::read(path).expect("read recipe")).expect("recipe JSON");
+    let mut recipe: patch_schema::RecipeV2 =
+        serde_json::from_slice(&std::fs::read(path).expect("read")).expect("recipe JSON");
+    recipe.expected = None;
+    recipe.replacements = vec![patch_schema::Replacement {
+        offset: (padding + 32) as u64,
+        bytes_hex: "00".to_owned(),
+        precondition: patch_schema::Precondition {
+            before: 32,
+            after: 7,
+            sha256: sha256_hex(&decoded[padding..padding + 40]),
+        },
+        purpose: "a window over padding".to_owned(),
+    }];
 
-    let rebuilt = xdj700::apply_recipe_v2(&recipe, &official).expect("apply");
+    let result = xdj700::apply_recipe_v2(&recipe, &official);
 
-    assert_eq!(rebuilt.application_sha256(), STAGE3_APPLICATION_SHA256);
-    assert_eq!(rebuilt.main_image_sha256(), STAGE3_MAIN_SHA256);
-    assert_eq!(rebuilt.bytes().len(), STAGE3_UPD_LEN);
-    assert_eq!(rebuilt.sha256(), STAGE3_UPD_SHA256);
-    assert_eq!(
-        rebuilt.application_reported_version(),
-        Some(STAGE3_REPORTED_VERSION)
+    assert!(
+        matches!(
+            result,
+            Err(xdj700::RecipeError::PredictableWindow { index: 0, .. })
+        ),
+        "a window over padding must be refused"
     );
 }
