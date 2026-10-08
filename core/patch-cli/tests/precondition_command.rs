@@ -141,8 +141,13 @@ fn skips_the_drafts_own_file_among_the_committed_recipes() {
     let mut recipe = committed_recipe();
     recipe["recipe_id"] = json!("draft");
     recipe["replacements"] = json!([draft_replacement(0x1000, 32, 0)]);
-    let draft = committed.path().join("draft.json");
-    write_bytes(&draft, &serde_json::to_vec(&recipe).expect("serialize"));
+    write_bytes(
+        &committed.path().join("draft.json"),
+        &serde_json::to_vec(&recipe).expect("serialize"),
+    );
+    // The same file, spelled differently from the directory's listing of it.
+    let draft = committed.path().join("sub/../draft.json");
+    std::fs::create_dir(committed.path().join("sub")).expect("mkdir");
     let missing_input = committed.path().join("XDJ700.UPD");
 
     let result = run_precondition(&missing_input, &draft, committed.path());
