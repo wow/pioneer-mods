@@ -3,7 +3,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FirmwareIdentity {
@@ -102,6 +102,34 @@ pub fn open_regular_file(path: &Path) -> Result<File, PatchCoreError> {
         return Err(not_a_file());
     }
     Ok(file)
+}
+
+/// Every `.json` file under `dir`, recursively and sorted: the recipe files of a recipe directory.
+/// Directories are not followed through symbolic links, so a link loop cannot recurse forever.
+pub fn recipe_files(dir: &Path) -> Result<Vec<PathBuf>, PatchCoreError> {
+    let mut files = Vec::new();
+    let mut directories = vec![dir.to_owned()];
+    while let Some(directory) = directories.pop() {
+        let entries =
+            std::fs::read_dir(&directory).map_err(|source| read_error(&directory, source))?;
+        for entry in entries {
+            let entry = entry.map_err(|source| read_error(&directory, source))?;
+            let path = entry.path();
+            let file_type = entry
+                .file_type()
+                .map_err(|source| read_error(&path, source))?;
+            if file_type.is_dir() {
+                directories.push(path);
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension == "json")
+            {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
 }
 
 #[cfg(unix)]

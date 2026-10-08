@@ -275,13 +275,16 @@ fn a_window_over_real_padding_is_refused() {
     let target = xdj700::recipe_target("xdj700-v1.15").expect("target");
     let hashed = xdj700::precondition_hashes(&recipe, target, &official);
 
-    for result in [result.map(|_| ()), hashed.map(|_| ())] {
+    for (call, result) in [
+        ("apply_recipe_v2", result.map(|_| ())),
+        ("precondition_hashes", hashed.map(|_| ())),
+    ] {
         assert!(
             matches!(
                 result,
                 Err(xdj700::RecipeError::PredictableWindow { index: 0, .. })
             ),
-            "a window over padding must be refused, and never hashed for an author"
+            "{call} must refuse a window over padding"
         );
     }
 }

@@ -91,16 +91,22 @@ paste stock bytes into an issue or a commit, only their hash.
    ```bash
    cargo run --release -p patch-cli -- precondition \
      --input /path/to/XDJ700.UPD \
-     --recipe /path/to/draft.json
+     --recipe /path/to/draft.json \
+     --committed-recipes recipes
    ```
 
-   The command runs every check a recipe gets, the leak checks included, before it computes any
-   hash. It never prints the hash of a window the engine would refuse, and it writes nothing. For
-   each replacement it prints the window and its SHA-256, and says whether the recipe already
-   declares it. Copy the hashes into the recipe. The command cannot see the other recipes: CI
-   also checks that your windows do not overlap those of the committed recipes.
-3. Run `patch` to build the update. It checks every hash and prints the output identities; copy
-   them into `expected`. Running `precondition` again shows every hash `as declared`.
+   Before it computes any hash, the command runs the recipe's own checks (release pins, version
+   order, bounds, protected ranges), checks that its windows are identical to or disjoint from
+   those of the committed recipes, and runs each window's leak checks. So it never prints the
+   hash of a window those rules refuse, and it writes nothing. For each replacement it prints the
+   window and its SHA-256, and says whether the recipe already declares it. Copy the hashes into
+   the recipe.
+3. Run `patch` to build the update. It checks every hash, adds the rebuild's own checks (bounded
+   diff, version rule, image size), and prints the output identities; copy them into `expected`.
+   `precondition --check` then exits with an error unless every hash is `as declared`.
+
+Settle your windows before you push: hashes of windows that later move stay in the history, and
+two overlapping windows reveal the bytes between them. CI checks the committed recipes again.
 
 A hash covers whatever is at the declared offset, so it cannot show that the offset is the one
 you meant. Check offsets against your own analysis before step 2. After that, the hash catches a

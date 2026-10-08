@@ -46,11 +46,25 @@ pub fn precondition_hashes(
     let stock = StockMain::load(input, &target.release)?.application()?;
     let stock = stock.decoded();
     let hash = |(index, replacement)| {
-        let range = window(index, replacement, stock.len())?;
-        check_leaks(index, replacement, stock, range.clone())?;
-        Ok(sha256_hex(&stock[range]))
+        Ok(sha256_hex(
+            &stock[checked_window(index, replacement, stock)?],
+        ))
     };
     recipe.replacements.iter().enumerate().map(hash).collect()
+}
+
+/// The replacement's precondition window on the stock application, after every per-window rule:
+/// inside the application, and the leak checks. Applying a recipe and [`precondition_hashes`]
+/// both go through it, so the hashes shown to authors and the windows `patch` accepts cannot
+/// drift apart.
+pub(super) fn checked_window(
+    index: usize,
+    replacement: &Replacement,
+    stock: &[u8],
+) -> Result<Range<usize>, RecipeError> {
+    let range = window(index, replacement, stock.len())?;
+    check_leaks(index, replacement, stock, range.clone())?;
+    Ok(range)
 }
 
 /// The replacement's precondition window, if it lies inside an application of `application_len`.
@@ -79,7 +93,7 @@ pub(super) fn window(
 /// On the stock application: the span's first and last bytes change, at most half of its bytes
 /// equal stock and fewer than [`MIN_PRECONDITION_LEN`] in a row, and the window bytes outside the
 /// span are not dominated by a few values.
-pub(super) fn check_leaks(
+fn check_leaks(
     index: usize,
     replacement: &Replacement,
     stock: &[u8],

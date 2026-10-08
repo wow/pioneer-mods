@@ -44,8 +44,8 @@ This repository currently includes:
   code is not mapped, so staying out of it is enforced by review and staged hardware tests, not
   by the tool. See [docs/recipes.md](./docs/recipes.md) and the flashing guide.
 - `precondition` command: prints a draft recipe's precondition hashes, computed on the official
-  file only after every check, so authors never compute a hash themselves and never see one for
-  a window the engine would refuse
+  file only after the recipe, committed-recipe and leak checks, so authors never compute a hash
+  themselves and never see one for a window those rules refuse
 
 ## Quick start (developer)
 
@@ -96,13 +96,15 @@ cargo run --release -p patch-cli -- patch \
 ```
 
 To write a recipe, `precondition` prints its precondition hashes, computed on the official file
-after every check, so a draft's placeholders can be filled in (see "Writing a recipe" in
+after the recipe, committed-recipe and leak checks, so a draft's placeholders can be filled in;
+`--check` confirms a completed recipe (see "Writing a recipe" in
 [docs/recipes.md](./docs/recipes.md)):
 
 ```bash
 cargo run --release -p patch-cli -- precondition \
   --input /path/to/XDJ700.UPD \
-  --recipe /path/to/draft.json
+  --recipe /path/to/draft.json \
+  --committed-recipes recipes
 ```
 
 Notes:

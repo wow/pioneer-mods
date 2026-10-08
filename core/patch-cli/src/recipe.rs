@@ -1,16 +1,15 @@
 //! Reading a recipe file without trusting it, and checking a schema-v2 recipe before the input it
 //! names is read.
 
+use crate::input::read_pinned_input;
 use anyhow::{Context, Result, bail};
 use patch_core::xdj700::{
     RecipeError, RecipeTarget, check_recipe_v2, recipe_target, unknown_release,
 };
-use patch_core::{RebuildError, open_regular_file};
-use patch_schema::RecipeV2;
+use patch_core::{RebuildError, open_regular_file, recipe_files};
+use patch_schema::{RecipeV2, SCHEMA_VERSION_V2, SchemaVersionProbe, check_windows_across};
 use std::io::Read;
 use std::path::Path;
-
-use crate::input::read_pinned_input;
 
 /// Largest recipe file read: recipes are a few KB, so anything near this is not a recipe.
 pub const MAX_RECIPE_LEN: u64 = 1024 * 1024;
@@ -42,8 +41,24 @@ pub fn read_recipe(path: &Path) -> Result<Vec<u8>> {
     Ok(raw)
 }
 
+/// [`read_recipe`], then its `schema_version`, refusing any version other than 1 and 2 with the
+/// same message for every command.
+pub fn read_recipe_versioned(path: &Path) -> Result<(Vec<u8>, u32)> {
+    let raw = read_recipe(path)?;
+    let probe: SchemaVersionProbe = serde_json::from_slice(&raw)
+        .with_context(|| format!("failed to parse recipe manifest JSON '{}'", path.display()))?;
+    match probe.schema_version {
+        1 | SCHEMA_VERSION_V2 => Ok((raw, probe.schema_version)),
+        other => bail!(
+            "refusing recipe '{}': unsupported schema_version {other}; supported: 1, 2",
+            path.display()
+        ),
+    }
+}
+
 /// A schema-v2 recipe that passed every check that needs no firmware, with its release. The
-/// fields are private, so the recipe cannot change after the checks.
+/// fields are private, so the recipe cannot change after the checks. The library entry points
+/// check it again on purpose: they do not trust their callers.
 pub struct CheckedRecipe {
     recipe: RecipeV2,
     target: &'static RecipeTarget<'static>,
@@ -75,6 +90,32 @@ impl CheckedRecipe {
 
     pub fn target(&self) -> &'static RecipeTarget<'static> {
         self.target
+    }
+
+    /// Checks that the recipe's precondition windows are identical to or disjoint from those of
+    /// every recipe under `dir` for the same release (the committed recipes), so that no hash is
+    /// computed for a window that would overlap one already published. A `dir` without recipes
+    /// is refused, so a mistyped path cannot skip the check.
+    pub fn check_against_committed(&self, dir: &Path) -> Result<()> {
+        let committed_failed = || format!("failed to read committed recipes '{}'", dir.display());
+        let files = recipe_files(dir).with_context(committed_failed)?;
+        if files.is_empty() {
+            bail!(
+                "refusing committed recipes '{}': it holds no recipes; pass the repository's \
+                 recipes directory",
+                dir.display()
+            );
+        }
+        let mut committed = Vec::with_capacity(files.len());
+        for path in files {
+            let raw = read_recipe(&path)?;
+            let recipe: RecipeV2 = serde_json::from_slice(&raw).with_context(|| {
+                format!("failed to parse committed recipe '{}'", path.display())
+            })?;
+            committed.push(recipe);
+        }
+        check_windows_across(std::iter::once(&self.recipe).chain(&committed))
+            .map_err(|error| anyhow::Error::new(error).context(self.refusing.clone()))
     }
 
     /// Reads the official update of the recipe's release from `input`, refusing a file of the

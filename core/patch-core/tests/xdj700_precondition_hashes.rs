@@ -106,3 +106,19 @@ fn refuses_an_input_that_is_not_the_release() {
         "{result:?}"
     );
 }
+
+#[test]
+fn returns_no_hash_at_all_when_a_later_window_is_refused() {
+    let fixture = Fixture::new();
+    let recipe = fixture.recipe(vec![
+        draft(replacement(0x900, &[0xde, 0xad])),
+        draft(windowed(PADDING.end, &[1], 32, 7)),
+    ]);
+
+    let result = precondition_hashes(&recipe, &fixture.target(), &fixture.update);
+
+    assert!(
+        matches!(result, Err(RecipeError::PredictableWindow { index: 1, .. })),
+        "{result:?}"
+    );
+}

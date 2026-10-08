@@ -3,17 +3,10 @@
 
 mod common;
 
-use common::write_bytes;
+use common::{committed_recipe, write_bytes};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-
-const VERSION_MARKER: &str = "../../recipes/xdj700-v1.15/version-marker-0.10.json";
-
-fn committed_recipe() -> Value {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(VERSION_MARKER);
-    serde_json::from_slice(&std::fs::read(path).expect("read recipe")).expect("recipe JSON")
-}
 
 fn run_patch(input: &Path, recipe: &Value, output: &Path, extra: &[&str]) -> Output {
     let dir = output.parent().expect("output directory");

@@ -1,9 +1,9 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
-use patch_cli::recipe::{CheckedRecipe, read_recipe};
+use patch_cli::recipe::{CheckedRecipe, read_recipe_versioned};
 use patch_core::xdj700::apply_recipe_v2_to;
 use patch_core::{apply_recipe, firmware_file_name, read_regular_file};
-use patch_schema::{RecipeManifest, SCHEMA_VERSION_V2, SchemaVersionProbe};
+use patch_schema::{RecipeManifest, SCHEMA_VERSION_V2};
 use std::path::PathBuf;
 
 #[derive(clap::Args, Debug)]
@@ -29,20 +29,11 @@ pub struct PatchArgs {
 }
 
 pub fn patch(args: PatchArgs) -> Result<()> {
-    let raw = read_recipe(&args.recipe)?;
-    let probe: SchemaVersionProbe = serde_json::from_slice(&raw).with_context(|| {
-        format!(
-            "failed to parse recipe manifest JSON '{}'",
-            args.recipe.display()
-        )
-    })?;
-    match probe.schema_version {
-        1 => patch_v1(&args, &raw),
-        SCHEMA_VERSION_V2 => patch_v2(&args, &raw),
-        other => bail!(
-            "refusing recipe '{}': unsupported schema_version {other}; supported: 1, 2",
-            args.recipe.display()
-        ),
+    let (raw, schema_version) = read_recipe_versioned(&args.recipe)?;
+    if schema_version == SCHEMA_VERSION_V2 {
+        patch_v2(&args, &raw)
+    } else {
+        patch_v1(&args, &raw)
     }
 }
 

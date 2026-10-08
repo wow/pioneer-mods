@@ -26,8 +26,8 @@ enum Commands {
     /// Rebuild the official XDJ-700 v1.15 update around an application (verified, never
     /// overwrites).
     Rebuild(RebuildArgs),
-    /// Print the precondition hashes of a schema-v2 recipe, computed on the official update after
-    /// every check, for completing a draft (writes nothing).
+    /// Print the precondition hashes of a schema-v2 recipe for completing a draft, computed on the
+    /// official update after the recipe, committed-recipe and leak checks (writes nothing).
     Precondition(PreconditionArgs),
 }
 

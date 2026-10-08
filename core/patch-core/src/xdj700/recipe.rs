@@ -14,7 +14,7 @@
 
 use super::app_version::VERSION_TEXT_LEN;
 use super::is_label_higher;
-use super::precondition::{check_leaks, window};
+use super::precondition::{checked_window, window};
 use super::rebuild::{RebuiltUpdate, rebuild_with_edited_stock_application};
 use super::release::{OFFICIAL_V115, StockRelease};
 use crate::error::RebuildError;
@@ -152,8 +152,9 @@ pub enum RecipeError {
         len: usize,
     },
 
-    /// The window's actual hash is not reported: the window may not pass the leak checks, and
-    /// an error is easily pasted somewhere public.
+    /// The window's actual hash is not reported: this check cannot see other recipes' windows,
+    /// and an error is easily pasted somewhere public. `patch-cli precondition` computes hashes
+    /// after also checking the committed recipes.
     #[error(
         "replacements[{index}]: the precondition window does not have SHA-256 {expected}; the \
          recipe does not match this application"
@@ -292,15 +293,14 @@ pub fn apply_recipe_v2_to(
         rebuild_with_edited_stock_application(input, release, &recipe.label, |decoded| {
             // Every precondition is checked on the stock application before anything changes.
             for (index, replacement) in recipe.replacements.iter().enumerate() {
-                let range = window(index, replacement, decoded.len())?;
-                let actual = sha256_hex(&decoded[range.clone()]);
+                let range = checked_window(index, replacement, decoded)?;
+                let actual = sha256_hex(&decoded[range]);
                 if !actual.eq_ignore_ascii_case(&replacement.precondition.sha256) {
                     return Err(RecipeError::Precondition {
                         index,
                         expected: replacement.precondition.sha256.clone(),
                     });
                 }
-                check_leaks(index, replacement, &decoded[..], range)?;
             }
             // The version string, then every replaced span.
             let mut declared = Vec::with_capacity(recipe.replacements.len() + 1);
