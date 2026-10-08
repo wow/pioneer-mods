@@ -159,10 +159,10 @@ observed.**
   the application itself.
 - **The unprotected case:** an application whose checksum is valid but which crashes or hangs
   before its update mode starts cannot be recovered by software.
-  - *Observed:* the stage-1b no-op file did not cause this. It was flashed (MAIN progressed for
-    about 3 minutes) and booted normally on one owner's unit, so the updater accepted that
-    file and the unit booted normally afterwards. A modified application yields a
-    different compressed stream and needs its own test.
+  - *Observed:* the stage-1b no-op file did not cause this. On one owner's unit the updater
+    accepted that file (MAIN progressed for about 3 minutes), and the unit booted normally
+    afterwards. A modified application yields a different compressed stream and needs its own
+    test.
   - Files that change behaviour can cause it, so every future modification must stay out of the
     code that runs early during start-up.
 
