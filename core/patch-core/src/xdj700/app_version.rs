@@ -7,7 +7,8 @@
 //! and the next official update showed `MAIN Ver0.10 -> Ver1.15`).
 //!
 //! A modified application reports a version **lower** than the official one, so that the official
-//! update is written over it (a higher version) and restores the stock application (observed).
+//! update is written over it (a higher version) and restores the stock application (observed for
+//! an application changed only in its version string).
 
 use super::decode_application;
 use super::label::{OFFICIAL_V115_LABEL, is_label_higher, validate_version_label};

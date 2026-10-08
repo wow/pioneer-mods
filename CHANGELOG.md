@@ -33,11 +33,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   `xdj700::is_label_higher`; the label helpers (`xdj700::OFFICIAL_V115_LABEL`,
   `is_label_higher`, `validate_version_label`) live in one place.
 - Hardware result, stages 3 and 4 (owner's unit, 2026-10-08): the stage-3 file (stock
-  application reporting `0.10`, label `Ver1.16`) was written (about 3 minutes); the boot screen
-  and UTILITY then showed `0.10`, and the unit worked as stock. The official v1.15 file then
+  application reporting `0.10`, label `Ver1.16`) was written (about 3 minutes); UTILITY then
+  showed `0.10`, and the owner's checks of the unit were all good. The official v1.15 file then
   showed `MAIN Ver0.10 -> Ver1.15`, progressed for about 3 minutes, and UTILITY returned to
   `1.15`. So the unit reports the application's version string, and the vendor's own file
-  restores an application that reports a lower version.
+  restores an application that reports a lower version (observed for a version-only change).
 - Hardware result (owner's unit, 2026-10-08): the `Ver1.16` no-op rebuild was flashed with MAIN
   progressing for about 3 minutes, as in a real write, and the unit boots and plays normally.
   Afterwards the unit still reports `1.15`, and the official v1.15 file shows `Ver1.15 -> Ver1.15`
