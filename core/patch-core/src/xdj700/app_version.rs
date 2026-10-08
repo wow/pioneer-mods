@@ -10,7 +10,7 @@
 //! update is written over it (a higher version) and restores the stock application.
 
 use super::decode_application;
-use super::label::{OFFICIAL_V115_LABEL, is_label_higher};
+use super::label::{OFFICIAL_V115_LABEL, is_label_higher, validate_version_label};
 use super::rebuild::{RebuiltUpdate, StockRelease, rebuild_with_application};
 use crate::error::RebuildError;
 use crate::identity::sha256_hex;
@@ -79,7 +79,8 @@ pub fn with_reported_version(decoded: &[u8], version: &str) -> Result<Vec<u8>, R
 ///
 /// # Errors
 ///
-/// - any [`validate_reported_version`] error, before the input is examined;
+/// - [`RebuildError::InvalidVersionLabel`] or any [`validate_reported_version`] error, before the
+///   input is examined;
 /// - [`RebuildError::UnpinnedInput`] if `input` is not the release file, before it is decoded;
 /// - [`RebuildError::Input`] / [`RebuildError::InputSection`] if it cannot be decoded;
 /// - [`RebuildError::MissingVersionString`], or any [`rebuild_with_application`] error.
@@ -89,6 +90,7 @@ pub fn rebuild_with_stock_application_reporting(
     version: &str,
     label: &str,
 ) -> Result<RebuiltUpdate, RebuildError> {
+    validate_version_label(label)?;
     validate_reported_version(version)?;
     let sha256 = sha256_hex(input);
     if input.len() != release.upd_len || sha256 != release.upd_sha256 {

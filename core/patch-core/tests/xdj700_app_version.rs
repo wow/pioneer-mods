@@ -155,6 +155,12 @@ fn reporting_rebuild_validates_the_version_then_pins_the_input_before_decoding()
         })
     );
     assert_eq!(
+        rebuild_with_stock_application_reporting(&not_a_update, &pinned_elsewhere, "0.10", "1.16"),
+        Err(RebuildError::InvalidVersionLabel {
+            label: "1.16".to_owned()
+        })
+    );
+    assert_eq!(
         rebuild_with_stock_application_reporting(
             &not_a_update,
             &pinned_elsewhere,
