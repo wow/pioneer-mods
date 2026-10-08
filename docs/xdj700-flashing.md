@@ -38,7 +38,8 @@ If it holds:
 
 ## 2. Stages
 
-Go one stage at a time. Do not move on until the previous stage has passed. Photograph the
+Go one stage at a time. Do not move on until the previous stage has passed, except where the
+table says otherwise. Photograph the
 **MAIN line** of every update (section 4).
 
 | Stage | File | What to look for | Next |
