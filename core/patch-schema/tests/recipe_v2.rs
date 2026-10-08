@@ -5,14 +5,14 @@ use patch_schema::{
 };
 use serde_json::json;
 
-/// A replacement whose precondition window starts at the span and is the minimum length.
+/// A replacement whose precondition window is the minimum length, mostly after the span.
 fn replacement(offset: u64, bytes_hex: &str) -> Replacement {
     Replacement {
         offset,
         bytes_hex: bytes_hex.to_owned(),
         precondition: Precondition {
-            offset,
-            len: MIN_PRECONDITION_LEN,
+            before: 0,
+            after: MIN_PRECONDITION_LEN,
             sha256: "ab".repeat(32),
         },
         purpose: "test".to_owned(),
@@ -34,7 +34,7 @@ fn recipe_json() -> serde_json::Value {
         "replacements": [{
             "offset": 2048,
             "bytes_hex": "DEad",
-            "precondition": {"offset": 2040, "len": 32, "sha256": "ab".repeat(32)},
+            "precondition": {"before": 8, "after": 22, "sha256": "ab".repeat(32)},
             "purpose": "x"
         }],
         "expected": {"upd_sha256": "22".repeat(32)}
@@ -193,42 +193,38 @@ fn replacements_must_be_ascending_and_disjoint() {
 }
 
 #[test]
-fn the_precondition_window_is_long_enough_and_contains_the_span() {
+fn the_precondition_window_is_relative_and_long_enough() {
     let mut recipe = recipe();
-    let mut short = replacement(0x800, "0000");
-    short.precondition.len = MIN_PRECONDITION_LEN - 1;
-    recipe.replacements = vec![short];
+    let mut window = replacement(0x800, "0000");
+    window.precondition = Precondition {
+        before: 8,
+        after: 22,
+        sha256: "ab".repeat(32),
+    };
+    assert_eq!(window.precondition_window(), Some(0x7f8..0x818));
+    recipe.replacements = vec![window.clone()];
+    assert_eq!(recipe.validate(), Ok(()), "8 + 2 + 22 = 32 bytes");
+
+    window.precondition.after = 21;
+    recipe.replacements = vec![window.clone()];
     assert_eq!(
         recipe.validate(),
         Err(RecipeV2Error::PreconditionTooShort { index: 0 })
     );
 
-    for (window_offset, window_len) in [(0x801, 64), (0x7c0, 0x41), (0x7c0, 0x40)] {
-        let mut outside = replacement(0x800, "0000");
-        outside.precondition.offset = window_offset;
-        outside.precondition.len = window_len;
-        recipe.replacements = vec![outside];
-        assert_eq!(
-            recipe.validate(),
-            Err(RecipeV2Error::PreconditionNotCovering { index: 0 }),
-            "{window_offset:#x}+{window_len:#x}"
-        );
-    }
+    window.precondition.before = 0x801;
+    window.precondition.after = 32;
+    recipe.replacements = vec![window.clone()];
+    assert_eq!(
+        recipe.validate(),
+        Err(RecipeV2Error::PreconditionBeforeStart { index: 0 })
+    );
 
-    let mut overflowing = replacement(0x800, "00");
-    overflowing.precondition.offset = u64::MAX - 8;
-    recipe.replacements = vec![overflowing];
+    window.precondition.before = 0;
+    window.precondition.after = u64::MAX;
+    recipe.replacements = vec![window];
     assert_eq!(
         recipe.validate(),
         Err(RecipeV2Error::OffsetOverflow { index: 0 })
-    );
-
-    let mut exact_end = replacement(0x81e, "0000");
-    exact_end.precondition.offset = 0x800;
-    recipe.replacements = vec![exact_end];
-    assert_eq!(
-        recipe.validate(),
-        Ok(()),
-        "a span may end at the window's end"
     );
 }

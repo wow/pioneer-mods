@@ -23,9 +23,9 @@ updater installs. Read [xdj700-flashing.md](./xdj700-flashing.md) before you fla
       "offset": 2304,
       "bytes_hex": "0900",
       "precondition": {
-        "offset": 2288,
-        "len": 48,
-        "sha256": "<SHA-256 of the stock bytes in 2288..2336>"
+        "before": 16,
+        "after": 30,
+        "sha256": "<SHA-256 of the stock bytes in 2288..2336: 16 before, the span, 30 after>"
       },
       "purpose": "What the original code does, and what the replacement does instead."
     }
@@ -44,7 +44,7 @@ updater installs. Read [xdj700-flashing.md](./xdj700-flashing.md) before you fla
 | `label` | The MAIN label of the output, `VerX.YY`. It must be **higher** than the release's own version, or the updater skips the file. |
 | `reported_version` | The version the modified application reports, `X.YY`. It must be **lower** than the release's own version, so that the official update restores stock. |
 | `replacements` | Same-length replacements in the decoded application, in ascending order and not overlapping. May be empty. |
-| `precondition` | A window of the stock application that contains the span, at least 32 bytes long, identified by its SHA-256. A recipe never contains vendor bytes. A hash of only a few bytes could be inverted by brute force (four bytes take minutes), which would publish them; a window of 32 or more bytes cannot. Windows are checked on the stock application before anything is replaced, so they may overlap other spans. |
+| `precondition` | The stock bytes around the span, `before` it and `after` it (at least 32 bytes in all), identified by their SHA-256. The window moves with `offset`, so a mistyped offset fails the check. A recipe never contains vendor bytes. A hash of only a few bytes could be inverted by brute force (four bytes take minutes), which would publish them; over 32 or more bytes that is impractical unless most of the window is predictable, so choose windows over code, not over padding or known strings. Windows are checked on the stock application before anything is replaced, so they may overlap other spans. |
 | `bytes_hex` | The project's own replacement bytes. Their length is the span length. |
 | `purpose` | Required. A reviewer must be able to tell what each span changes. |
 | `expected` | Optional, but every committed recipe pins both identities. |
@@ -53,7 +53,7 @@ updater installs. Read [xdj700-flashing.md](./xdj700-flashing.md) before you fla
 
 Before the input is read (`check_recipe_v2`):
 1. The recipe's static checks: fields, hex, order, no overlaps, precondition windows of at least
-   32 bytes that contain their spans.
+   32 bytes that start inside the application.
 2. The release is known, and the recipe repeats its id and pins exactly.
 3. The label is higher, and the reported version lower, than the release's own version.
 4. No replacement overlaps a protected range. For v1.15 that is `[0, 0x800)`: the application

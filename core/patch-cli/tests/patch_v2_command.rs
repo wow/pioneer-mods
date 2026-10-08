@@ -127,7 +127,7 @@ fn refuses_a_replacement_in_the_protected_header_before_reading_the_input() {
     recipe["replacements"] = json!([{
         "offset": 0x740,
         "bytes_hex": "312e3939",
-        "precondition": {"offset": 0x730, "len": 32, "sha256": "00".repeat(32)},
+        "precondition": {"before": 16, "after": 16, "sha256": "00".repeat(32)},
         "purpose": "an attempt to set the version without reported_version"
     }]);
 

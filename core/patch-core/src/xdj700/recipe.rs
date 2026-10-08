@@ -4,7 +4,8 @@
 //! Before the input is read, the recipe must pass its static checks, name a known release whose
 //! pins it repeats exactly, declare a label higher and a reported version lower than the release's
 //! own version, and keep every replacement out of the release's protected ranges. On the stock
-//! application each replacement's original bytes must match their declared SHA-256. The output
+//! application, the precondition window around each replacement (defined relative to its
+//! offset, so a wrong offset moves the window) must match its declared SHA-256. The output
 //! application may differ from stock only in the declared replacements and the version string,
 //! the rebuild then runs its own verification (including the version rule), and any declared
 //! output identities must match.
@@ -15,7 +16,7 @@ use super::release::{OFFICIAL_V115, StockRelease};
 use crate::engine::verify_bounded_diff;
 use crate::error::{PatchEngineError, RebuildError};
 use crate::identity::sha256_hex;
-use patch_schema::{RecipeV2, RecipeV2Error};
+use patch_schema::{RecipeV2, RecipeV2Error, Replacement};
 use std::ops::Range;
 use thiserror::Error;
 
@@ -49,15 +50,25 @@ pub const RECIPE_TARGETS: &[RecipeTarget<'static>] = &[RecipeTarget {
     }],
 }];
 
-// Each target's protected ranges cover its version string, so no replacement can change it.
+// Every target pins a version block, and one of its protected ranges covers the version string
+// and its NUL, so no replacement can change it.
 const _: () = {
-    let target = &RECIPE_TARGETS[0];
-    match target.release.version_block {
-        Some(block) => assert!(
-            target.protected[0].start <= block.offset
-                && block.offset + VERSION_FIELD_TEXT_LEN < target.protected[0].end
-        ),
-        None => panic!("every recipe target pins a version block"),
+    let mut index = 0;
+    while index < RECIPE_TARGETS.len() {
+        let target = &RECIPE_TARGETS[index];
+        let Some(block) = target.release.version_block else {
+            panic!("every recipe target pins a version block");
+        };
+        let mut covered = false;
+        let mut range = 0;
+        while range < target.protected.len() {
+            let protected = &target.protected[range];
+            covered |= protected.start <= block.offset
+                && block.offset + VERSION_FIELD_TEXT_LEN < protected.end;
+            range += 1;
+        }
+        assert!(covered, "a protected range must cover the version string");
+        index += 1;
     }
 };
 
@@ -243,7 +254,7 @@ pub fn apply_recipe_v2_to(
             // since windows may overlap other replacements.
             for (index, replacement) in recipe.replacements.iter().enumerate() {
                 let precondition = &replacement.precondition;
-                let window = window(index, precondition.offset, precondition.len, stock.len())?;
+                let window = window(index, replacement, stock.len())?;
                 let actual = sha256_hex(&stock[window]);
                 if !actual.eq_ignore_ascii_case(&precondition.sha256) {
                     return Err(RecipeError::Precondition {
@@ -295,15 +306,16 @@ pub fn apply_recipe_v2_to(
 /// The four characters of `X.YY`; the NUL after them never changes.
 const VERSION_FIELD_TEXT_LEN: usize = 4;
 
-/// The precondition window `offset..offset + len`, if it lies inside the application.
+/// The replacement's precondition window, if it lies inside the application.
 fn window(
     index: usize,
-    offset: u64,
-    len: u64,
+    replacement: &Replacement,
     application_len: usize,
 ) -> Result<Range<usize>, RecipeError> {
-    // `validate` has checked that this cannot overflow.
-    let end = offset.saturating_add(len);
+    // `validate` has checked that the window neither starts before 0 nor overflows.
+    let Range { start: offset, end } = replacement
+        .precondition_window()
+        .unwrap_or(u64::MAX..u64::MAX);
     let out_of_bounds = || RecipeError::OutOfBounds {
         index,
         end,

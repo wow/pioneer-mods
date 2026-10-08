@@ -37,8 +37,9 @@ This repository currently includes:
 - `rebuild` command: writes a verified no-op rebuild of the official v1.15 update (stock
   application re-encoded) under a declared version label
 - Recipe schema v2: same-length changes to the decoded application of a pinned release, with
-  hash preconditions over windows of at least 32 bytes (no vendor bytes), a protected header
-  and version block, and a bounded diff, written as a complete, verified update by `patch`.
+  hash preconditions over windows of at least 32 bytes around each span (no vendor bytes), a
+  protected header and version block, and a bounded diff, written as a complete, verified
+  update by `patch`.
   "Verified" means checked against the input and the recipe, not safe to flash: the start-up
   code is not mapped, so staying out of it is enforced by review and staged hardware tests, not
   by the tool. See [docs/recipes.md](./docs/recipes.md) and the flashing guide.

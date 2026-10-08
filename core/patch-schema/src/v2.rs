@@ -2,10 +2,12 @@
 //! into a complete, installable update.
 //!
 //! A v2 recipe never carries vendor bytes. Each replacement declares a precondition: the SHA-256
-//! of a window of the stock application, at least [`MIN_PRECONDITION_LEN`] bytes long, that
-//! contains the replaced span. A hash of only a few bytes could be inverted by brute force, which
-//! would publish them; a window this long cannot. Only the project's own replacement bytes are
-//! written. The static checks here need no firmware; the release-specific rules (protected
+//! of the stock bytes in a window around the replaced span, at least [`MIN_PRECONDITION_LEN`]
+//! bytes long. The window is defined relative to the span (`before` and `after` it), so a wrong
+//! `offset` moves the window and fails the hash. A hash of only a few bytes could be inverted by
+//! brute force, which would publish them; over a window this long that is impractical unless
+//! most of the window is predictable, so windows belong over code, not padding or known strings.
+//! Only the project's own replacement bytes are written. The static checks here need no firmware; the release-specific rules (protected
 //! ranges, label and reported-version order, preconditions) are enforced by the engine in
 //! `patch-core`.
 
@@ -65,15 +67,15 @@ pub struct Replacement {
     pub purpose: String,
 }
 
-/// A window of the stock application, containing the replaced span and at least
-/// [`MIN_PRECONDITION_LEN`] bytes long, identified by its SHA-256.
+/// The stock bytes around a replaced span, `offset - before .. offset + len + after`, at least
+/// [`MIN_PRECONDITION_LEN`] bytes long, identified by their SHA-256.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Precondition {
-    /// Decoded-application offset of the window.
-    pub offset: u64,
-    /// Window length in bytes.
-    pub len: u64,
+    /// Bytes of the window before the span.
+    pub before: u64,
+    /// Bytes of the window after the span.
+    pub after: u64,
     /// SHA-256 of the stock bytes in the window.
     pub sha256: String,
 }
@@ -92,6 +94,17 @@ impl Replacement {
     /// The replacement bytes, or `None` unless `bytes_hex` is valid, non-empty hex.
     pub fn bytes(&self) -> Option<Vec<u8>> {
         decode_hex(&self.bytes_hex)
+    }
+
+    /// The precondition window `offset - before .. offset + len + after`, or `None` if it would
+    /// start before 0 or end past the 64-bit range.
+    pub fn precondition_window(&self) -> Option<std::ops::Range<u64>> {
+        let start = self.offset.checked_sub(self.precondition.before)?;
+        let end = self
+            .offset
+            .checked_add(self.len())?
+            .checked_add(self.precondition.after)?;
+        Some(start..end)
     }
 }
 
@@ -133,8 +146,8 @@ pub enum RecipeV2Error {
          (a shorter hash could be inverted to recover vendor bytes)"
     )]
     PreconditionTooShort { index: usize },
-    #[error("replacements[{index}].precondition must contain the replaced span")]
-    PreconditionNotCovering { index: usize },
+    #[error("replacements[{index}].precondition.before reaches before the application's start")]
+    PreconditionBeforeStart { index: usize },
     #[error("expected must pin at least one identity when present")]
     EmptyExpected,
 }
@@ -178,21 +191,17 @@ impl RecipeV2 {
             if replacement.purpose.trim().is_empty() {
                 return Err(RecipeV2Error::EmptyPurpose { index });
             }
-            let overflow = RecipeV2Error::OffsetOverflow { index };
-            let end = replacement
-                .offset
-                .checked_add(replacement.len())
-                .ok_or(overflow.clone())?;
-            let window_end = precondition
-                .offset
-                .checked_add(precondition.len)
-                .ok_or(overflow)?;
-            if precondition.len < MIN_PRECONDITION_LEN {
+            if precondition.before > replacement.offset {
+                return Err(RecipeV2Error::PreconditionBeforeStart { index });
+            }
+            let window = replacement
+                .precondition_window()
+                .ok_or(RecipeV2Error::OffsetOverflow { index })?;
+            if window.end - window.start < MIN_PRECONDITION_LEN {
                 return Err(RecipeV2Error::PreconditionTooShort { index });
             }
-            if precondition.offset > replacement.offset || end > window_end {
-                return Err(RecipeV2Error::PreconditionNotCovering { index });
-            }
+            // Inside the window, so it cannot overflow.
+            let end = replacement.offset + replacement.len();
             if let Some((previous, previous_end)) = previous_end
                 && replacement.offset < previous_end
             {

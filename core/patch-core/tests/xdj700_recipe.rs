@@ -87,17 +87,18 @@ impl Fixture {
     }
 }
 
-/// A replacement of `bytes` at `offset`. Its precondition is a 40-byte window of the stock
-/// application around the span (clamped to the application), identified by its SHA-256.
+/// A replacement of `bytes` at `offset`. Its precondition covers 40 bytes of the stock
+/// application around the span (fewer before it near the end), identified by their SHA-256.
 fn replacement(offset: usize, bytes: &[u8]) -> Replacement {
     let stock = stock_application();
     let start = offset.saturating_sub(8).min(stock.len() - 40);
+    let (before, after) = (offset - start, 40 - (offset - start) - bytes.len());
     Replacement {
         offset: offset as u64,
         bytes_hex: bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
         precondition: Precondition {
-            offset: start as u64,
-            len: 40,
+            before: before as u64,
+            after: after as u64,
             sha256: sha256_hex(&stock[start..start + 40]),
         },
         purpose: "test".to_owned(),
@@ -172,8 +173,7 @@ fn refuses_a_replacement_in_a_protected_range() {
 fn refuses_a_replacement_past_the_application() {
     let fixture = Fixture::new();
     let mut past = replacement(0xff0, &[1, 2, 3, 4]);
-    past.precondition.offset = 0xfe0;
-    past.precondition.len = 0x40;
+    past.precondition.after += 1;
 
     let result = fixture.apply(&fixture.recipe(vec![past]));
 
@@ -181,9 +181,15 @@ fn refuses_a_replacement_past_the_application() {
         result,
         Err(RecipeError::OutOfBounds {
             index: 0,
-            end: 0x1020,
+            end: 0x1001,
             len: 0x1000
         })
+    );
+    let exact_end = replacement(0xffc, &[1, 2, 3, 4]);
+    assert_eq!(exact_end.precondition_window(), Some(0xfd8..0x1000));
+    assert!(
+        fixture.apply(&fixture.recipe(vec![exact_end])).is_ok(),
+        "a window may end exactly at the application's end"
     );
 }
 
@@ -298,19 +304,20 @@ fn refuses_an_invalid_recipe_before_anything_else() {
 #[test]
 fn preconditions_are_checked_on_the_stock_application_before_any_change() {
     let fixture = Fixture::new();
-    // The second window covers the first span; it must still see the stock bytes there.
-    let first = replacement(0x900, &[0xde, 0xad]);
-    let mut second = replacement(0x910, &[0xbe, 0xef]);
-    let stock = stock_application();
-    second.precondition.offset = 0x900;
-    second.precondition.sha256 = sha256_hex(&stock[0x900..0x928]);
-    second.precondition.len = 0x28;
+    // The second window (0x908..0x930) covers the first span; it must still see stock bytes.
+    let first = replacement(0x900, &[0xde, 0xad, 0xbe, 0xef, 0, 0, 0, 0, 0, 0, 1]);
+    let second = replacement(0x910, &[0xbe, 0xef]);
+    assert!(
+        second
+            .precondition_window()
+            .is_some_and(|w| w.start < 0x90b)
+    );
 
     let output = fixture
         .apply(&fixture.recipe(vec![first, second]))
         .expect("apply");
 
-    assert_eq!(&output[0x900..0x902], &[0xde, 0xad]);
+    assert_eq!(&output[0x900..0x904], &[0xde, 0xad, 0xbe, 0xef]);
     assert_eq!(&output[0x910..0x912], &[0xbe, 0xef]);
 }
 
@@ -343,6 +350,20 @@ fn refuses_a_recipe_naming_another_release_than_its_target() {
                 ..
             })
         ),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn a_mistyped_offset_moves_the_window_and_fails_the_precondition() {
+    let fixture = Fixture::new();
+    let mut typo = replacement(0x900, &[0xde, 0xad]);
+    typo.offset = 0x904;
+
+    let result = fixture.apply(&fixture.recipe(vec![typo]));
+
+    assert!(
+        matches!(result, Err(RecipeError::Precondition { index: 0, .. })),
         "{result:?}"
     );
 }
