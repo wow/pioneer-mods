@@ -91,6 +91,9 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
     let application = xdj700::decode_application(&container).expect("application section");
     assert_eq!(application.offset(), xdj700::APPLICATION_SECTION_OFFSET);
     assert_eq!(application.decoded().len(), STOCK_APPLICATION_LEN);
+    // The recipe engine bounds-checks windows against this pin before reading the input.
+    let target = xdj700::recipe_target("xdj700-v1.15").expect("recipe target");
+    assert_eq!(target.application_len, application.decoded().len());
     assert_eq!(application.decoded_sha256(), STOCK_APPLICATION_SHA256);
     assert_eq!(&application.decoded()[..19], &[0; 19]);
     assert_eq!(

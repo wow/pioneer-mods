@@ -7,6 +7,34 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- **Recipe schema v2** (`patch_schema::RecipeV2`, `docs/recipes.md`): same-length replacements in
+  the decoded application of a pinned release. Each replacement has a precondition: the SHA-256 of
+  the stock bytes `before` and `after` the span, with at least 32 bytes outside the span
+  (`MIN_PRECONDITION_LEN`). The window moves with the offset, so a mistyped offset fails, and over
+  a window of code the hash is impractical to invert to recover vendor bytes. A recipe declares a
+  label higher and a reported version lower than the release's own, and may pin its output
+  identities (an empty `expected` is refused). `patch` refuses any `schema_version` other than 1
+  and 2. Precondition windows are at most 4096 bytes and may not overlap each other or a
+  protected range; CI checks that the windows of all committed recipes are disjoint, too. On the
+  stock application the engine refuses a window in which four byte values fill more than half of
+  the bytes outside the span, and a span that keeps its first or last stock byte, more than half
+  of them, or 32 in a row (`bytes_hex` would publish them). A precondition mismatch does not
+  print the actual hash. These guard against accidentally revealing stock bytes; they are
+  heuristics, and review remains the backstop.
+- **Recipe engine** (`xdj700::apply_recipe_v2`, `check_recipe_v2`, `RECIPE_TARGETS`). Before
+  reading the input it checks the recipe, the release pins, the version order and the protected
+  ranges (v1.15: `[0, 0x800)`, the header and version block). On the official file it checks each
+  precondition, that only the declared spans and the version string changed, the rebuild's own
+  verification and the expected identities. It is built on the new
+  `xdj700::rebuild_with_edited_stock_application`, whose `edit` returns its declared ranges: the
+  entry point checks the bounded diff for every caller (`RebuildError::UndeclaredChange`).
+- `patch-cli patch` chooses the engine by `schema_version`. A v2 recipe is checked before the
+  input is read; the input is length-checked before reading; the output is never overwritten.
+- `recipes/xdj700-v1.15/version-marker-0.10.json`, the first committed recipe. It reproduces the
+  hardware-tested stage-3 file (`84cbd263…`), checked by the owner-input tests. CI checks that
+  every committed recipe passes the firmware-free checks and pins its outputs.
+- `xdj700::stock` holds the verified rebuild input and its verification (split from `rebuild`);
+  `patch_cli::input::read_pinned_input` is shared by `rebuild` and `patch`.
 - `patch-cli rebuild --report-version X.YY` sets the version the application reports about
   itself (the NUL-terminated string at decoded offset `0x740`, `xdj700::VERSION_STRING_OFFSET`);
   only those bytes change. It must be lower than 1.15, so that the official v1.15 update is a

@@ -1,6 +1,8 @@
 //! XDJ-700 MAIN version labels (`VerX.YY`) and the order the updater compares them in.
 
 use crate::error::RebuildError;
+/// The one `X.YY` parser, shared with the recipe schema so the two cannot disagree.
+pub(super) use patch_schema::bare_version_number;
 
 /// MAIN label of the official v1.15 release.
 pub const OFFICIAL_V115_LABEL: &str = "Ver1.15";
@@ -38,20 +40,4 @@ pub fn is_label_higher(label: &str, installed: &str) -> Result<bool, RebuildErro
 /// `VerX.YY` as `X * 100 + YY`, or `None` for any other form.
 fn version_number(label: &str) -> Option<u16> {
     label.strip_prefix("Ver").and_then(bare_version_number)
-}
-
-/// A bare `X.YY` (as the application's version string holds it) as `X * 100 + YY`, or `None` for
-/// any other form. The one parser for both labels and reported versions.
-pub(super) fn bare_version_number(version: &str) -> Option<u16> {
-    match version.as_bytes() {
-        [major, b'.', tens, units]
-            if [major, tens, units]
-                .iter()
-                .all(|digit| digit.is_ascii_digit()) =>
-        {
-            let digit = |byte: &u8| u16::from(byte - b'0');
-            Some(digit(major) * 100 + digit(tens) * 10 + digit(units))
-        }
-        _ => None,
-    }
 }

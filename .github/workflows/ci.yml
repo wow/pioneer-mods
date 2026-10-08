@@ -43,6 +43,11 @@ jobs:
       - name: Test
         run: cargo test --workspace --all-targets --all-features
 
+      - name: Docs (broken intra-doc links fail)
+        run: cargo doc --workspace --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: -D warnings
+
   rust-security:
     runs-on: ubuntu-latest
 

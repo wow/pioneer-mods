@@ -267,6 +267,7 @@ dependencies = [
  "libc",
  "patch-schema",
  "serde",
+ "serde_json",
  "sha2",
  "tempfile",
  "thiserror",

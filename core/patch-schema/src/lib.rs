@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub mod v2;
+
+pub use v2::{
+    ExpectedV2, MAX_PRECONDITION_LEN, MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error,
+    Replacement, SCHEMA_VERSION_V2, SchemaVersionProbe, TargetV2, bare_version_number,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecipeManifest {
@@ -117,7 +124,8 @@ pub struct OwnerCopyWindow {
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SchemaValidationError {
     #[error(
-        "unsupported schema_version: {schema_version}; only schema_version=1 is currently supported"
+        "unsupported schema_version: {schema_version}; this manifest format is schema_version=1 \
+         (schema_version=2 recipes use a different format, see docs/recipes.md)"
     )]
     UnsupportedSchemaVersion { schema_version: u32 },
     #[error("recipe_id must not be empty")]
@@ -142,6 +150,6 @@ pub enum SchemaValidationError {
     ZeroLengthOwnerCopyWindow,
 }
 
-fn is_valid_sha256_hex(value: &str) -> bool {
+pub(crate) fn is_valid_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.as_bytes().iter().all(u8::is_ascii_hexdigit)
 }
