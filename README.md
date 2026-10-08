@@ -44,7 +44,8 @@ This repository currently includes:
   code is not mapped, so staying out of it is enforced by review and staged hardware tests, not
   by the tool. See [docs/recipes.md](./docs/recipes.md) and the flashing guide.
 - `precondition` command: prints a draft recipe's precondition hashes, computed on the official
-  file only after every check, so authors never handle stock bytes
+  file only after every check, so authors never compute a hash themselves and never see one for
+  a window the engine would refuse
 
 ## Quick start (developer)
 

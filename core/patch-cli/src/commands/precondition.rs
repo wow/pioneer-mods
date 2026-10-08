@@ -42,7 +42,7 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
     );
     // Every check that needs no firmware, before the input is read.
     let checked = CheckedRecipe::load(&args.recipe, &raw, refusing)?;
-    let (recipe, target) = (&checked.recipe, checked.target);
+    let (recipe, target) = (checked.recipe(), checked.target());
     let input = checked.read_input(&args.input, "hash preconditions on")?;
     let hashes = precondition_hashes(recipe, target, &input)
         .map_err(|error| checked.refusal(&args.input, "hash preconditions on", error))?;

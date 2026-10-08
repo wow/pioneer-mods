@@ -56,7 +56,7 @@ fn patch_v2(args: &PatchArgs, raw: &[u8]) -> Result<()> {
     );
     // Every check that needs no firmware (it validates the recipe first), before the input is read.
     let checked = CheckedRecipe::load(&args.recipe, raw, refusing)?;
-    let (recipe, target) = (&checked.recipe, checked.target);
+    let (recipe, target) = (checked.recipe(), checked.target());
     if args.force {
         bail!(
             "--force is not accepted with a schema-v2 recipe: its output is an installable update \

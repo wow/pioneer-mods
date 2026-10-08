@@ -42,10 +42,11 @@ pub fn read_recipe(path: &Path) -> Result<Vec<u8>> {
     Ok(raw)
 }
 
-/// A schema-v2 recipe that passed every check that needs no firmware, with its release.
+/// A schema-v2 recipe that passed every check that needs no firmware, with its release. The
+/// fields are private, so the recipe cannot change after the checks.
 pub struct CheckedRecipe {
-    pub recipe: RecipeV2,
-    pub target: &'static RecipeTarget<'static>,
+    recipe: RecipeV2,
+    target: &'static RecipeTarget<'static>,
     /// Why a refusal happened, for example "refusing to apply recipe 'r.json' to 'XDJ700.UPD'".
     refusing: String,
 }
@@ -66,6 +67,14 @@ impl CheckedRecipe {
             target,
             refusing,
         })
+    }
+
+    pub fn recipe(&self) -> &RecipeV2 {
+        &self.recipe
+    }
+
+    pub fn target(&self) -> &'static RecipeTarget<'static> {
+        self.target
     }
 
     /// Reads the official update of the recipe's release from `input`, refusing a file of the

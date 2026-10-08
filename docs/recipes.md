@@ -81,9 +81,11 @@ backstop.
 Write recipes against your own copy of the official file, and commit only the recipe. Never
 paste stock bytes into an issue or a commit, only their hash.
 
-1. Choose each span and its window in your own analysis of the decoded application. Write the
-   recipe with every field filled in, and use any 64 hex digits (for example all zeros) as the
-   placeholder for each `precondition.sha256`. Leave `expected` out for now.
+1. Choose each span and its window in your own analysis of the decoded application. The CLI
+   does not extract it; `patch-core` decodes it (`xdj700::decode_application` on the parsed
+   official update), and it stays on your machine. Write the recipe with every field filled in,
+   and use any 64 hex digits (for example all zeros) as the placeholder for each
+   `precondition.sha256`. Leave `expected` out for now.
 2. Compute the hashes:
 
    ```bash
@@ -95,13 +97,15 @@ paste stock bytes into an issue or a commit, only their hash.
    The command runs every check a recipe gets, the leak checks included, before it computes any
    hash. It never prints the hash of a window the engine would refuse, and it writes nothing. For
    each replacement it prints the window and its SHA-256, and says whether the recipe already
-   declares it. Copy the hashes into the recipe.
+   declares it. Copy the hashes into the recipe. The command cannot see the other recipes: CI
+   also checks that your windows do not overlap those of the committed recipes.
 3. Run `patch` to build the update. It checks every hash and prints the output identities; copy
    them into `expected`. Running `precondition` again shows every hash `as declared`.
 
 A hash covers whatever is at the declared offset, so it cannot show that the offset is the one
-you meant. Check offsets against your own analysis before step 2. After that, the hash catches
-any later change to an offset.
+you meant. Check offsets against your own analysis before step 2. After that, the hash catches a
+later change to an offset, unless the same bytes also occur at the new offset (code and tables
+can repeat), so prefer windows long enough to be unique.
 
 ## What the engine checks
 
