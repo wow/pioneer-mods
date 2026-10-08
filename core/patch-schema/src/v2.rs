@@ -2,9 +2,10 @@
 //! into a complete, installable update.
 //!
 //! A v2 recipe is meant to carry no vendor bytes. Each replacement declares a precondition: the
-//! SHA-256 of the stock bytes in a window around the replaced span, [`MIN_PRECONDITION_LEN`] to
-//! [`MAX_PRECONDITION_LEN`] bytes long. The window is defined relative to the span (`before` and
-//! `after` it), so a wrong `offset` moves the window and fails the hash. A hash over only a few
+//! SHA-256 of the stock bytes in a window around the replaced span, at most
+//! [`MAX_PRECONDITION_LEN`] bytes long, with at least [`MIN_PRECONDITION_LEN`] of them outside the
+//! span. The window is defined relative to the span (`before` and `after` it), so a wrong `offset`
+//! moves the window and fails the hash. A hash over only a few
 //! unknown bytes could be inverted by brute force, which would publish them. So the windows of a
 //! recipe may not overlap each other (overlapping windows would share all but a few bytes, and
 //! each hash would reveal the difference); CI checks the same across all committed recipes. On
@@ -22,7 +23,9 @@ use thiserror::Error;
 /// The only `schema_version` this module accepts.
 pub const SCHEMA_VERSION_V2: u32 = 2;
 
-/// Shortest precondition window, so that its hash cannot be inverted to recover vendor bytes.
+/// Fewest stock bytes a precondition window covers outside its span (`before + after`), so that
+/// its hash cannot be inverted to recover vendor bytes. The span's own stock bytes do not count:
+/// they may follow from the replacement (a flipped bit, a changed condition).
 pub const MIN_PRECONDITION_LEN: u64 = 32;
 
 /// Longest precondition window, so that a recipe stays local and cheap to check.
@@ -75,8 +78,8 @@ pub struct Replacement {
     pub purpose: String,
 }
 
-/// The stock bytes around a replaced span, `offset - before .. offset + len + after`, at least
-/// [`MIN_PRECONDITION_LEN`] bytes long, identified by their SHA-256.
+/// The stock bytes around a replaced span, `offset - before .. offset + len + after`, with at least
+/// [`MIN_PRECONDITION_LEN`] of them outside the span, identified by their SHA-256.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Precondition {
@@ -150,8 +153,9 @@ pub enum RecipeV2Error {
     #[error("replacements[{index}] extends past the 64-bit offset range")]
     OffsetOverflow { index: usize },
     #[error(
-        "replacements[{index}].precondition must be at least {MIN_PRECONDITION_LEN} bytes long \
-         (a shorter hash could be inverted to recover vendor bytes)"
+        "replacements[{index}].precondition must cover at least {MIN_PRECONDITION_LEN} bytes \
+         before and after the span in all (a shorter hash could be inverted to recover vendor \
+         bytes)"
     )]
     PreconditionTooShort { index: usize },
     #[error("replacements[{index}].precondition.before reaches before the application's start")]
@@ -213,7 +217,8 @@ impl RecipeV2 {
             let window = replacement
                 .precondition_window()
                 .ok_or(RecipeV2Error::OffsetOverflow { index })?;
-            if window.end - window.start < MIN_PRECONDITION_LEN {
+            // Cannot overflow, since the window did not.
+            if precondition.before + precondition.after < MIN_PRECONDITION_LEN {
                 return Err(RecipeV2Error::PreconditionTooShort { index });
             }
             if window.end - window.start > MAX_PRECONDITION_LEN {

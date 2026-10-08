@@ -233,7 +233,7 @@ fn refuses_a_window_past_the_application_before_reading_the_input() {
     recipe["replacements"] = json!([{
         "offset": 18_601_862,
         "bytes_hex": "0102",
-        "precondition": {"before": 30, "after": 1, "sha256": "00".repeat(32)},
+        "precondition": {"before": 31, "after": 1, "sha256": "00".repeat(32)},
         "purpose": "a window one byte past the application"
     }]);
 

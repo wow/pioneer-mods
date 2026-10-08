@@ -14,12 +14,12 @@
 
 use super::app_version::VERSION_TEXT_LEN;
 use super::is_label_higher;
-use super::precondition::{check_unpublished, window};
+use super::precondition::{check_leaks, window};
 use super::rebuild::{RebuiltUpdate, rebuild_with_edited_stock_application};
 use super::release::{OFFICIAL_V115, StockRelease};
 use crate::error::RebuildError;
 use crate::identity::sha256_hex;
-use patch_schema::{RecipeV2, RecipeV2Error};
+use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2, RecipeV2Error};
 use std::ops::Range;
 use thiserror::Error;
 
@@ -124,8 +124,8 @@ pub enum RecipeError {
 
     #[error(
         "replacements[{index}]: the {top} most common byte values fill {count} of the {len} \
-         unpublished bytes in the precondition window; a window that predictable could be \
-         inverted to recover the rest, so choose a window over code"
+         precondition window bytes around the span; a window that predictable could be inverted \
+         to recover the rest, so choose a window over code"
     )]
     PredictableWindow {
         index: usize,
@@ -135,41 +135,30 @@ pub enum RecipeError {
     },
 
     #[error(
-        "replacements[{index}]: only {unpublished} bytes of the precondition window are not \
-         published by the recipe itself (replacement bytes equal to stock are published); at \
-         least {min} are needed"
-    )]
-    TooFewUnpublishedBytes {
-        index: usize,
-        unpublished: usize,
-        min: usize,
-    },
-
-    #[error(
         "replacements[{index}]: the span's first and last bytes must differ from stock (unchanged \
          bytes at its edges belong outside the span)"
     )]
     UnchangedSpanEdge { index: usize },
 
     #[error(
-        "replacements[{index}]: {unchanged} of the span's {len} bytes equal stock, and bytes_hex \
-         would publish them; at most half may, so split the span around unchanged bytes"
+        "replacements[{index}]: {unchanged} of the span's {len} bytes equal stock, {longest_run} \
+         in a row, and bytes_hex would publish them; at most half may, fewer than \
+         {MIN_PRECONDITION_LEN} in a row, so split the span around unchanged bytes"
     )]
-    MostlyUnchangedSpan {
+    UnchangedSpanBytes {
         index: usize,
         unchanged: usize,
+        longest_run: usize,
         len: usize,
     },
 
+    /// The window's actual hash is not reported: the window may not pass the leak checks, and
+    /// an error is easily pasted somewhere public.
     #[error(
-        "replacements[{index}]: the precondition window has SHA-256 {actual}, not {expected}; \
-         the recipe does not match this application"
+        "replacements[{index}]: the precondition window does not have SHA-256 {expected}; the \
+         recipe does not match this application"
     )]
-    Precondition {
-        index: usize,
-        expected: String,
-        actual: String,
-    },
+    Precondition { index: usize, expected: String },
 
     #[error("{field} is {actual}, but the recipe expects {expected}")]
     UnexpectedOutput {
@@ -309,10 +298,9 @@ pub fn apply_recipe_v2_to(
                     return Err(RecipeError::Precondition {
                         index,
                         expected: replacement.precondition.sha256.clone(),
-                        actual,
                     });
                 }
-                check_unpublished(index, replacement, &decoded[..], range)?;
+                check_leaks(index, replacement, &decoded[..], range)?;
             }
             // The version string, then every replaced span.
             let mut declared = Vec::with_capacity(recipe.replacements.len() + 1);

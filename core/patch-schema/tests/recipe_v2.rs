@@ -35,7 +35,7 @@ fn recipe_json() -> serde_json::Value {
         "replacements": [{
             "offset": 2048,
             "bytes_hex": "DEad",
-            "precondition": {"before": 8, "after": 22, "sha256": "ab".repeat(32)},
+            "precondition": {"before": 8, "after": 24, "sha256": "ab".repeat(32)},
             "purpose": "x"
         }],
         "expected": {"upd_sha256": "22".repeat(32)}
@@ -179,7 +179,7 @@ fn replacements_must_be_ascending_and_disjoint() {
     let mut recipe = recipe();
     // Adjacent spans with windows reaching outward (before the first, after the second).
     let mut first = replacement(0x800, "0000");
-    first.precondition.before = 30;
+    first.precondition.before = 32;
     first.precondition.after = 0;
     recipe.replacements = vec![first, replacement(0x802, "00")];
     assert_eq!(recipe.validate(), Ok(()), "adjacent spans are fine");
@@ -203,14 +203,19 @@ fn the_precondition_window_is_relative_and_long_enough() {
     let mut window = replacement(0x800, "0000");
     window.precondition = Precondition {
         before: 8,
-        after: 22,
+        after: 24,
         sha256: "ab".repeat(32),
     };
-    assert_eq!(window.precondition_window(), Some(0x7f8..0x818));
+    assert_eq!(window.precondition_window(), Some(0x7f8..0x81a));
     recipe.replacements = vec![window.clone()];
-    assert_eq!(recipe.validate(), Ok(()), "8 + 2 + 22 = 32 bytes");
+    assert_eq!(
+        recipe.validate(),
+        Ok(()),
+        "8 + 24 = 32 bytes outside the span"
+    );
 
-    window.precondition.after = 21;
+    // The span's own bytes do not count.
+    window.precondition.after = 23;
     recipe.replacements = vec![window.clone()];
     assert_eq!(
         recipe.validate(),
@@ -234,15 +239,15 @@ fn the_precondition_window_is_relative_and_long_enough() {
     );
 }
 
-/// The leak a reviewer demonstrated: 1-byte replacements whose 32-byte windows slide one byte at
-/// a time share 31 bytes, so each hash would reveal one more stock byte. Windows must not overlap.
+/// The leak a reviewer demonstrated: 1-byte replacements whose windows slide one byte at a time
+/// share all but one byte, so each hash would reveal one more stock byte. Windows must not overlap.
 #[test]
 fn overlapping_precondition_windows_are_refused() {
     let mut recipe = recipe();
     recipe.replacements = (0..4)
         .map(|i| Replacement {
             precondition: Precondition {
-                before: 31,
+                before: 32,
                 after: 0,
                 sha256: "ab".repeat(32),
             },
@@ -262,7 +267,7 @@ fn overlapping_precondition_windows_are_refused() {
     recipe.replacements = vec![
         Replacement {
             precondition: Precondition {
-                before: 31,
+                before: 32,
                 after: 0,
                 sha256: "ab".repeat(32),
             },

@@ -1,11 +1,12 @@
 //! Precondition windows of schema-v2 recipes: where a window lies, and whether the recipe would
-//! reveal the stock bytes in it.
+//! reveal stock bytes, through the window's hash or through `bytes_hex`.
 //!
-//! A window's hash covers stock bytes. Any of them the recipe itself publishes (a replacement byte
-//! equal to stock) are known to every reader, so they do not count towards the window; the bytes
-//! that remain must be at least [`MIN_PRECONDITION_LEN`] and not dominated by a few byte values.
-//! A span must also change its first and last bytes, and at most half of its bytes may equal
-//! stock, so that `bytes_hex` cannot carry stock code verbatim.
+//! A window's hash covers the span's stock bytes too, but those may follow from the replacement (a
+//! flipped bit, a changed condition), so only the bytes outside the span count: `validate` checks
+//! that there are at least [`MIN_PRECONDITION_LEN`] of them, and here they must not be dominated
+//! by a few byte values. A span must change its first and last bytes, and may keep at most half
+//! of its stock bytes, fewer than [`MIN_PRECONDITION_LEN`] in a row: `bytes_hex` publishes them,
+//! and a longer unchanged stretch belongs between two spans, where it can be window bytes instead.
 //!
 //! These are heuristic guards against accidental leaks, not a proof: windows belong over code, not
 //! over strings or tables, and review is the backstop. They hold for one recipe; the windows of
@@ -15,8 +16,8 @@ use super::recipe::RecipeError;
 use patch_schema::{MIN_PRECONDITION_LEN, Replacement};
 use std::ops::Range;
 
-/// How many of the most common byte values may together fill at most half of the unpublished
-/// bytes of a window.
+/// How many of the most common byte values may together fill at most half of the bytes around a
+/// span.
 const TOP_VALUES: usize = 4;
 
 /// The replacement's precondition window, if it lies inside an application of `application_len`.
@@ -43,9 +44,9 @@ pub(super) fn window(
 }
 
 /// On the stock application: the span's first and last bytes change, at most half of its bytes
-/// equal stock, at least [`MIN_PRECONDITION_LEN`] window bytes are not published by the recipe,
-/// and those bytes are not dominated by a few values.
-pub(super) fn check_unpublished(
+/// equal stock and fewer than [`MIN_PRECONDITION_LEN`] in a row, and the window bytes outside the
+/// span are not dominated by a few values.
+pub(super) fn check_leaks(
     index: usize,
     replacement: &Replacement,
     stock: &[u8],
@@ -59,31 +60,26 @@ pub(super) fn check_unpublished(
     if stock_span.first() == bytes.first() || stock_span.last() == bytes.last() {
         return Err(RecipeError::UnchangedSpanEdge { index });
     }
-    let unchanged = stock_span
-        .iter()
-        .zip(&bytes)
-        .filter(|(stock, replacement)| stock == replacement)
-        .count();
-    if unchanged * 2 > bytes.len() {
-        return Err(RecipeError::MostlyUnchangedSpan {
+    let (mut unchanged, mut run, mut longest_run) = (0, 0, 0);
+    for (stock_byte, byte) in stock_span.iter().zip(&bytes) {
+        run = if stock_byte == byte { run + 1 } else { 0 };
+        unchanged += usize::from(run > 0);
+        longest_run = longest_run.max(run);
+    }
+    if unchanged * 2 > bytes.len() || longest_run >= MIN_PRECONDITION_LEN as usize {
+        return Err(RecipeError::UnchangedSpanBytes {
             index,
             unchanged,
+            longest_run,
             len: bytes.len(),
         });
     }
-    let unpublished: Vec<u8> = window
-        .filter(|&offset| !span.contains(&offset) || stock[offset] != bytes[offset - span.start])
-        .map(|offset| stock[offset])
+    let outside: Vec<u8> = stock[window.start..span.start]
+        .iter()
+        .chain(&stock[span.end..window.end])
+        .copied()
         .collect();
-    let min = MIN_PRECONDITION_LEN as usize;
-    if unpublished.len() < min {
-        return Err(RecipeError::TooFewUnpublishedBytes {
-            index,
-            unpublished: unpublished.len(),
-            min,
-        });
-    }
-    check_unpredictable(index, &unpublished)
+    check_unpredictable(index, &outside)
 }
 
 /// Refuses bytes in which the [`TOP_VALUES`] most common byte values fill more than half: padding,

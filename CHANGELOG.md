@@ -9,18 +9,18 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ### Added
 - **Recipe schema v2** (`patch_schema::RecipeV2`, `docs/recipes.md`): same-length replacements in
   the decoded application of a pinned release. Each replacement has a precondition: the SHA-256 of
-  the stock bytes `before` and `after` the span, at least 32 bytes in all
+  the stock bytes `before` and `after` the span, with at least 32 bytes outside the span
   (`MIN_PRECONDITION_LEN`). The window moves with the offset, so a mistyped offset fails, and over
   a window of code the hash is impractical to invert to recover vendor bytes. A recipe declares a
   label higher and a reported version lower than the release's own, and may pin its output
   identities (an empty `expected` is refused). `patch` refuses any `schema_version` other than 1
-  and 2. Precondition windows are 32 to 4096 bytes and may not overlap each other or a protected
-  range; CI checks that the windows of all committed recipes are disjoint, too. On the stock
-  application the engine refuses a window with fewer than 32 bytes the recipe does not publish (a
-  replacement byte equal to stock is published), or in which four byte values fill more than half
-  of those bytes, and a span that keeps its first or last stock byte or more than half of them.
-  These guard against accidentally revealing stock bytes through the hashes; they are heuristics,
-  and review remains the backstop.
+  and 2. Precondition windows are at most 4096 bytes and may not overlap each other or a
+  protected range; CI checks that the windows of all committed recipes are disjoint, too. On the
+  stock application the engine refuses a window in which four byte values fill more than half of
+  the bytes outside the span, and a span that keeps its first or last stock byte, more than half
+  of them, or 32 in a row (`bytes_hex` would publish them). A precondition mismatch does not
+  print the actual hash. These guard against accidentally revealing stock bytes; they are
+  heuristics, and review remains the backstop.
 - **Recipe engine** (`xdj700::apply_recipe_v2`, `check_recipe_v2`, `RECIPE_TARGETS`). Before
   reading the input it checks the recipe, the release pins, the version order and the protected
   ranges (v1.15: `[0, 0x800)`, the header and version block). On the official file it checks each

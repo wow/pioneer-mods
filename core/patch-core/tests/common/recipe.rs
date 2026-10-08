@@ -94,21 +94,34 @@ impl Fixture {
     }
 }
 
-/// A replacement of `bytes` at `offset`. Its precondition covers 40 bytes of the stock
-/// application around the span (8 before it, fewer near the protected header and the end),
-/// identified by their SHA-256.
+/// A replacement of `bytes` at `offset`. Its precondition covers the span and 32 stock bytes
+/// around it (8 before it, fewer near the protected header and more near the end), identified by
+/// their SHA-256.
 pub fn replacement(offset: usize, bytes: &[u8]) -> Replacement {
     let stock = stock_application();
-    let start = if offset >= 0x808 { offset - 8 } else { offset }.min(stock.len() - 40);
-    let (before, after) = (offset - start, 40 - (offset - start) - bytes.len());
+    let len = bytes.len() + 32;
+    let start = if offset >= 0x808 { offset - 8 } else { offset }.min(stock.len() - len);
+    let (before, after) = (offset - start, len - (offset - start) - bytes.len());
     Replacement {
         offset: offset as u64,
         bytes_hex: bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
         precondition: Precondition {
             before: before as u64,
             after: after as u64,
-            sha256: sha256_hex(&stock[start..start + 40]),
+            sha256: sha256_hex(&stock[start..start + len]),
         },
         purpose: "test".to_owned(),
     }
+}
+
+/// [`replacement`] with a window of `before` stock bytes before the span and `after` after it.
+pub fn windowed(offset: usize, bytes: &[u8], before: usize, after: usize) -> Replacement {
+    let stock = stock_application();
+    let mut windowed = replacement(offset, bytes);
+    windowed.precondition = Precondition {
+        before: before as u64,
+        after: after as u64,
+        sha256: sha256_hex(&stock[offset - before..offset + bytes.len() + after]),
+    };
+    windowed
 }
