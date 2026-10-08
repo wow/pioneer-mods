@@ -165,6 +165,11 @@ observed.**
     test.
   - Files that change behaviour can cause it, so every future modification must stay out of the
     code that runs early during start-up.
+- **Rules for every future modification:**
+  - stay out of the code that runs early during start-up (above);
+  - **never change the application's version block** (model, `1.15`, build date). The recovery
+    stick relies on the unit reporting `1.15` (section 1). A modified application that reports a
+    higher version would make the updater skip the `Ver1.16` recovery stick.
 
 ## 6. If something goes wrong
 

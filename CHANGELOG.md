@@ -29,6 +29,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   and is skipped: labels do not stick, and future official releases are expected to install
   normally. The guide's recovery stick is the `Ver1.16` stock no-op file; `Ver1.17` is kept only
   as a spare pin.
+  The guide makes two rules for future modifications: stay out of the early start-up code, and
+  never change the application's version block, so that the recovery stick keeps working.
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
   the updater writes only versions higher than the installed one; equal and lower versions
   (including the project's `Ver0.90` probe) are skipped. Stage 1b therefore uses `Ver1.16`, the
