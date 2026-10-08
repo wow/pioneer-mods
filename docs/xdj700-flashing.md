@@ -16,7 +16,7 @@ error, and the unit still reports "Firmware update is complete":
 | File version vs installed | Result | Observed |
 | --- | --- | --- |
 | higher (`Ver1.14 -> Ver1.15`) | written, MAIN progresses | official v1.15 over v1.14 |
-| higher (`Ver1.15 -> Ver1.16`) | written, MAIN progresses (about 3 minutes) | the project's stage-1b no-op rebuild over v1.15 |
+| higher (`Ver1.15 -> Ver1.16`) | accepted, MAIN progresses (about 3 minutes, as in a real write) | the project's stage-1b no-op rebuild over v1.15 |
 | equal (`Ver1.15 -> Ver1.15`, PANEL `Ver1.00 -> Ver1.00`) | skipped at once | official v1.15 over v1.15; PANEL in every update |
 | lower (`Ver1.15 -> Ver0.90`) | skipped at once | the project's stage-1 file over v1.15 |
 
@@ -160,8 +160,8 @@ observed.**
 - **The unprotected case:** an application whose checksum is valid but which crashes or hangs
   before its update mode starts cannot be recovered by software.
   - *Observed:* the stage-1b no-op file did not cause this. It was flashed (MAIN progressed for
-    about 3 minutes) and booted normally on one owner's unit, so the updater and the loader
-    accepted that file's layout and its encoded application. A modified application yields a
+    about 3 minutes) and booted normally on one owner's unit, so the updater accepted that
+    file and the unit booted normally afterwards. A modified application yields a
     different compressed stream and needs its own test.
   - Files that change behaviour can cause it, so every future modification must stay out of the
     code that runs early during start-up.
