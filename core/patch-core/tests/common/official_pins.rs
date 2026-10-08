@@ -43,8 +43,8 @@ pub const STAGE_FILES: [(&str, &str); 3] = [
         "Ver1.16",
         "9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08",
     ),
-    // Recovery stick: a label above anything installed, because the official v1.15 file is
-    // skipped in normal update mode on a unit that reports 1.15 or higher.
+    // Spare, prepared in case labels stuck. They do not (observed: after `Ver1.16` was written
+    // the unit still reports the application's `1.15`), so the `Ver1.16` file is the recovery.
     (
         "Ver1.17",
         "2d0a4a09a90494c8af26fd585ec5bc1b058b2d731f9d5d72d8ed03fafc4a758d",

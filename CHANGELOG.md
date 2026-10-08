@@ -25,6 +25,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   running official v1.15 or later skips such a file. The comparison is
   `xdj700::is_label_higher`; the label helpers (`xdj700::OFFICIAL_V115_LABEL`,
   `is_label_higher`, `validate_version_label`) live in one place.
+- Hardware result (owner's unit, 2026-10-08): the `Ver1.16` no-op rebuild was **written**
+  (MAIN progressed for about 3 minutes) and the unit boots and plays normally. Afterwards the
+  unit still reports `1.15`, and the official v1.15 file shows `Ver1.15 -> Ver1.15` and is
+  skipped: labels do not stick, and future official releases install normally. The guide's
+  recovery stick is the `Ver1.16` stock no-op file; `Ver1.17` is kept only as a spare pin.
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
   the updater writes only versions higher than the installed one; equal and lower versions
   (including the project's `Ver0.90` probe) are skipped. Stage 1b therefore uses `Ver1.16`, the

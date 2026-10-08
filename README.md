@@ -115,8 +115,10 @@ Notes:
 - The updater only writes a document whose version is higher than the installed one; equal and
   lower versions are skipped, as observed on an owner's unit. A unit on v1.15 therefore needs
   `--label Ver1.16`, the smallest higher label. Its output is always 17,368,545 bytes with
-  SHA-256 `9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08`. If the unit
-  remembers labels, a future official 1.16 would be skipped; see the guide.
+  SHA-256 `9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08`. It was written
+  and booted on an owner's unit. Labels do not stick: the unit keeps reporting the
+  application's own version (`1.15`), so future official releases install normally (observed);
+  see the guide.
 - Flashing any rebuilt file is at your own risk. Read
   [docs/xdj700-flashing.md](./docs/xdj700-flashing.md) first: it covers the stages, how to check
   the file on the USB stick itself, and recovery.
