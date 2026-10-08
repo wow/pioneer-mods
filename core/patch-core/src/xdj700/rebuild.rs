@@ -70,6 +70,7 @@ pub struct RebuiltUpdate {
     main_image_len: usize,
     main_image_sha256: String,
     application_sha256: String,
+    application_reported_version: Option<String>,
 }
 
 impl RebuiltUpdate {
@@ -101,6 +102,12 @@ impl RebuiltUpdate {
     /// SHA-256 of the decoded application, as decoded from the verified bytes.
     pub fn application_sha256(&self) -> &str {
         &self.application_sha256
+    }
+
+    /// The version the verified application reports about itself
+    /// ([`reported_version`](super::reported_version)), if it holds a version string.
+    pub fn application_reported_version(&self) -> Option<&str> {
+        self.application_reported_version.as_deref()
     }
 }
 
@@ -193,6 +200,8 @@ fn rebuild_from(
         main_image_len: verified.len,
         main_image_sha256: verified.sha256,
         application_sha256: verified.application_sha256,
+        // `verify` proved that the output's application decodes to exactly `decoded`.
+        application_reported_version: super::reported_version(decoded).map(str::to_owned),
     })
 }
 

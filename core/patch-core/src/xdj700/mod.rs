@@ -16,7 +16,8 @@ mod label;
 mod rebuild;
 
 pub use app_version::{
-    VERSION_STRING_OFFSET, reported_version, validate_reported_version, with_reported_version,
+    VERSION_STRING_OFFSET, rebuild_with_stock_application_reporting, reported_version,
+    validate_reported_version, with_reported_version,
 };
 pub use grid::RECORD_DATA_LEN;
 pub use label::{OFFICIAL_V115_LABEL, is_label_higher, validate_version_label};

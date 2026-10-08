@@ -1,18 +1,18 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
 use patch_core::xdj700::{
-    OFFICIAL_V115, OFFICIAL_V115_LABEL, RebuiltUpdate, decode_application, is_label_higher,
-    rebuild_with_application, rebuild_with_stock_application, reported_version,
-    validate_reported_version, with_reported_version,
+    OFFICIAL_V115, OFFICIAL_V115_LABEL, is_label_higher, rebuild_with_stock_application,
+    rebuild_with_stock_application_reporting, validate_reported_version,
 };
-use patch_core::{RebuildError, firmware_file_name, open_regular_file, parse_upd, sha256_hex};
+use patch_core::{RebuildError, firmware_file_name, open_regular_file};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 /// Where the rebuilt application comes from.
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApplicationSource {
-    /// The input's own application, unchanged (re-encoded only): a no-op rebuild.
+    /// The input's own application, re-encoded: a no-op rebuild, unless `--report-version` changes
+    /// its version string.
     Stock,
 }
 
@@ -36,8 +36,9 @@ pub struct RebuildArgs {
     pub output: PathBuf,
 
     /// Version the application reports about itself (`X.YY`, lower than 1.15), e.g. `0.10`.
-    /// Only the application's version string changes. The unit then reports this version, so the
-    /// official v1.15 update is written over it. Without it the application keeps `1.15`.
+    /// Only the application's version string changes. The unit is then expected to report this
+    /// version, so that the official v1.15 update is written over it (untested; see the guide's
+    /// stages 3 and 4). Without it the application keeps `1.15`.
     #[arg(long, value_name = "X.YY")]
     pub report_version: Option<String>,
 }
@@ -63,7 +64,7 @@ pub fn rebuild(args: RebuildArgs) -> Result<()> {
             rebuild_with_stock_application(&input, &OFFICIAL_V115, &args.label)
         }
         (ApplicationSource::Stock, Some(version)) => {
-            rebuild_reporting(&input, &args.input, version, &args.label)?
+            rebuild_with_stock_application_reporting(&input, &OFFICIAL_V115, version, &args.label)
         }
     }
     .map_err(|error| refusal(&args.input, error))?;
@@ -79,7 +80,7 @@ pub fn rebuild(args: RebuildArgs) -> Result<()> {
     }
     println!(
         "application_reported_version: {}",
-        args.report_version.as_deref().unwrap_or("1.15")
+        rebuilt.application_reported_version().unwrap_or("none")
     );
     println!("application_sha256_hex: {}", rebuilt.application_sha256());
     println!("version_label: {}", args.label);
@@ -115,32 +116,6 @@ fn read_official_input(path: &Path) -> Result<Vec<u8>> {
         .read_to_end(&mut bytes)
         .with_context(read_failed)?;
     Ok(bytes)
-}
-
-/// The stock application with its version string set to `version`, rebuilt under `label`. The
-/// input's identity is checked before it is decoded.
-fn rebuild_reporting(
-    input: &[u8],
-    path: &Path,
-    version: &str,
-    label: &str,
-) -> Result<Result<RebuiltUpdate, RebuildError>> {
-    let sha256 = sha256_hex(input);
-    if sha256 != OFFICIAL_V115.upd_sha256 {
-        return Err(not_official(path, &sha256));
-    }
-    let container = parse_upd(input).map_err(|error| refusal(path, RebuildError::Input(error)))?;
-    let stock = decode_application(&container)
-        .map_err(|error| refusal(path, RebuildError::InputSection(error)))?;
-    let modified =
-        with_reported_version(stock.decoded(), version).map_err(|error| refusal(path, error))?;
-    debug_assert_eq!(reported_version(&modified), Some(version));
-    Ok(rebuild_with_application(
-        input,
-        &OFFICIAL_V115,
-        &modified,
-        label,
-    ))
 }
 
 fn refusal(path: &Path, error: RebuildError) -> anyhow::Error {

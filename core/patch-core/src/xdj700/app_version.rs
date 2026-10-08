@@ -9,8 +9,12 @@
 //! A modified application reports a version **lower** than the official one, so that the official
 //! update is written over it (a higher version) and restores the stock application.
 
+use super::decode_application;
 use super::label::{OFFICIAL_V115_LABEL, is_label_higher};
+use super::rebuild::{RebuiltUpdate, StockRelease, rebuild_with_application};
 use crate::error::RebuildError;
+use crate::identity::sha256_hex;
+use crate::upd::parse_upd;
 
 /// Decoded-application offset of the NUL-terminated version string (`X.YY`) in v1.15.
 pub const VERSION_STRING_OFFSET: usize = 0x740;
@@ -24,7 +28,8 @@ pub fn reported_version(decoded: &[u8]) -> Option<&str> {
     let field = decoded.get(VERSION_STRING_OFFSET..VERSION_STRING_OFFSET + VERSION_FIELD_LEN)?;
     let (version, nul) = field.split_at(VERSION_FIELD_LEN - 1);
     (nul == [0] && is_version(version))
-        .then(|| std::str::from_utf8(version).expect("checked ASCII"))
+        .then(|| std::str::from_utf8(version).ok())
+        .flatten()
 }
 
 /// Checks that `version` may be reported by a modified application: of the form `X.YY` and
@@ -67,6 +72,32 @@ pub fn with_reported_version(decoded: &[u8], version: &str) -> Result<Vec<u8>, R
     modified[VERSION_STRING_OFFSET..VERSION_STRING_OFFSET + VERSION_FIELD_LEN - 1]
         .copy_from_slice(version.as_bytes());
     Ok(modified)
+}
+
+/// Rebuilds `input`, which must be the `release` file, with its own application changed only to
+/// report `version` (see [`with_reported_version`]), under the MAIN label `label`.
+///
+/// # Errors
+///
+/// - any [`validate_reported_version`] error, before the input is examined;
+/// - [`RebuildError::UnpinnedInput`] if `input` is not the release file, before it is decoded;
+/// - [`RebuildError::Input`] / [`RebuildError::InputSection`] if it cannot be decoded;
+/// - [`RebuildError::MissingVersionString`], or any [`rebuild_with_application`] error.
+pub fn rebuild_with_stock_application_reporting(
+    input: &[u8],
+    release: &StockRelease<'_>,
+    version: &str,
+    label: &str,
+) -> Result<RebuiltUpdate, RebuildError> {
+    validate_reported_version(version)?;
+    let sha256 = sha256_hex(input);
+    if input.len() != release.upd_len || sha256 != release.upd_sha256 {
+        return Err(RebuildError::UnpinnedInput { sha256 });
+    }
+    let container = parse_upd(input).map_err(RebuildError::Input)?;
+    let stock = decode_application(&container).map_err(RebuildError::InputSection)?;
+    let modified = with_reported_version(stock.decoded(), version)?;
+    rebuild_with_application(input, release, &modified, label)
 }
 
 fn is_version(bytes: &[u8]) -> bool {
