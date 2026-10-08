@@ -106,7 +106,8 @@ cargo run --release -p patch-cli -- rebuild \
 Notes:
 - Only the official v1.15 file is accepted (checked by SHA-256). A rebuilt file is never
   accepted as input.
-- `--label` is required. Which labels the device's updater accepts is not yet confirmed.
+- `--label` is required. Only labels higher than the installed version are written (observed);
+  see the guide.
 - The output must not exist; it is never overwritten. The rebuild is verified against the input
   before it is written. It is then written atomically, after its temporary file has been read
   back through the file system. Write to a local disk, then copy the file to a FAT32 stick

@@ -40,7 +40,8 @@ If it holds:
   the application is already the official one.
 
 If it does not hold, the unit reports the label instead (`Ver1.16`), and a future official 1.16
-would be skipped. In that case the project can rebuild that official release, contents
+would be skipped. In that case the project would first need to add support for that release
+(new pins and a verified layout) before it could rebuild it, contents
 unchanged, under a higher label.
 
 ## 2. Stages
@@ -69,13 +70,14 @@ functionally at any stage.
 > Stage 1b is your decision.
 
 The stage files built from the official v1.15 file (`XDJ700.UPD`, 17,371,335 bytes, SHA-256
-`73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c`) are always the same. Both are
+`73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c`) are always the same. All are
 17,368,545 bytes:
 
 | Stage | Label | SHA-256 |
 | --- | --- | --- |
 | 1 | `Ver0.90` | `79f25fa1be84e0e5323273eb36ca5cbfd0f532824f6a2fde0a80db6965380252` |
 | 1b | `Ver1.16` | `9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08` |
+| recovery | `Ver1.17` | `2d0a4a09a90494c8af26fd585ec5bc1b058b2d731f9d5d72d8ed03fafc4a758d` |
 
 (With `--label Ver1.15` the SHA-256 is
 `f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c`, but on a v1.15 unit that
@@ -109,8 +111,15 @@ file is skipped.)
      `9e1ac10e…`). **On any mismatch, stop.** The read-back done by
      `patch-cli` can be served from the operating system's cache, so it does not prove what is on
      the stick.
-5. **Recovery stick ready:** keep a second stick with the official v1.15 file, checked the same
-   way. After a rebuild it may be skipped rather than flashed (see section 6).
+5. **Recovery sticks ready**, each checked the same way (re-insert, then `shasum`):
+   - **Official v1.15 file.** In normal update mode it is skipped on any unit that reports 1.15 or
+     higher, so it only helps where no version is compared, for example possibly the fallback
+     updater (section 5).
+   - **Recovery no-op rebuild labelled `Ver1.17`**: the official application, re-compressed, under
+     a label above anything installed. Its identity is in section 2. Build it with the same
+     command as stage 1b, using `--label Ver1.17` and its own output directory. Trade-off: if the
+     unit remembers labels, using this stick means a future official 1.17 would be skipped.
+     That is acceptable for a recovery. This route is untested.
 6. **Follow the official update procedure:**
    - power off with nothing connected;
    - hold **IN** and **RELOOP/EXIT** while powering on, and release them when the unit asks for
@@ -151,7 +160,8 @@ observed on hardware.**
   the loader starts a separate fallback updater stored in the loader region. Rebuilt files keep
   that region byte-identical. Nobody has seen the fallback updater run, so its screens and the
   stick it expects are unknown. If the unit powers on into an unfamiliar update or USB prompt,
-  try the official v1.15 stick.
+  try the official v1.15 stick first. If its MAIN line jumps to 100%, try the `Ver1.17`
+  recovery stick. Untested.
 - **Interruptions in the loader region are not covered.** The update also writes the loader
   region; it is part of the file, rewritten with identical bytes. An interruption there is not
   covered by the fallback, for official files too. So **never interrupt an update**.
@@ -159,7 +169,8 @@ observed on hardware.**
   the application itself.
 - **The unprotected case:** an application whose checksum is valid but which crashes or hangs
   before its update mode starts cannot be recovered by software.
-  - The stage-1 no-op file is **not expected** to cause this: offline checks show the device
+  - Stage 1b is the **first real write** of a rebuilt file (stage 1 was skipped). The stage-1b
+    no-op file is **not expected** to cause this: offline checks show the device
     will run exactly the stock application.
   - What remains untested is how the updater handles the rebuilt file's layout. A reference
     build with the same layout installed successfully on hardware.
@@ -174,10 +185,11 @@ observed on hardware.**
 - the step;
 - what you expected and what you saw.
 
-Then try the official v1.15 update with the official procedure. **Check whether MAIN really
-progressed** (section 4). After a rebuild the updater may skip the official file as
-`Ver1.15 -> Ver1.15`. That is harmless after a no-op rebuild, whose application is already the
-official one, but it does **not** restore a modified application. Restoring one needs a stock
-no-op rebuild under a label the updater accepts, which means **higher** than the version the
-unit reports. That route is untested.
+Then use a recovery stick (section 3, step 5), and **check whether MAIN really progressed**
+(section 4).
+- **In normal update mode** the official v1.15 file is skipped on a unit that reports 1.15 or
+  higher. That is harmless after a no-op rebuild, whose application is already the official one,
+  but it does **not** restore a modified application.
+- **To actually write the official application**, use the `Ver1.17` recovery stick, or any stock
+  no-op rebuild labelled higher than the version the unit reports. That route is untested.
 If the unit no longer starts, leave it powered off and open an issue with your notes.

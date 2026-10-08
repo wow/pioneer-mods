@@ -35,10 +35,10 @@ const NOOP_MAIN_LEN: usize = 7_250_754;
 const NOOP_MAIN_SHA256: &str = "c03360e5e93493d2d3a292707c74d7889e503ac4f7e7bfa81cbe8d9af88e9eef";
 /// The same no-op rebuild under the hardware-stage labels. The updater writes only versions
 /// higher than the installed one (observed on an owner's unit): `Ver0.90` (stage 1, the lower
-/// probe) was skipped, so stage 1b uses `Ver1.16`, the smallest higher label. The MAIN image is
-/// unchanged; only the descriptor and the CRCs differ. Both are cross-checked byte-identical
-/// against the reference serializer.
-const STAGE_FILES: [(&str, &str); 2] = [
+/// probe) was skipped, so stage 1b uses `Ver1.16`, the smallest higher label, and the recovery
+/// stick uses `Ver1.17`. The MAIN image is unchanged; only the descriptor and the CRCs differ.
+/// All are cross-checked byte-identical against the reference serializer.
+const STAGE_FILES: [(&str, &str); 3] = [
     (
         "Ver0.90",
         "79f25fa1be84e0e5323273eb36ca5cbfd0f532824f6a2fde0a80db6965380252",
@@ -46,6 +46,12 @@ const STAGE_FILES: [(&str, &str); 2] = [
     (
         "Ver1.16",
         "9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08",
+    ),
+    // Recovery stick: a label above anything installed, because the official v1.15 file is
+    // skipped in normal update mode on a unit that reports 1.15 or higher.
+    (
+        "Ver1.17",
+        "2d0a4a09a90494c8af26fd585ec5bc1b058b2d731f9d5d72d8ed03fafc4a758d",
     ),
 ];
 const FALLBACK_DECODED_SHA256: &str =
