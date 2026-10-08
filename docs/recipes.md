@@ -82,18 +82,21 @@ Windows over data that review accepted, and why. No later recipe can use these r
 
 - **`xdj700-v1.15/beat-loop-16-plays-32.json`:** decoded `0xD6234..0xD66F5`, the span and the
   1,216 bytes after it.
-  - The span is a table entry, so any window around it lies over table data. Windows before it
-    are refused (four values fill 74 to 80 percent of them). After it, only 49 of the sizes
-    below 636 bytes pass, all close to the limit of half; every size from 636 bytes passes, and
-    the share falls to 40 percent at about 1,160 bytes. At 1,216 bytes it is 38 percent.
-  - Every valid window covers at least the 32 bytes after the span, which hold the next group of
-    the same handler's table, so that group is reserved whatever the window's size. A later
-    change there cannot add a recipe of its own: it would replace this one, and review would
-    weigh its window against this published hash.
+  - The span is a table entry, so any window around it lies over data. The next group of the
+    same handler's table starts at `0xD6238`. Windows that stop short of it pass the value check
+    only from 2,130 bytes before the span: the nearest kilobyte is 65 to 70 percent zero bytes,
+    and text follows. After the span, only 49 of the sizes below 636 bytes pass, all close to the
+    limit of half; every size from 636 bytes passes, and the share falls to 40 percent at about
+    1,160 bytes. At 1,216 bytes it is 38 percent.
+  - So the window covers the next group, and that group is reserved; leaving it free would take
+    one of the long windows over zero bytes and text. A later change in the range cannot add a
+    recipe of its own: it would replace this one, and review would weigh its window against this
+    published hash.
   - The first commit of #19 published a 96-byte window for the same span. It lies inside this
-    one. The 1,120 bytes that only this window covers pass the value check on their own
-    (38 percent), so the pair does not leave the short stretch covered by one hash alone that the
-    rule against overlapping windows guards against.
+    one. On its own it holds 13 distinct 32-bit values that are neither small numbers, pointers
+    nor round floats, far beyond brute force. The 1,120 bytes that only this window covers pass
+    the value check on their own (38 percent), so the pair does not leave the short stretch
+    covered by one hash alone that the rule against overlapping windows guards against.
 
 ## Writing a recipe
 
