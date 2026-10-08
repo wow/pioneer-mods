@@ -8,9 +8,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 
 ### Added
 - **Recipe schema v2** (`patch_schema::RecipeV2`, `docs/recipes.md`): same-length replacements in
-  the decoded application of a pinned release. A recipe identifies each replaced span by the
-  SHA-256 of its original bytes (no vendor bytes), declares a label higher and a reported version
-  lower than the release's own, and may pin its output identities.
+  the decoded application of a pinned release. Each replacement has a precondition: the SHA-256
+  of a stock window of at least 32 bytes containing the span (`MIN_PRECONDITION_LEN`), so the
+  hash cannot be inverted to recover vendor bytes. A recipe declares a label higher and a
+  reported version lower than the release's own, and may pin its output identities (an empty
+  `expected` is refused). `patch` refuses any `schema_version` other than 1 and 2.
 - **Recipe engine** (`xdj700::apply_recipe_v2`, `check_recipe_v2`, `RECIPE_TARGETS`). Before
   reading the input it checks the recipe, the release pins, the version order and the protected
   ranges (v1.15: `[0, 0x800)`, the header and version block). On the official file it checks each

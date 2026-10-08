@@ -4,8 +4,8 @@ use thiserror::Error;
 pub mod v2;
 
 pub use v2::{
-    ExpectedV2, RecipeV2, RecipeV2Error, Replacement, SCHEMA_VERSION_V2, SchemaVersionProbe,
-    TargetV2,
+    ExpectedV2, MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error, Replacement,
+    SCHEMA_VERSION_V2, SchemaVersionProbe, TargetV2,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,7 +124,8 @@ pub struct OwnerCopyWindow {
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SchemaValidationError {
     #[error(
-        "unsupported schema_version: {schema_version}; only schema_version=1 is currently supported"
+        "unsupported schema_version: {schema_version}; this manifest format is schema_version=1 \
+         (schema_version=2 recipes use a different format, see docs/recipes.md)"
     )]
     UnsupportedSchemaVersion { schema_version: u32 },
     #[error("recipe_id must not be empty")]

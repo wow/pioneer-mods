@@ -21,6 +21,10 @@ use thiserror::Error;
 
 /// A release recipes may target: its identifier, its pins, and the decoded-application ranges no
 /// replacement may touch.
+///
+/// The fields are public so that tests can use synthetic targets. Like [`StockRelease`], the
+/// safety guarantees hold only for the pinned constants in [`RECIPE_TARGETS`]; production code
+/// must never construct a target from user input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RecipeTarget<'a> {
     /// The identifier recipes name in `target.release`.
@@ -45,14 +49,26 @@ pub const RECIPE_TARGETS: &[RecipeTarget<'static>] = &[RecipeTarget {
     }],
 }];
 
+// Each target's protected ranges cover its version string, so no replacement can change it.
+const _: () = {
+    let target = &RECIPE_TARGETS[0];
+    match target.release.version_block {
+        Some(block) => assert!(
+            target.protected[0].start <= block.offset
+                && block.offset + VERSION_FIELD_TEXT_LEN < target.protected[0].end
+        ),
+        None => panic!("every recipe target pins a version block"),
+    }
+};
+
 /// Why a recipe was not applied.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum RecipeError {
     #[error("recipe is invalid: {0}")]
     Invalid(#[from] RecipeV2Error),
 
-    #[error("unknown release {0:?}; known: xdj700-v1.15")]
-    UnknownRelease(String),
+    #[error("unknown release {release:?}; known: {known}")]
+    UnknownRelease { release: String, known: String },
 
     #[error("{field} is {recipe}, but release {release} pins {pinned}")]
     TargetMismatch {
@@ -68,20 +84,27 @@ pub enum RecipeError {
     )]
     LabelNotHigher { label: String, stock: String },
 
-    #[error("replacements[{index}] at {start:#x}..{end:#x} overlaps protected range {protected:?}")]
+    #[error(
+        "replacements[{index}] at {start:#x}..{end:#x} overlaps protected range \
+         {protected_start:#x}..{protected_end:#x}"
+    )]
     Protected {
         index: usize,
         start: u64,
         end: u64,
-        protected: Range<usize>,
+        protected_start: usize,
+        protected_end: usize,
     },
 
-    #[error("replacements[{index}] ends at {end:#x}, past the application's {len} bytes")]
+    #[error(
+        "replacements[{index}].precondition ends at {end:#x}, past the application's end at \
+         {len:#x}"
+    )]
     OutOfBounds { index: usize, end: u64, len: usize },
 
     #[error(
-        "replacements[{index}]: the original bytes have SHA-256 {actual}, not {expected}; the \
-         recipe does not match this application"
+        "replacements[{index}]: the precondition window has SHA-256 {actual}, not {expected}; \
+         the recipe does not match this application"
     )]
     Precondition {
         index: usize,
@@ -111,8 +134,17 @@ pub enum RecipeError {
 pub fn apply_recipe_v2(recipe: &RecipeV2, input: &[u8]) -> Result<RebuiltUpdate, RecipeError> {
     recipe.validate()?;
     let target = recipe_target(&recipe.target.release)
-        .ok_or_else(|| RecipeError::UnknownRelease(recipe.target.release.clone()))?;
+        .ok_or_else(|| unknown_release(&recipe.target.release))?;
     apply_recipe_v2_to(recipe, target, input)
+}
+
+/// [`RecipeError::UnknownRelease`] for `release`, listing the known targets.
+pub fn unknown_release(release: &str) -> RecipeError {
+    let known: Vec<&str> = RECIPE_TARGETS.iter().map(|target| target.id).collect();
+    RecipeError::UnknownRelease {
+        release: release.to_owned(),
+        known: known.join(", "),
+    }
 }
 
 /// The known target with identifier `id`.
@@ -134,7 +166,12 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
     let release = &target.release;
     let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
     let pin = |field, recipe: &str, pinned: &str| {
-        if recipe.eq_ignore_ascii_case(pinned) {
+        let same = if field == "target.release" {
+            recipe == pinned
+        } else {
+            recipe.eq_ignore_ascii_case(pinned)
+        };
+        if same {
             Ok(())
         } else {
             Err(RecipeError::TargetMismatch {
@@ -145,6 +182,7 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
             })
         }
     };
+    pin("target.release", &recipe.target.release, target.id)?;
     pin(
         "target.upd_sha256",
         &recipe.target.upd_sha256,
@@ -164,7 +202,9 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
     }
     block.validate_reported_version(&recipe.reported_version)?;
     for (index, replacement) in recipe.replacements.iter().enumerate() {
-        let (start, end) = (replacement.offset, replacement.offset + replacement.len());
+        let start = replacement.offset;
+        // `validate` has checked that this cannot overflow.
+        let end = start.saturating_add(replacement.len());
         let overlap = |protected: &&Range<usize>| {
             start < protected.end as u64 && (protected.start as u64) < end
         };
@@ -173,7 +213,8 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
                 index,
                 start,
                 end,
-                protected: protected.clone(),
+                protected_start: protected.start,
+                protected_end: protected.end,
             });
         }
     }
@@ -197,21 +238,29 @@ pub fn apply_recipe_v2_to(
     let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
     let rebuilt =
         rebuild_with_edited_stock_application(input, release, &recipe.label, |decoded| {
-            let stock = decoded.clone();
-            // The version string, then every replaced span.
-            let mut declared = Vec::with_capacity(recipe.replacements.len() + 1);
-            declared.push(block.offset..block.offset + VERSION_FIELD_TEXT_LEN);
+            let stock = decoded.to_vec();
+            // Every precondition is checked on the stock application before anything changes,
+            // since windows may overlap other replacements.
             for (index, replacement) in recipe.replacements.iter().enumerate() {
-                let span = span(index, replacement.offset, replacement.len(), decoded.len())?;
-                let actual = sha256_hex(&decoded[span.clone()]);
-                if !actual.eq_ignore_ascii_case(&replacement.original_sha256) {
+                let precondition = &replacement.precondition;
+                let window = window(index, precondition.offset, precondition.len, stock.len())?;
+                let actual = sha256_hex(&stock[window]);
+                if !actual.eq_ignore_ascii_case(&precondition.sha256) {
                     return Err(RecipeError::Precondition {
                         index,
-                        expected: replacement.original_sha256.clone(),
+                        expected: precondition.sha256.clone(),
                         actual,
                     });
                 }
+            }
+            // The version string, then every replaced span.
+            let mut declared = Vec::with_capacity(recipe.replacements.len() + 1);
+            declared.push(block.offset..block.offset + VERSION_FIELD_TEXT_LEN);
+            for replacement in &recipe.replacements {
+                // Inside its precondition window, which is inside the application.
+                let start = usize::try_from(replacement.offset).expect("inside the window");
                 let bytes = replacement.bytes().expect("validated hex");
+                let span = start..start + bytes.len();
                 decoded[span.clone()].copy_from_slice(&bytes);
                 declared.push(span);
             }
@@ -246,13 +295,15 @@ pub fn apply_recipe_v2_to(
 /// The four characters of `X.YY`; the NUL after them never changes.
 const VERSION_FIELD_TEXT_LEN: usize = 4;
 
-fn span(
+/// The precondition window `offset..offset + len`, if it lies inside the application.
+fn window(
     index: usize,
     offset: u64,
     len: u64,
     application_len: usize,
 ) -> Result<Range<usize>, RecipeError> {
-    let end = offset + len;
+    // `validate` has checked that this cannot overflow.
+    let end = offset.saturating_add(len);
     let out_of_bounds = || RecipeError::OutOfBounds {
         index,
         end,

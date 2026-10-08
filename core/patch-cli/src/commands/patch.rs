@@ -1,7 +1,9 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::input::read_pinned_input;
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
-use patch_core::xdj700::{RecipeError, apply_recipe_v2, check_recipe_v2, recipe_target};
+use patch_core::xdj700::{
+    RecipeError, apply_recipe_v2, check_recipe_v2, recipe_target, unknown_release,
+};
 use patch_core::{RebuildError, apply_recipe, firmware_file_name, read_regular_file};
 use patch_schema::{RecipeManifest, RecipeV2, SCHEMA_VERSION_V2, SchemaVersionProbe};
 use std::fs;
@@ -38,10 +40,13 @@ pub fn patch(args: PatchArgs) -> Result<()> {
             args.recipe.display()
         )
     })?;
-    if probe.schema_version == SCHEMA_VERSION_V2 {
-        patch_v2(&args, &raw)
-    } else {
-        patch_v1(&args, &raw)
+    match probe.schema_version {
+        1 => patch_v1(&args, &raw),
+        SCHEMA_VERSION_V2 => patch_v2(&args, &raw),
+        other => bail!(
+            "refusing recipe '{}': unsupported schema_version {other}; supported: 1, 2",
+            args.recipe.display()
+        ),
     }
 }
 
@@ -69,7 +74,7 @@ fn patch_v2(args: &PatchArgs, raw: &[u8]) -> Result<()> {
         );
     }
     let target = recipe_target(&recipe.target.release)
-        .ok_or_else(|| refuse(RecipeError::UnknownRelease(recipe.target.release.clone())))?;
+        .ok_or_else(|| refuse(unknown_release(&recipe.target.release)))?;
     // Every check that needs no firmware, before the input is read.
     check_recipe_v2(&recipe, target).map_err(refuse)?;
     ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;

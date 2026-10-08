@@ -8,7 +8,7 @@ use patch_core::xdj700::{
     VersionBlock, apply_recipe_v2, apply_recipe_v2_to, decode_section, main_document,
 };
 use patch_core::{RebuildError, parse_upd, sha256_hex};
-use patch_schema::{ExpectedV2, RecipeV2, Replacement, TargetV2};
+use patch_schema::{ExpectedV2, Precondition, RecipeV2, Replacement, TargetV2};
 use std::ops::Range;
 
 const PROTECTED: &[Range<usize>] = &[Range {
@@ -87,13 +87,19 @@ impl Fixture {
     }
 }
 
-/// A replacement of `bytes` at `offset`, with the stock bytes' SHA-256 as its precondition.
+/// A replacement of `bytes` at `offset`. Its precondition is a 40-byte window of the stock
+/// application around the span (clamped to the application), identified by its SHA-256.
 fn replacement(offset: usize, bytes: &[u8]) -> Replacement {
     let stock = stock_application();
+    let start = offset.saturating_sub(8).min(stock.len() - 40);
     Replacement {
         offset: offset as u64,
-        original_sha256: sha256_hex(&stock[offset..offset + bytes.len()]),
         bytes_hex: bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
+        precondition: Precondition {
+            offset: start as u64,
+            len: 40,
+            sha256: sha256_hex(&stock[start..start + 40]),
+        },
         purpose: "test".to_owned(),
     }
 }
@@ -133,7 +139,7 @@ fn replacements_are_applied_and_nothing_else_changes() {
 fn refuses_a_replacement_whose_original_bytes_differ() {
     let fixture = Fixture::new();
     let mut wrong = replacement(0x900, &[0xde, 0xad]);
-    wrong.original_sha256 = "00".repeat(32);
+    wrong.precondition.sha256 = "00".repeat(32);
 
     let result = fixture.apply(&fixture.recipe(vec![wrong]));
 
@@ -165,8 +171,9 @@ fn refuses_a_replacement_in_a_protected_range() {
 #[test]
 fn refuses_a_replacement_past_the_application() {
     let fixture = Fixture::new();
-    let mut past = replacement(0xffc, &[1, 2, 3, 4]);
-    past.offset = 0xffe;
+    let mut past = replacement(0xff0, &[1, 2, 3, 4]);
+    past.precondition.offset = 0xfe0;
+    past.precondition.len = 0x40;
 
     let result = fixture.apply(&fixture.recipe(vec![past]));
 
@@ -174,7 +181,7 @@ fn refuses_a_replacement_past_the_application() {
         result,
         Err(RecipeError::OutOfBounds {
             index: 0,
-            end: 0x1002,
+            end: 0x1020,
             len: 0x1000
         })
     );
@@ -232,7 +239,10 @@ fn refuses_an_unknown_release() {
 
     assert_eq!(
         apply_recipe_v2(&fixture.recipe(Vec::new()), &fixture.update).map(|_| ()),
-        Err(RecipeError::UnknownRelease("synthetic".to_owned()))
+        Err(RecipeError::UnknownRelease {
+            release: "synthetic".to_owned(),
+            known: "xdj700-v1.15".to_owned()
+        })
     );
 }
 
@@ -247,22 +257,30 @@ fn checks_declared_output_identities() {
     });
     assert!(apply_recipe_v2_to(&recipe, &fixture.target(), &fixture.update).is_ok());
 
-    recipe.expected = Some(ExpectedV2 {
-        application_sha256: None,
-        upd_sha256: Some("33".repeat(32)),
-    });
-    let result = apply_recipe_v2_to(&recipe, &fixture.target(), &fixture.update);
-
-    assert!(
-        matches!(
-            result,
-            Err(RecipeError::UnexpectedOutput {
-                field: "upd_sha256",
-                ..
-            })
+    for (expected, field) in [
+        (
+            ExpectedV2 {
+                application_sha256: None,
+                upd_sha256: Some("33".repeat(32)),
+            },
+            "upd_sha256",
         ),
-        "{result:?}"
-    );
+        (
+            ExpectedV2 {
+                application_sha256: Some("44".repeat(32)),
+                upd_sha256: None,
+            },
+            "application_sha256",
+        ),
+    ] {
+        recipe.expected = Some(expected);
+        let result = apply_recipe_v2_to(&recipe, &fixture.target(), &fixture.update);
+
+        assert!(
+            matches!(&result, Err(RecipeError::UnexpectedOutput { field: f, .. }) if *f == field),
+            "{result:?}"
+        );
+    }
 }
 
 #[test]
@@ -275,4 +293,56 @@ fn refuses_an_invalid_recipe_before_anything_else() {
         apply_recipe_v2_to(&recipe, &fixture.target(), b"not an update"),
         Err(RecipeError::Invalid(_))
     ));
+}
+
+#[test]
+fn preconditions_are_checked_on_the_stock_application_before_any_change() {
+    let fixture = Fixture::new();
+    // The second window covers the first span; it must still see the stock bytes there.
+    let first = replacement(0x900, &[0xde, 0xad]);
+    let mut second = replacement(0x910, &[0xbe, 0xef]);
+    let stock = stock_application();
+    second.precondition.offset = 0x900;
+    second.precondition.sha256 = sha256_hex(&stock[0x900..0x928]);
+    second.precondition.len = 0x28;
+
+    let output = fixture
+        .apply(&fixture.recipe(vec![first, second]))
+        .expect("apply");
+
+    assert_eq!(&output[0x900..0x902], &[0xde, 0xad]);
+    assert_eq!(&output[0x910..0x912], &[0xbe, 0xef]);
+}
+
+#[test]
+fn hashes_and_pins_compare_without_regard_to_case() {
+    let fixture = Fixture::new();
+    let mut upper = replacement(0x900, &[0xde, 0xad]);
+    upper.precondition.sha256 = upper.precondition.sha256.to_uppercase();
+    upper.bytes_hex = upper.bytes_hex.to_uppercase();
+    let mut recipe = fixture.recipe(vec![upper]);
+    recipe.target.upd_sha256 = recipe.target.upd_sha256.to_uppercase();
+    recipe.target.application_sha256 = recipe.target.application_sha256.to_uppercase();
+
+    assert!(fixture.apply(&recipe).is_ok());
+}
+
+#[test]
+fn refuses_a_recipe_naming_another_release_than_its_target() {
+    let fixture = Fixture::new();
+    let mut recipe = fixture.recipe(Vec::new());
+    recipe.target.release = "xdj700-v1.15".to_owned();
+
+    let result = fixture.apply(&recipe);
+
+    assert!(
+        matches!(
+            &result,
+            Err(RecipeError::TargetMismatch {
+                field: "target.release",
+                ..
+            })
+        ),
+        "{result:?}"
+    );
 }

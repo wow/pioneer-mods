@@ -27,7 +27,7 @@ pub use rebuild::{
 };
 pub use recipe::{
     RECIPE_TARGETS, RecipeError, RecipeTarget, apply_recipe_v2, apply_recipe_v2_to,
-    check_recipe_v2, recipe_target,
+    check_recipe_v2, recipe_target, unknown_release,
 };
 pub use release::{
     MAX_MAIN_GROWTH, OFFICIAL_V115, OFFICIAL_V115_VERSION_BLOCK, StockRelease, VersionBlock,

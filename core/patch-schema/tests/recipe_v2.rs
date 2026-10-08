@@ -1,13 +1,20 @@
 //! Static validation of schema-v2 recipes (no firmware needed).
 
-use patch_schema::{RecipeV2, RecipeV2Error, Replacement, SchemaVersionProbe};
+use patch_schema::{
+    MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error, Replacement, SchemaVersionProbe,
+};
 use serde_json::json;
 
+/// A replacement whose precondition window starts at the span and is the minimum length.
 fn replacement(offset: u64, bytes_hex: &str) -> Replacement {
     Replacement {
         offset,
-        original_sha256: "ab".repeat(32),
         bytes_hex: bytes_hex.to_owned(),
+        precondition: Precondition {
+            offset,
+            len: MIN_PRECONDITION_LEN,
+            sha256: "ab".repeat(32),
+        },
         purpose: "test".to_owned(),
     }
 }
@@ -24,9 +31,12 @@ fn recipe_json() -> serde_json::Value {
         },
         "label": "Ver1.16",
         "reported_version": "0.10",
-        "replacements": [
-            {"offset": 2048, "original_sha256": "ab".repeat(32), "bytes_hex": "DEad", "purpose": "x"}
-        ],
+        "replacements": [{
+            "offset": 2048,
+            "bytes_hex": "DEad",
+            "precondition": {"offset": 2040, "len": 32, "sha256": "ab".repeat(32)},
+            "purpose": "x"
+        }],
         "expected": {"upd_sha256": "22".repeat(32)}
     })
 }
@@ -108,6 +118,16 @@ fn identity_and_version_fields_are_checked() {
                 field: "expected.upd_sha256".to_owned(),
             },
         ),
+        (
+            |r| r.expected.as_mut().expect("expected").application_sha256 = Some("0".to_owned()),
+            RecipeV2Error::InvalidSha256 {
+                field: "expected.application_sha256".to_owned(),
+            },
+        ),
+        (
+            |r| r.expected.as_mut().expect("expected").upd_sha256 = None,
+            RecipeV2Error::EmptyExpected,
+        ),
     ];
 
     for (mutate, error) in cases {
@@ -137,14 +157,13 @@ fn replacement_fields_are_checked() {
         recipe.validate(),
         Err(RecipeV2Error::EmptyPurpose { index: 0 })
     );
-    recipe.replacements = vec![Replacement {
-        original_sha256: "ab".to_owned(),
-        ..replacement(0x800, "00")
-    }];
+    let mut short_hash = replacement(0x800, "00");
+    short_hash.precondition.sha256 = "ab".to_owned();
+    recipe.replacements = vec![short_hash];
     assert_eq!(
         recipe.validate(),
         Err(RecipeV2Error::InvalidSha256 {
-            field: "replacements[0].original_sha256".to_owned()
+            field: "replacements[0].precondition.sha256".to_owned()
         })
     );
     recipe.replacements = vec![replacement(u64::MAX, "0000")];
@@ -171,4 +190,45 @@ fn replacements_must_be_ascending_and_disjoint() {
             "{second:#x}"
         );
     }
+}
+
+#[test]
+fn the_precondition_window_is_long_enough_and_contains_the_span() {
+    let mut recipe = recipe();
+    let mut short = replacement(0x800, "0000");
+    short.precondition.len = MIN_PRECONDITION_LEN - 1;
+    recipe.replacements = vec![short];
+    assert_eq!(
+        recipe.validate(),
+        Err(RecipeV2Error::PreconditionTooShort { index: 0 })
+    );
+
+    for (window_offset, window_len) in [(0x801, 64), (0x7c0, 0x41), (0x7c0, 0x40)] {
+        let mut outside = replacement(0x800, "0000");
+        outside.precondition.offset = window_offset;
+        outside.precondition.len = window_len;
+        recipe.replacements = vec![outside];
+        assert_eq!(
+            recipe.validate(),
+            Err(RecipeV2Error::PreconditionNotCovering { index: 0 }),
+            "{window_offset:#x}+{window_len:#x}"
+        );
+    }
+
+    let mut overflowing = replacement(0x800, "00");
+    overflowing.precondition.offset = u64::MAX - 8;
+    recipe.replacements = vec![overflowing];
+    assert_eq!(
+        recipe.validate(),
+        Err(RecipeV2Error::OffsetOverflow { index: 0 })
+    );
+
+    let mut exact_end = replacement(0x81e, "0000");
+    exact_end.precondition.offset = 0x800;
+    recipe.replacements = vec![exact_end];
+    assert_eq!(
+        recipe.validate(),
+        Ok(()),
+        "a span may end at the window's end"
+    );
 }

@@ -126,12 +126,75 @@ fn refuses_a_replacement_in_the_protected_header_before_reading_the_input() {
     let mut recipe = committed_recipe();
     recipe["replacements"] = json!([{
         "offset": 0x740,
-        "original_sha256": "00".repeat(32),
         "bytes_hex": "312e3939",
+        "precondition": {"offset": 0x730, "len": 32, "sha256": "00".repeat(32)},
         "purpose": "an attempt to set the version without reported_version"
     }]);
 
     let result = run_patch(&missing_input, &recipe, &output, &[]);
 
-    assert_refused(&result, &output, "overlaps protected range 0..2048");
+    assert_refused(&result, &output, "overlaps protected range 0x0..0x800");
+}
+
+#[test]
+fn refuses_a_reported_version_not_lower_before_reading_the_input() {
+    let (_dir, missing_input, output) = paths();
+    let mut recipe = committed_recipe();
+    recipe["reported_version"] = json!("1.15");
+
+    let result = run_patch(&missing_input, &recipe, &output, &[]);
+
+    assert_refused(
+        &result,
+        &output,
+        "reported version 1.15 is not lower than the official 1.15",
+    );
+}
+
+#[test]
+fn never_overwrites_an_existing_output() {
+    let (_dir, input, output) = paths();
+    write_bytes(&input, b"input");
+    write_bytes(&output, b"keep me");
+
+    let result = run_patch(&input, &committed_recipe(), &output, &[]);
+
+    assert!(!result.status.success());
+    assert!(
+        stderr(&result).contains("choose a new output path"),
+        "{}",
+        stderr(&result)
+    );
+    assert_eq!(std::fs::read(&output).expect("read output"), b"keep me");
+}
+
+#[test]
+fn refuses_to_write_over_the_input() {
+    let (_dir, input, _output) = paths();
+    write_bytes(&input, b"input");
+
+    let result = run_patch(&input, &committed_recipe(), &input, &[]);
+
+    assert!(!result.status.success());
+    assert!(
+        stderr(&result).contains("same path as input"),
+        "{}",
+        stderr(&result)
+    );
+    assert_eq!(std::fs::read(&input).expect("read input"), b"input");
+}
+
+#[test]
+fn refuses_an_unsupported_schema_version() {
+    let (_dir, missing_input, output) = paths();
+    let mut recipe = committed_recipe();
+    recipe["schema_version"] = json!(3);
+
+    let result = run_patch(&missing_input, &recipe, &output, &[]);
+
+    assert_refused(
+        &result,
+        &output,
+        "unsupported schema_version 3; supported: 1, 2",
+    );
 }

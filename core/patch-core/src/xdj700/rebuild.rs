@@ -141,7 +141,7 @@ pub fn rebuild_with_edited_stock_application<E: From<RebuildError>>(
     input: &[u8],
     release: &StockRelease<'_>,
     label: &str,
-    edit: impl FnOnce(&mut Vec<u8>) -> Result<(), E>,
+    edit: impl FnOnce(&mut [u8]) -> Result<(), E>,
 ) -> Result<RebuiltUpdate, E> {
     validate_version_label(label)?;
     let stock = StockMain::load(input, release)?;

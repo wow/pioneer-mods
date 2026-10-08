@@ -1,16 +1,22 @@
 //! Recipe schema v2: changes to the **decoded application** of a pinned official release, rebuilt
 //! into a complete, installable update.
 //!
-//! A v2 recipe never carries vendor bytes. Each replaced span is identified by the SHA-256 of the
-//! original bytes (a precondition), and only the project's own replacement bytes are written. The
-//! static checks here need no firmware; the release-specific rules (protected ranges, label and
-//! reported-version order, preconditions) are enforced by the engine in `patch-core`.
+//! A v2 recipe never carries vendor bytes. Each replacement declares a precondition: the SHA-256
+//! of a window of the stock application, at least [`MIN_PRECONDITION_LEN`] bytes long, that
+//! contains the replaced span. A hash of only a few bytes could be inverted by brute force, which
+//! would publish them; a window this long cannot. Only the project's own replacement bytes are
+//! written. The static checks here need no firmware; the release-specific rules (protected
+//! ranges, label and reported-version order, preconditions) are enforced by the engine in
+//! `patch-core`.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// The only `schema_version` this module accepts.
 pub const SCHEMA_VERSION_V2: u32 = 2;
+
+/// Shortest precondition window, so that its hash cannot be inverted to recover vendor bytes.
+pub const MIN_PRECONDITION_LEN: u64 = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -51,12 +57,25 @@ pub struct TargetV2 {
 pub struct Replacement {
     /// Decoded-application offset of the first replaced byte.
     pub offset: u64,
-    /// SHA-256 of the original bytes in `offset..offset + len` (the precondition).
-    pub original_sha256: String,
     /// The replacement bytes, as lowercase or uppercase hex; its length is the span length.
     pub bytes_hex: String,
+    /// What the stock application must hold around the span before anything is replaced.
+    pub precondition: Precondition,
     /// Why this span changes: what the original code does and what the replacement does.
     pub purpose: String,
+}
+
+/// A window of the stock application, containing the replaced span and at least
+/// [`MIN_PRECONDITION_LEN`] bytes long, identified by its SHA-256.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Precondition {
+    /// Decoded-application offset of the window.
+    pub offset: u64,
+    /// Window length in bytes.
+    pub len: u64,
+    /// SHA-256 of the stock bytes in the window.
+    pub sha256: String,
 }
 
 impl Replacement {
@@ -87,7 +106,7 @@ pub struct ExpectedV2 {
     pub upd_sha256: Option<String>,
 }
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum RecipeV2Error {
     #[error("unsupported schema_version {0}; this is a schema_version=2 recipe parser")]
     SchemaVersion(u32),
@@ -109,6 +128,15 @@ pub enum RecipeV2Error {
     UnorderedOrOverlapping { index: usize, previous: usize },
     #[error("replacements[{index}] extends past the 64-bit offset range")]
     OffsetOverflow { index: usize },
+    #[error(
+        "replacements[{index}].precondition must be at least {MIN_PRECONDITION_LEN} bytes long \
+         (a shorter hash could be inverted to recover vendor bytes)"
+    )]
+    PreconditionTooShort { index: usize },
+    #[error("replacements[{index}].precondition must contain the replaced span")]
+    PreconditionNotCovering { index: usize },
+    #[error("expected must pin at least one identity when present")]
+    EmptyExpected,
 }
 
 impl RecipeV2 {
@@ -139,9 +167,10 @@ impl RecipeV2 {
         }
         let mut previous_end: Option<(usize, u64)> = None;
         for (index, replacement) in self.replacements.iter().enumerate() {
+            let precondition = &replacement.precondition;
             check_sha256(
-                &format!("replacements[{index}].original_sha256"),
-                &replacement.original_sha256,
+                &format!("replacements[{index}].precondition.sha256"),
+                &precondition.sha256,
             )?;
             if replacement.bytes().is_none() {
                 return Err(RecipeV2Error::InvalidReplacementBytes { index });
@@ -149,10 +178,21 @@ impl RecipeV2 {
             if replacement.purpose.trim().is_empty() {
                 return Err(RecipeV2Error::EmptyPurpose { index });
             }
+            let overflow = RecipeV2Error::OffsetOverflow { index };
             let end = replacement
                 .offset
                 .checked_add(replacement.len())
-                .ok_or(RecipeV2Error::OffsetOverflow { index })?;
+                .ok_or(overflow.clone())?;
+            let window_end = precondition
+                .offset
+                .checked_add(precondition.len)
+                .ok_or(overflow)?;
+            if precondition.len < MIN_PRECONDITION_LEN {
+                return Err(RecipeV2Error::PreconditionTooShort { index });
+            }
+            if precondition.offset > replacement.offset || end > window_end {
+                return Err(RecipeV2Error::PreconditionNotCovering { index });
+            }
             if let Some((previous, previous_end)) = previous_end
                 && replacement.offset < previous_end
             {
@@ -161,6 +201,9 @@ impl RecipeV2 {
             previous_end = Some((index, end));
         }
         if let Some(expected) = &self.expected {
+            if expected.application_sha256.is_none() && expected.upd_sha256.is_none() {
+                return Err(RecipeV2Error::EmptyExpected);
+            }
             if let Some(sha256) = &expected.application_sha256 {
                 check_sha256("expected.application_sha256", sha256)?;
             }
