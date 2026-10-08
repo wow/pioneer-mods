@@ -36,8 +36,8 @@ pub struct RebuildArgs {
     pub output: PathBuf,
 
     /// Version the application reports about itself (`X.YY`, lower than 1.15), e.g. `0.10`.
-    /// Only the application's version string changes. The unit is then expected to report this
-    /// version, so that the official v1.15 update is written over it (untested; see the guide's
+    /// Only the application's version string changes. The unit then reports this version, so the
+    /// official v1.15 update is written over it and restores stock (observed; see the guide's
     /// stages 3 and 4). Without it the application keeps `1.15`.
     #[arg(long, value_name = "X.YY")]
     pub report_version: Option<String>,

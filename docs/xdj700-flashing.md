@@ -19,6 +19,8 @@ error, and the unit still reports "Firmware update is complete":
 | higher (`Ver1.15 -> Ver1.16`) | accepted, MAIN progresses (about 3 minutes, as in a real write) | the project's stage-1b no-op rebuild over v1.15 |
 | equal (`Ver1.15 -> Ver1.15`, PANEL `Ver1.00 -> Ver1.00`) | skipped at once | official v1.15 over v1.15; PANEL in every update |
 | lower (`Ver1.15 -> Ver0.90`) | skipped at once | the project's stage-1 file over v1.15 |
+| higher (`Ver1.15 -> Ver1.16`) | **written** (about 3 minutes; UTILITY then shows the new application's `0.10`) | the project's stage-3 file over v1.15 |
+| higher (`Ver0.10 -> Ver1.15`) | **written** (about 3 minutes; UTILITY back to `1.15`) | official v1.15 over the stage-3 application |
 
 **Where the installed version comes from (observed 2026-10-08):** not from the label of the last
 file. After the project's `Ver1.16` file was flashed with MAIN progressing for about 3 minutes, as
@@ -26,9 +28,10 @@ in a real write (stage 1b):
 - the boot screen and the UTILITY screen still showed `Ver 1.15`;
 - the official v1.15 file flashed next showed `MAIN Ver1.15 -> Ver1.15` and was skipped.
 
-So **labels do not stick**. The unit reports a version of its own, most likely the version block
-the application carries (model, `1.15`, build date). That source comes from static analysis and
-fits both observations.
+So **labels do not stick**. **The unit reports the application's own version string** (decoded
+offset `0x740`, `1.15` in the official application). Observed on the same unit (stages 3 and 4):
+after the project's stage-3 file changed only that string to `0.10`, the boot screen and UTILITY
+showed `0.10`, and the next official update showed `MAIN Ver0.10 -> Ver1.15`.
 
 What this means:
 - **A rebuild for a unit on v1.15 needs a label higher than `Ver1.15`.** The project uses
@@ -42,11 +45,12 @@ What this means:
   stock no-op rebuild labelled `Ver1.16` (section 3, step 5). That is tested over the official
   application only.
 - **A modified application reports a version lower than 1.15** (`patch-cli rebuild
-  --report-version`, for example `0.10`; the tool refuses 1.15 or higher). The unit is then
-  expected to report that version (the string is the most likely source, see above), so the
-  official v1.15 file would be a higher version and is expected to be **written** over it,
-  restoring the stock application with the vendor's own file. **Untested:** stages 3 and 4 test
-  it.
+  --report-version`, for example `0.10`; the tool refuses 1.15 or higher). The unit then reports
+  that version, so **the official v1.15 file is written over it and restores the stock
+  application with the vendor's own file**. *(Observed on an owner's unit, 2026-10-08, stages 3
+  and 4: `Ver0.10 -> Ver1.15` progressed for about 3 minutes and UTILITY returned to `1.15`.)*
+  This was observed for an application changed only in its version string. An application whose
+  code is changed also needs its own update mode to keep working (section 5).
 - Official files older than v1.15 are no longer downloadable.
 
 ## 2. Stages
@@ -60,8 +64,8 @@ table says otherwise. Photograph the **MAIN line** of every update (section 4).
 | 1 | *(done: the probe that established the policy)* No-op rebuild labelled `Ver0.90`, lower than the installed version | Skipped at once, as the policy predicts; nothing was written | — |
 | 1b | **No-op rebuild labelled `Ver1.16`** (higher) | **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes, as in a real write; the unit still reports `1.15`. *(Passed on an owner's unit, 2026-10-08: about 3 minutes, normal cold boots, browsing, playback, cue and loop unchanged.)* **Skipped:** MAIN jumps to 100%: stop and report it. **An error at any point:** stop and follow section 6 | Stage 2 |
 | 2 | The **official** v1.15 update again (optional: it only confirms section 1) | `MAIN Ver1.15 -> Ver1.15` and a skip, so the label did not stick. *(Observed on an owner's unit, 2026-10-08.)* Nothing is written | Stage 3 |
-| 3 | **Stock application reporting `0.10`, labelled `Ver1.16`** (built **with** `--report-version 0.10`; the recovery stick is built without it): only the application's 4-byte version string differs from stock. This is the first flashed application that differs from stock. A static scan finds one pointer to the string, in a small table with the model string, and no code literal that points to it directly (computed addresses are not ruled out); the reference implementation changed the same string and its build booted on hardware | **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes. Afterwards the boot screen and UTILITY show **`0.10`**; the unit otherwise behaves as stock (cold boots, browsing, playback, cue, loop, and Pro DJ Link or rekordbox if you use them: the version may be announced there). **Skipped**, or UTILITY still shows `1.15`: stop and report it (the unit then runs an application equivalent to stock; the `Ver1.16` stick restores it exactly). **An error:** section 6 | Stage 4 |
-| 4 | The **official** v1.15 update | **Expected: a real write**, `MAIN Ver0.10 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again: the vendor file restores stock. **If it is skipped** (`MAIN Ver0.10 -> Ver1.15` at 100% at once, UTILITY still `0.10`): use the `Ver1.16` stock no-op stick, which is higher than `0.10`, and report it | Done: the unit runs the official application |
+| 3 | **Stock application reporting `0.10`, labelled `Ver1.16`** (built **with** `--report-version 0.10`; the recovery stick is built without it): only the application's 4-byte version string differs from stock. This is the first flashed application that differs from stock. A static scan finds one pointer to the string, in a small table with the model string, and no code literal that points to it directly (computed addresses are not ruled out); the reference implementation changed the same string and its build booted on hardware | *(Passed on an owner's unit, 2026-10-08: about 3 minutes; UTILITY showed `0.10`; everything else worked as stock.)* **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes. Afterwards the boot screen and UTILITY show **`0.10`**; the unit otherwise behaves as stock (cold boots, browsing, playback, cue, loop, and Pro DJ Link or rekordbox if you use them: the version may be announced there). **Skipped**, or UTILITY still shows `1.15`: stop and report it (the unit then runs an application equivalent to stock; the `Ver1.16` stick restores it exactly). **An error:** section 6 | Stage 4 |
+| 4 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-08: `MAIN Ver0.10 -> Ver1.15` progressed for about 3 minutes and UTILITY returned to `1.15`.)* **Expected: a real write**, `MAIN Ver0.10 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again: the vendor file restores stock. **If it is skipped** (`MAIN Ver0.10 -> Ver1.15` at 100% at once, UTILITY still `0.10`): use the `Ver1.16` stock no-op stick, which is higher than `0.10`, and report it | Done: the unit runs the official application |
 
 A no-op rebuild's application is the official one, re-compressed, so nothing should change
 functionally at any stage. Stage 3 changes only the text of the application's version string.
@@ -127,12 +131,14 @@ file is skipped.)
      stage-1b file, `9e1ac10e…`; check the SHA-256, since the stage-3 file has the same name and
      label): the official
      application, re-compressed. On a unit that reports 1.15 it is written in normal update mode
-     (stage 1b, over the official application). Over a modified application it is expected to
-     restore the official one, but that is untested (section 6).
-   - **Official v1.15 file.** On a unit that reports a lower version (for example `0.10` after
-     stage 3) it is expected to be written (stage 4 tests this). On a unit that reports 1.15 it is
-     skipped in normal update mode, so there it only helps where no version is compared, for
-     example possibly the fallback updater (section 5).
+     (stage 1b, over the official application). It is higher than any version a modified
+     application reports (lower than 1.15), so it is the backup restore stick for those too
+     (not yet needed on hardware).
+   - **Official v1.15 file: the first restore stick for a modified application.** On a unit that
+     reports a lower version (for example `0.10` after stage 3) it is written and restores stock
+     (observed, stage 4). On a unit that reports 1.15 it is skipped in normal update mode, so
+     there it only helps where no version is compared, for example possibly the fallback updater
+     (section 5).
    - `patch-cli inspect --structure --input <file>` shows the version a file's application
      reports (`reported_version=…`).
 6. **Follow the official update procedure:**
@@ -184,10 +190,11 @@ observed.**
   the application itself.
 - **The unprotected case:** an application whose checksum is valid but which crashes or hangs
   before its update mode starts cannot be recovered by software.
-  - *Observed:* the stage-1b no-op file did not cause this. On one owner's unit the updater
-    accepted that file (MAIN progressed for about 3 minutes), and the unit booted normally
-    afterwards. A modified application yields a different compressed stream and needs its own
-    test.
+  - *Observed:* the stage-1b and stage-3 files did not cause this. On one owner's unit both
+    were written (stage 3 visibly: UTILITY changed to `0.10`), the unit booted normally, and its
+    update mode still worked (stage 4). Stage 3's application differs from stock only in its
+    version string; an application whose code is changed yields a different compressed stream and
+    needs its own test.
   - Files that change behaviour can cause it, so every future modification must stay out of the
     code that runs early during start-up.
 - **Rules for every future modification:**
@@ -209,10 +216,10 @@ Then use a recovery stick (section 3, step 5), and **check whether MAIN really p
 (section 4).
 - **In normal update mode** the official v1.15 file is skipped on a unit that reports 1.15. That
   is harmless after a no-op rebuild, whose application is already the official one. On a unit
-  that reports a lower version (a modified application, section 5) it is expected to be written
-  and to restore the stock application; stage 4 tests this.
-- **To actually write the official application**, use the `Ver1.16` stock no-op stick, or any
+  that reports a lower version (a modified application, section 5) it is written and restores
+  the stock application (observed, stage 4).
+- **Otherwise, to write the official application**, use the `Ver1.16` stock no-op stick, or any
   stock no-op rebuild labelled higher than the version the unit reports. Writing it over the
-  official application is tested (stage 1b); over a modified application it is not yet.
+  official application is tested (stage 1b).
 
 **If the unit no longer starts, leave it powered off and open an issue with your notes.**

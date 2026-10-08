@@ -2,12 +2,12 @@
 //!
 //! The decoded v1.15 application carries a version block: the model string at `0x720`, the
 //! version string `1.15` (NUL-terminated) at [`VERSION_STRING_OFFSET`], and the build date at
-//! `0x760`. On an owner's unit the reported version, not the MAIN label, is what the updater
-//! compares a file against (observed: after a `Ver1.16` no-op the unit still reported `1.15`);
-//! this string is its most likely source (static analysis).
+//! `0x760`. The updater compares a file's MAIN label against this string, and UTILITY shows it
+//! (observed on an owner's unit: with only this string changed to `0.10`, UTILITY showed `0.10`
+//! and the next official update showed `MAIN Ver0.10 -> Ver1.15`).
 //!
 //! A modified application reports a version **lower** than the official one, so that the official
-//! update is written over it (a higher version) and restores the stock application.
+//! update is written over it (a higher version) and restores the stock application (observed).
 
 use super::decode_application;
 use super::label::{OFFICIAL_V115_LABEL, is_label_higher, validate_version_label};

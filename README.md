@@ -110,8 +110,8 @@ Notes:
   than `Ver1.15` gets a warning.
 - `--report-version X.YY` (optional) sets the version the application reports about itself;
   only its version string changes. It must be lower than 1.15, so that the official v1.15
-  update can restore the stock application (to be confirmed on hardware; see the guide's stages 3
-  and 4). `inspect --structure` shows a file's `reported_version`.
+  update restores the stock application (observed on an owner's unit with `0.10`; see the
+  guide's stages 3 and 4). `inspect --structure` shows a file's `reported_version`.
 - The output must not exist; it is never overwritten. The rebuild is verified against the input
   before it is written. It is then written atomically, after its temporary file has been read
   back through the file system. Write to a local disk, then copy the file to a FAT32 stick
@@ -120,9 +120,9 @@ Notes:
   lower versions are skipped, as observed on an owner's unit. A unit on v1.15 therefore needs
   `--label Ver1.16`, the smallest higher label. Its output is always 17,368,545 bytes with
   SHA-256 `9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08`. It was flashed
-  and booted on an owner's unit. Labels do not stick: afterwards the unit still reports `1.15`
-  (observed; most likely the application's own version block), so future official releases are
-  expected to install normally; see the guide.
+  and booted on an owner's unit. Labels do not stick: the unit reports the application's own
+  version string (observed), so future official releases are expected to install normally; see
+  the guide.
 - Flashing any rebuilt file is at your own risk. Read
   [docs/xdj700-flashing.md](./docs/xdj700-flashing.md) first: it covers the stages, how to check
   the file on the USB stick itself, and recovery.

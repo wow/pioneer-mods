@@ -10,8 +10,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - `patch-cli rebuild --report-version X.YY` sets the version the application reports about
   itself (the NUL-terminated string at decoded offset `0x740`, `xdj700::VERSION_STRING_OFFSET`);
   only those bytes change. It must be lower than 1.15 (`xdj700::validate_reported_version`
-  refuses 1.15 or higher), so that the official v1.15 update is a higher version and is expected
-  to restore the stock application (untested; the guide's stages 3 and 4). The engine step is
+  refuses 1.15 or higher), so that the official v1.15 update is a higher version and restores the
+  stock application. The engine step is
   `xdj700::rebuild_with_stock_application_reporting`, and `RebuiltUpdate` reports the verified
   application's version. `inspect --structure` reports the application's
   `reported_version`. The owner-input tests pin the stage-3 file (`Ver1.16`, reporting `0.10`:
@@ -32,6 +32,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   running official v1.15 or later skips such a file. The comparison is
   `xdj700::is_label_higher`; the label helpers (`xdj700::OFFICIAL_V115_LABEL`,
   `is_label_higher`, `validate_version_label`) live in one place.
+- Hardware result, stages 3 and 4 (owner's unit, 2026-10-08): the stage-3 file (stock
+  application reporting `0.10`, label `Ver1.16`) was written (about 3 minutes); the boot screen
+  and UTILITY then showed `0.10`, and the unit worked as stock. The official v1.15 file then
+  showed `MAIN Ver0.10 -> Ver1.15`, progressed for about 3 minutes, and UTILITY returned to
+  `1.15`. So the unit reports the application's version string, and the vendor's own file
+  restores an application that reports a lower version.
 - Hardware result (owner's unit, 2026-10-08): the `Ver1.16` no-op rebuild was flashed with MAIN
   progressing for about 3 minutes, as in a real write, and the unit boots and plays normally.
   Afterwards the unit still reports `1.15`, and the official v1.15 file shows `Ver1.15 -> Ver1.15`
