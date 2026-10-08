@@ -7,8 +7,8 @@ use common::xdj700::{release, stock_update};
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115_VERSION_BLOCK, StockRelease, VERSION_STRING_OFFSET,
     VersionBlock, decode_section, main_document, rebuild_with_application,
-    rebuild_with_stock_application_reporting, reported_version, reported_version_at,
-    verify_rebuild,
+    rebuild_with_stock_application, rebuild_with_stock_application_reporting, reported_version,
+    reported_version_at, verify_rebuild,
 };
 use patch_core::{RebuildError, parse_upd, sha256_hex};
 
@@ -327,5 +327,30 @@ fn the_refusal_names_what_the_application_reports() {
         message(None).contains("(it reports no version string of the form X.YY)"),
         "{}",
         message(None)
+    );
+}
+
+#[test]
+fn the_rule_lets_the_stock_application_through_every_path() {
+    let stock_application = application(b"1.15\0");
+    let stock = stock_update(&stock_application);
+    let (upd_sha256, stock_sha256) = (sha256_hex(&stock), sha256_hex(&stock_application));
+    let with_rule = release_with(&stock, &upd_sha256, block(&stock_sha256));
+
+    let noop = rebuild_with_stock_application(&stock, &with_rule, "Ver1.16").expect("no-op");
+    let same = rebuild_with_application(&stock, &with_rule, &stock_application, "Ver1.16")
+        .expect("stock application");
+
+    assert_eq!(noop.application_reported_version(), Some("1.15"));
+    assert_eq!(same, noop);
+    assert_eq!(
+        verify_rebuild(
+            &stock,
+            &with_rule,
+            noop.bytes(),
+            &stock_application,
+            "Ver1.16"
+        ),
+        Ok(())
     );
 }
