@@ -99,20 +99,26 @@ rebuild, the first hardware test candidate):
 cargo run --release -p patch-cli -- rebuild \
   --input /path/to/XDJ700.UPD \
   --application stock \
-  --label Ver1.15 \
+  --label Ver1.16 \
   --output /path/to/new-dir/XDJ700.UPD
 ```
 
 Notes:
 - Only the official v1.15 file is accepted (checked by SHA-256). A rebuilt file is never
   accepted as input.
-- `--label` is required. Which labels the device's updater accepts is not yet confirmed.
+- `--label` is required, with no default (see the note on versions below). A label not higher
+  than `Ver1.15` gets a warning.
 - The output must not exist; it is never overwritten. The rebuild is verified against the input
   before it is written. It is then written atomically, after its temporary file has been read
   back through the file system. Write to a local disk, then copy the file to a FAT32 stick
   (on macOS the writer refuses exFAT).
-- With `--label Ver1.15` the output is always 17,368,545 bytes with SHA-256
-  `f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c`.
+- The updater only writes a document whose version is higher than the installed one; equal and
+  lower versions are skipped, as observed on an owner's unit. A unit on v1.15 therefore needs
+  `--label Ver1.16`, the smallest higher label. Its output is always 17,368,545 bytes with
+  SHA-256 `9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08`. It was flashed
+  and booted on an owner's unit. Labels do not stick: afterwards the unit still reports `1.15`
+  (observed; most likely the application's own version block), so future official releases are
+  expected to install normally; see the guide.
 - Flashing any rebuilt file is at your own risk. Read
   [docs/xdj700-flashing.md](./docs/xdj700-flashing.md) first: it covers the stages, how to check
   the file on the USB stick itself, and recovery.

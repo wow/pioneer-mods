@@ -7,6 +7,34 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `patch_core::xdj700::FALLBACK_SECTION_OFFSET` (`0x10000`) records the loader's fallback updater
+  section. Static analysis of the v1.15 loader, not yet observed on hardware, shows it runs this
+  section instead of the application when the application section is left with a bad checksum. The
+  owner-input tests pin its decoded identity and check that a rebuild keeps it intact. They also
+  pin the hardware stage files: the no-op rebuild labelled `Ver0.90` (stage 1, the lower probe),
+  `Ver1.16` (stage 1b, also the recovery stick) and `Ver1.17` (a spare).
+- The XDJ-700 application layout is accepted when the MAIN label is verified (`Ver1.15`) **or**
+  the loader region `[0, 0x40000)` matches the official v1.15 loader
+  (`xdj700::VERIFIED_LOADER_SHA256`). The loader fixes the application offset, and rebuilds keep
+  that region byte-identical, so `inspect --structure` decodes the stage files instead of
+  reporting them as unsupported. `verify_main_version` is replaced by `verify_main_layout`
+  (and `verify_main_layout_with`, which takes the loader identities to accept).
+- `patch-cli rebuild` warns on stderr when the label is not higher than `Ver1.15`, since a unit
+  running official v1.15 or later skips such a file. The comparison is
+  `xdj700::is_label_higher`; the label helpers (`xdj700::OFFICIAL_V115_LABEL`,
+  `is_label_higher`, `validate_version_label`) live in one place.
+- Hardware result (owner's unit, 2026-10-08): the `Ver1.16` no-op rebuild was flashed with MAIN
+  progressing for about 3 minutes, as in a real write, and the unit boots and plays normally.
+  Afterwards the unit still reports `1.15`, and the official v1.15 file shows `Ver1.15 -> Ver1.15`
+  and is skipped: labels do not stick, and future official releases are expected to install
+  normally. The guide's recovery stick is the `Ver1.16` stock no-op file; `Ver1.17` is kept only
+  as a spare pin.
+- The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
+  the updater writes only versions higher than the installed one; equal and lower versions
+  (including the project's `Ver0.90` probe) are skipped. Stage 1b therefore uses `Ver1.16`, the
+  smallest higher label. The guide also covers telling a
+  real flash from a skip, the official update procedure, and what does and does not protect the
+  unit.
 - Initial project documentation for versioning, releasing, and safety disclaimers.
 - Open-source baseline docs: `LICENSE` and `CONTRIBUTING.md`.
 - Rust workspace scaffolding with:
@@ -54,8 +82,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   16-bit additive checksum and the zero-prefix tag at MAIN image offset `0x40000`, then decodes
   the section with a 64 MiB output cap.
 - `inspect --structure` reports the decoded application (offset, compressed length, checksum,
-  decoded length and SHA-256) for XDJ-700 updates. Decoding is limited to MAIN versions whose
-  layout has been verified (currently `Ver1.15`); other versions are reported as `unsupported`.
+  decoded length and SHA-256) for XDJ-700 updates. Decoding is limited to MAIN images whose
+  layout has been verified, by label (`Ver1.15`) or by loader region (see above); others are
+  reported as `unsupported`.
   A container with more than one XDJ-700 MAIN document is refused as ambiguous. The MAIN image
   is built once, during the budgeted summary (`UpdContainer::summary_with_images`). An invalid
   section is reported with its reason instead of failing the whole report.
@@ -96,7 +125,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   produced, and each failed property has its own `RebuildCheck` variant. With the official v1.15
   file, the rebuild reproduces the reference alpha.2 MAIN image and update byte-for-byte
   (owner-input test `official_rebuild`). The no-op rebuild (the stock application re-encoded)
-  is pinned as the first hardware candidate.
+  is pinned. Under the stock label `Ver1.15` (`f2dd19d4…`) a v1.15 unit skips it; the hardware
+  candidate is the `Ver1.16` file (`9e1ac10e…`, see `docs/xdj700-flashing.md`).
 - Deterministic LZSS encoder (`patch_core::lzss::encode`, `encode_section_stream`). It is
   decision-identical to the reference encoder (see README, Acknowledgements). It was verified byte-identical on random,
   exhaustive and adversarial inputs and on the official v1.15 application. CI pins golden vectors

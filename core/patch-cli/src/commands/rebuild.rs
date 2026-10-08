@@ -1,6 +1,8 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
-use patch_core::xdj700::{OFFICIAL_V115, rebuild_with_stock_application, validate_version_label};
+use patch_core::xdj700::{
+    OFFICIAL_V115, OFFICIAL_V115_LABEL, is_label_higher, rebuild_with_stock_application,
+};
 use patch_core::{RebuildError, firmware_file_name, open_regular_file};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -22,8 +24,8 @@ pub struct RebuildArgs {
     #[arg(long, value_enum)]
     pub application: ApplicationSource,
 
-    /// MAIN version label for the rebuilt update, e.g. `Ver1.15`. Required: which labels the
-    /// device's updater accepts is not yet confirmed, so there is no default.
+    /// MAIN version label for the rebuilt update, e.g. `Ver1.16`. Required, with no default: the
+    /// updater writes only versions higher than the installed one.
     #[arg(long)]
     pub label: String,
 
@@ -33,7 +35,15 @@ pub struct RebuildArgs {
 }
 
 pub fn rebuild(args: RebuildArgs) -> Result<()> {
-    validate_version_label(&args.label)?;
+    // Also validates the label's form.
+    if !is_label_higher(&args.label, OFFICIAL_V115_LABEL)? {
+        eprintln!(
+            "warning: label {} is not higher than the official {OFFICIAL_V115_LABEL}; a unit \
+             running official v1.15 or later skips it (MAIN jumps straight to 100% and nothing \
+             is written). See docs/xdj700-flashing.md",
+            args.label
+        );
+    }
     ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;
     let input = read_official_input(&args.input)?;
 

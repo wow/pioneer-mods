@@ -8,31 +8,28 @@
 //!     cargo test -p patch-core --test official_rebuild -- --ignored
 //! ```
 //!
-//! The second variable is needed only by `rebuild_reproduces_the_reference_alpha2_pins` (run
-//! the no-op test alone by name otherwise). It names the decoded alpha.2 application that the
+//! The second variable is needed only by `rebuild_reproduces_the_reference_alpha2_pins` (add
+//! `--skip alpha2` otherwise). It names the decoded alpha.2 application that the
 //! reference implementation's recipe produces from the official file (see the README's
 //! Acknowledgements).
 //! Its identities, and those of the hardware-tested alpha.2 MAIN image and update, are public
 //! pins and contain no firmware bytes.
 
+#[path = "common/official_pins.rs"]
+mod official_pins;
+
+use official_pins::{
+    NOOP_MAIN_LEN, NOOP_MAIN_SHA256, NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES,
+    STOCK_APPLICATION_SHA256, UPD_ENV, UPD_SHA256,
+};
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115, decode_application, rebuild_with_application,
     rebuild_with_stock_application, verify_rebuild,
 };
-use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex};
+use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex, xdj700};
 use std::path::PathBuf;
 
-const UPD_ENV: &str = "PIONEER_XDJ700_V115_UPD";
 const ALPHA2_ENV: &str = "PIONEER_XDJ700_REFERENCE_ALPHA2_DECODED";
-const UPD_SHA256: &str = "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c";
-
-/// The stock application re-encoded under the stock label: the first hardware candidate (H1).
-/// Cross-checked byte-identical against the reference serializer (2026-10-07).
-const NOOP_UPD_LEN: usize = 17_368_545;
-const NOOP_UPD_SHA256: &str = "f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c";
-const NOOP_MAIN_LEN: usize = 7_250_754;
-const NOOP_MAIN_SHA256: &str = "c03360e5e93493d2d3a292707c74d7889e503ac4f7e7bfa81cbe8d9af88e9eef";
-
 const ALPHA2_DECODED_LEN: usize = 18_655_132;
 const ALPHA2_DECODED_SHA256: &str =
     "9bfb9df00336bf79c9c0acc529f29ed1a23afaa82c5fb49df7ed4dffd214d2b6";
@@ -116,4 +113,36 @@ fn rebuild_reproduces_the_reference_alpha2_pins() {
     assert_eq!(rebuilt.main_image_sha256(), ALPHA2_MAIN_SHA256);
     assert_eq!(rebuilt.bytes().len(), ALPHA2_UPD_LEN);
     assert_eq!(rebuilt.sha256(), ALPHA2_UPD_SHA256);
+}
+
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn stage_files_are_pinned_and_decode_to_the_stock_application() {
+    let official = official_upd();
+
+    for (label, sha256) in STAGE_FILES {
+        let rebuilt =
+            rebuild_with_stock_application(&official, &OFFICIAL_V115, label).expect("rebuild");
+
+        assert_eq!(rebuilt.bytes().len(), NOOP_UPD_LEN, "{label}");
+        assert_eq!(rebuilt.sha256(), sha256, "{label}");
+        // Pins every MAIN byte, so the loader region, and the fallback updater pinned in
+        // `official_firmware`, are the official ones.
+        assert_eq!(rebuilt.main_image_sha256(), NOOP_MAIN_SHA256, "{label}");
+        let parsed = parse_upd(rebuilt.bytes()).expect("parse");
+        assert_eq!(
+            xdj700::main_document(&parsed)
+                .expect("main")
+                .descriptor()
+                .version(),
+            label
+        );
+        // The label is not verified, but the loader region is, so the layout is accepted.
+        let application = decode_application(&parsed).expect("stage file decodes");
+        assert_eq!(
+            application.decoded_sha256(),
+            STOCK_APPLICATION_SHA256,
+            "{label}"
+        );
+    }
 }

@@ -224,7 +224,10 @@ pub enum SectionError {
     #[error("container has {count} XDJ-700 MAIN documents; exactly one is required")]
     AmbiguousMainDocument { count: usize },
 
-    #[error("MAIN version {version} has no verified application-section layout")]
+    #[error(
+        "MAIN version {version} has no verified application-section layout, and its loader region \
+         matches no verified loader"
+    )]
     UnverifiedVersion { version: String },
 
     #[error("MAIN image could not be reconstructed: {0}")]
