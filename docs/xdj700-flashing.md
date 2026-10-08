@@ -16,8 +16,10 @@ showed 100% at once while MAIN was still updating. Flashed again over v1.15, bot
 completed immediately.
 
 **So a rebuilt file labelled with the installed version is skipped, not flashed.** A rebuild
-for a unit on v1.15 therefore needs a different label. The project uses **`Ver1.90`**, which is
-clearly unofficial and far above any likely official release.
+for a unit on v1.15 therefore needs a different label. The project first tries a **lower**,
+clearly unofficial label, **`Ver0.90`**. If the updater accepts it, the step is reversible
+whatever the updater does afterwards. Only if it is refused does the project use a higher one,
+**`Ver1.90`**, which is clearly unofficial and far above any likely official release.
 
 Whether the updater accepts a *lower* version is not yet known. Official files older than
 v1.15 are no longer downloadable.
@@ -36,21 +38,27 @@ If it holds:
 
 ## 2. Stages
 
-Go one stage at a time. Do not move on until the previous stage has passed.
+Go one stage at a time. Do not move on until the previous stage has passed. Photograph the
+**MAIN line** of every update (section 4).
 
-| Stage | File | Purpose |
-| --- | --- | --- |
-| 0 | The **official** v1.15 update, if the unit runs an older version | Bring the unit to v1.15 and rehearse the procedure |
-| 1 | The **no-op rebuild** labelled `Ver1.90` | The first rebuilt file. Its application is the official one, re-compressed, so nothing should change functionally |
-| 1b | The official v1.15 update, over stage 1 | Shows whether the updater accepts a lower version. Refused or skipped: harmless; the unit keeps running the stock application |
+| Stage | File | What to look for | Next |
+| --- | --- | --- | --- |
+| 0 | The **official** v1.15 update, if the unit runs an older version | MAIN progresses to v1.15 | Stage 1 |
+| 1 | **No-op rebuild labelled `Ver0.90`** (lower than the installed version) | **Accepted:** MAIN shows `… -> Ver0.90` and progresses for about 3 minutes; the stock application is installed. **Refused or skipped:** an error, or MAIN jumps to 100%; nothing is written | Accepted: stage 2. Refused or skipped: stage 1b |
+| 1b | **No-op rebuild labelled `Ver1.90`** (higher), only if stage 1 was refused or skipped | MAIN shows `… -> Ver1.90` and progresses | Stage 2 |
+| 2 | The **official** v1.15 update again | The MAIN line's **left-hand** version: `Ver1.15 -> Ver1.15` (and a skip) means the unit reports the application's own version. `Ver0.90 -> Ver1.15` or `Ver1.90 -> Ver1.15` means it stores the last file's label | Done: the unit runs the official application either way |
 
-The stage-1 file built from the official v1.15 file (`XDJ700.UPD`, SHA-256 `73edec98…f99c`) is
-always the same:
+A no-op rebuild's application is the official one, re-compressed, so nothing should change
+functionally at any stage. After stage 1 accepted, any official file is "higher", so the unit can
+always go back to official firmware. After stage 1b, see section 1.
 
-| Property | Value |
+The stage files built from the official v1.15 file (`XDJ700.UPD`, SHA-256 `73edec98…f99c`) are
+always the same. Both are 17,368,545 bytes:
+
+| Label | SHA-256 |
 | --- | --- |
-| Size | 17,368,545 bytes |
-| SHA-256 | `aff3a1b9f887dc6d6e35f5686d0edfa644ce9e661011775489315ddbcf928f99` |
+| `Ver0.90` (stage 1) | `79f25fa1be84e0e5323273eb36ca5cbfd0f532824f6a2fde0a80db6965380252` |
+| `Ver1.90` (stage 1b) | `aff3a1b9f887dc6d6e35f5686d0edfa644ce9e661011775489315ddbcf928f99` |
 
 (With `--label Ver1.15` the SHA-256 is
 `f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c`, but on a v1.15 unit that
@@ -65,7 +73,7 @@ file is skipped.)
    ```bash
    mkdir -p ~/xdj700-stage1
    cargo run --release -p patch-cli -- rebuild --input /path/to/XDJ700.UPD \
-     --application stock --label Ver1.90 --output ~/xdj700-stage1/XDJ700.UPD
+     --application stock --label Ver0.90 --output ~/xdj700-stage1/XDJ700.UPD
    ```
 
    The command checks the rebuild against the official file, writes atomically, reads the file
@@ -97,7 +105,7 @@ file is skipped.)
 **First, tell a real flash from a skip.** A completed update and a skipped one end on the same
 "Firmware update is complete" screen:
 - **Real flash:** the MAIN line shows the installed version, then the file's label (for example
-  `MAIN Ver1.15 -> Ver1.90`), and its progress bar runs for about 3 minutes.
+  `MAIN Ver1.15 -> Ver0.90`), and its progress bar runs for about 3 minutes.
 - **Skip:** the MAIN line jumps straight to 100%.
 
 A stage only passes if MAIN really progressed. **Photograph the MAIN line**: its left-hand

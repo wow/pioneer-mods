@@ -33,11 +33,21 @@ const NOOP_UPD_LEN: usize = 17_368_545;
 const NOOP_UPD_SHA256: &str = "f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c";
 const NOOP_MAIN_LEN: usize = 7_250_754;
 const NOOP_MAIN_SHA256: &str = "c03360e5e93493d2d3a292707c74d7889e503ac4f7e7bfa81cbe8d9af88e9eef";
-/// The same no-op rebuild labelled `Ver1.90`, the hardware stage-1 file. The updater skips a
-/// document whose version equals the installed one, so stage 1 on a v1.15 unit needs another
-/// label. The MAIN image is unchanged; only the descriptor and the CRCs differ.
-const NOOP_VER190_UPD_SHA256: &str =
-    "aff3a1b9f887dc6d6e35f5686d0edfa644ce9e661011775489315ddbcf928f99";
+/// The same no-op rebuild under the hardware-stage labels. The updater skips a document whose
+/// version equals the installed one, so a v1.15 unit needs another label: `Ver0.90` (lower,
+/// stage 1) first, and `Ver1.90` (stage 1b) only if the lower label is refused. The MAIN image is
+/// unchanged; only the descriptor and the CRCs differ. Both are cross-checked byte-identical
+/// against the reference serializer.
+const STAGE_FILES: [(&str, &str); 2] = [
+    (
+        "Ver0.90",
+        "79f25fa1be84e0e5323273eb36ca5cbfd0f532824f6a2fde0a80db6965380252",
+    ),
+    (
+        "Ver1.90",
+        "aff3a1b9f887dc6d6e35f5686d0edfa644ce9e661011775489315ddbcf928f99",
+    ),
+];
 const FALLBACK_DECODED_SHA256: &str =
     "ef2e0aaabb2400bd7938ac0c2d737545db276f53ba257a12ed83063eed0cf9a2";
 
@@ -128,20 +138,26 @@ fn rebuild_reproduces_the_reference_alpha2_pins() {
 
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
-fn stage1_noop_rebuild_labelled_ver190_is_pinned_and_keeps_the_fallback_updater() {
+fn stage_files_are_pinned_and_keep_the_fallback_updater() {
     let official = official_upd();
 
-    let rebuilt =
-        rebuild_with_stock_application(&official, &OFFICIAL_V115, "Ver1.90").expect("rebuild");
+    for (label, sha256) in STAGE_FILES {
+        let rebuilt =
+            rebuild_with_stock_application(&official, &OFFICIAL_V115, label).expect("rebuild");
 
-    assert_eq!(rebuilt.bytes().len(), NOOP_UPD_LEN);
-    assert_eq!(rebuilt.sha256(), NOOP_VER190_UPD_SHA256);
-    assert_eq!(rebuilt.main_image_sha256(), NOOP_MAIN_SHA256);
-    let parsed = parse_upd(rebuilt.bytes()).expect("parse");
-    let main = xdj700::main_document(&parsed).expect("main");
-    assert_eq!(main.descriptor().version(), "Ver1.90");
-    let image = main.image().expect("image");
-    let fallback = xdj700::decode_section(image.bytes(), xdj700::FALLBACK_SECTION_OFFSET)
-        .expect("fallback updater section survives the rebuild");
-    assert_eq!(fallback.decoded_sha256(), FALLBACK_DECODED_SHA256);
+        assert_eq!(rebuilt.bytes().len(), NOOP_UPD_LEN, "{label}");
+        assert_eq!(rebuilt.sha256(), sha256, "{label}");
+        assert_eq!(rebuilt.main_image_sha256(), NOOP_MAIN_SHA256, "{label}");
+        let parsed = parse_upd(rebuilt.bytes()).expect("parse");
+        let main = xdj700::main_document(&parsed).expect("main");
+        assert_eq!(main.descriptor().version(), label);
+        let image = main.image().expect("image");
+        let fallback = xdj700::decode_section(image.bytes(), xdj700::FALLBACK_SECTION_OFFSET)
+            .expect("fallback updater section survives the rebuild");
+        assert_eq!(
+            fallback.decoded_sha256(),
+            FALLBACK_DECODED_SHA256,
+            "{label}"
+        );
+    }
 }

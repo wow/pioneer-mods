@@ -11,12 +11,14 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   updater section. Static analysis of the v1.15 loader, not yet observed on hardware, shows it
   runs this section instead of the application when the application section is left with a bad
   checksum. The owner-input tests pin its decoded identity and
-  check that a rebuild keeps it intact. They also pin the stage-1 hardware file (the no-op
-  rebuild labelled `Ver1.90`).
+  check that a rebuild keeps it intact. They also pin the hardware stage files: the no-op
+  rebuild labelled `Ver0.90` (stage 1) and `Ver1.90` (stage 1b, only if the lower label is
+  refused).
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
-  a document whose version equals the installed one is skipped. Stage 1 therefore uses
-  `Ver1.90`. The guide also covers the official update procedure and what does and does not
-  protect the unit.
+  a document whose version equals the installed one is skipped. Stage 1 therefore uses a lower
+  label first (`Ver0.90`), which is reversible in every case. The guide also covers telling a
+  real flash from a skip, the official update procedure, and what does and does not protect the
+  unit.
 - Initial project documentation for versioning, releasing, and safety disclaimers.
 - Open-source baseline docs: `LICENSE` and `CONTRIBUTING.md`.
 - Rust workspace scaffolding with:
