@@ -6,9 +6,9 @@
 //! [u32 LE size][size bytes: LZSS stream starting with the section prefix][u16 LE checksum]
 //! ```
 //!
-//! The checksum is the 16-bit sum of the size field and every compressed byte. According to the
-//! reference implementation, the boot loader verifies it and falls back to a smaller updater
-//! section on mismatch.
+//! The checksum is the 16-bit sum of the size field and every compressed byte. The boot loader
+//! verifies it and, on a mismatch, runs the fallback updater at [`FALLBACK_SECTION_OFFSET`]
+//! instead (static analysis of the v1.15 loader).
 
 mod grid;
 mod rebuild;
@@ -28,9 +28,10 @@ use crate::upd::{DocumentImage, UpdContainer, UpdDocument};
 pub const APPLICATION_SECTION_OFFSET: usize = 0x40000;
 
 /// Offset of the loader's fallback updater section inside the MAIN image (v1.15). It has the
-/// application section's format. The loader decompresses and runs it instead of the application
-/// when the application section's checksum does not match, which is the device's recovery path
-/// after an interrupted update. It lies in the loader region that every rebuild keeps
+/// application section's format. Static analysis of the loader shows it decompresses and runs
+/// this section instead of the application when the application section's checksum does not
+/// match, for example after an update interrupted while the application was being written (not
+/// yet observed on hardware). It lies in the loader region that every rebuild keeps
 /// byte-identical.
 pub const FALLBACK_SECTION_OFFSET: usize = 0x10000;
 

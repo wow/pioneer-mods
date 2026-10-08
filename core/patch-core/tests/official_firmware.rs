@@ -22,14 +22,14 @@ const PANL_IMAGE_SHA256: &str = "52c5a54320c11477c50ed1da93fc585128c50e9e78d624c
 const APPLICATION_DECODED_LEN: usize = 18_601_864;
 const APPLICATION_DECODED_SHA256: &str =
     "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939";
-/// Re-encoding of the stock application (not the stock packer's bytes). Verified byte-identical
-/// to the reference encoder's output for the same input (2026-10-07), and pinned so any
-/// encoder drift is noticed.
 /// The loader's fallback updater section (decoded), run on an application checksum mismatch.
 const FALLBACK_COMPRESSED_LEN: usize = 127_776;
 const FALLBACK_DECODED_LEN: usize = 222_684;
 const FALLBACK_DECODED_SHA256: &str =
     "ef2e0aaabb2400bd7938ac0c2d737545db276f53ba257a12ed83063eed0cf9a2";
+/// Re-encoding of the stock application (not the stock packer's bytes). Verified byte-identical
+/// to the reference encoder's output for the same input (2026-10-07), and pinned so any
+/// encoder drift is noticed.
 const REENCODED_STREAM_LEN: usize = 6_988_604;
 const REENCODED_STREAM_SHA256: &str =
     "00b29057b9b92e20de9b5c899ac36095bbd1128f94e7aa1dd5b8314c8b0c8063";

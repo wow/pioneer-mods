@@ -13,8 +13,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 const ENV_VAR: &str = "PIONEER_XDJ700_V115_UPD";
-/// The no-op rebuild (stock application re-encoded, label `Ver1.15`): the first hardware
-/// candidate, pinned in `patch-core`'s `official_rebuild` test.
+/// The no-op rebuild (stock application re-encoded, label `Ver1.15`), pinned in `patch-core`'s
+/// `official_rebuild` test.
 const NOOP_UPD_LEN: usize = 17_368_545;
 const NOOP_UPD_SHA256: &str = "f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c";
 const STOCK_APPLICATION_SHA256: &str =

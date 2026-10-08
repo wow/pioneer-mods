@@ -20,10 +20,19 @@ for a unit on v1.15 therefore needs a different label. The project uses **`Ver1.
 clearly unofficial and far above any likely official release.
 
 Whether the updater accepts a *lower* version is not yet known. Official files older than
-v1.15 are no longer downloadable. Until that is known, plan for a unit that has run a `Ver1.90`
-file to keep showing `1.90`. Two consequences:
-- re-flashing official v1.15 over it may be refused;
-- a future official update numbered below 1.90 may be refused too.
+v1.15 are no longer downloadable.
+
+**Where the "installed" version probably comes from.** The application carries its own version
+block (model, `1.15`, build date), and the update screens are formatted from a version string.
+So the installed version the updater compares against, and the version on the UTILITY screen,
+**probably come from the running application, not from the label of the last file flashed**.
+This is not yet confirmed on hardware.
+
+If it holds:
+- after a no-op rebuild (stock application) the unit still reports `1.15`, whatever the label;
+- the label then does not stick, and an official v1.15 file flashed later shows
+  `Ver1.15 -> Ver1.15` and is skipped. That is harmless, because the application is already the
+  official one.
 
 ## 2. Stages
 
@@ -74,7 +83,7 @@ file is skipped.)
      `patch-cli` can be served from the operating system's cache, so it does not prove what is on
      the stick.
 5. **Recovery stick ready:** keep a second stick with the official v1.15 file, checked the same
-   way.
+   way. After a rebuild it may be skipped rather than flashed (see section 6).
 6. **Follow the official update procedure:**
    - power off with nothing connected;
    - hold **IN** and **RELOOP/EXIT** while powering on, and release them when the unit asks for
@@ -85,28 +94,49 @@ file is skipped.)
 
 ## 4. After the update
 
-Check each of these:
+**First, tell a real flash from a skip.** A completed update and a skipped one end on the same
+"Firmware update is complete" screen:
+- **Real flash:** the MAIN line shows the installed version, then the file's label (for example
+  `MAIN Ver1.15 -> Ver1.90`), and its progress bar runs for about 3 minutes.
+- **Skip:** the MAIN line jumps straight to 100%.
 
-- the update completes with no error;
-- the UTILITY screen shows the expected version (hold MENU/UTILITY for over a second);
+A stage only passes if MAIN really progressed. **Photograph the MAIN line**: its left-hand
+version tells us where the installed version comes from.
+
+Then check each of these:
+- the update completed with no error message;
+- the UTILITY screen (hold MENU/UTILITY for over a second) shows a version; write it down. After a
+  no-op rebuild it probably still shows `1.15` (see section 1). That is expected and not a
+  failure;
 - three cold boots reach the normal screen;
 - browsing, playback, cue and loop behave as before.
 
 ## 5. Recovery: what protects the unit, and what does not
 
-From static analysis of the v1.15 loader:
+**Everything in this section comes from static analysis of the v1.15 loader. None of it has been
+observed on hardware.**
 
 - **The loader checks the application before running it.** It verifies the application
   section's checksum before starting it.
-- **A bad checksum starts the fallback updater.** If the checksum does not match, for example
-  after an interrupted update, the loader runs a separate fallback updater stored in the loader
-  region. Rebuilt files never change that region, so this protection stays in place.
+- **A bad checksum starts the fallback updater.** When the application section is left with a
+  bad checksum (for example by an update interrupted while the application was being written),
+  the loader starts a separate fallback updater stored in the loader region. Rebuilt files keep
+  that region byte-identical. Nobody has seen the fallback updater run, so its screens and the
+  stick it expects are unknown. If the unit powers on into an unfamiliar update or USB prompt,
+  try the official v1.15 stick.
+- **Interruptions in the loader region are not covered.** The update also writes the loader
+  region; it is part of the file, rewritten with identical bytes. An interruption there is not
+  covered by the fallback, for official files too. So **never interrupt an update**.
 - **No button combination reaches the fallback.** The IN + RELOOP/EXIT update mode belongs to
   the application itself.
 - **The unprotected case:** an application whose checksum is valid but which crashes or hangs
-  before its update mode starts cannot be recovered by software. The stage-1 no-op file cannot
-  cause this, because the device runs exactly the stock application. Files that change behaviour
-  can, so every future modification must stay out of the code that runs early during start-up.
+  before its update mode starts cannot be recovered by software.
+  - The stage-1 no-op file is **not expected** to cause this: offline checks show the device
+    will run exactly the stock application.
+  - What remains untested is how the updater handles the rebuilt file's layout. A reference
+    build with the same layout installed successfully on hardware.
+  - Files that change behaviour can cause it, so every future modification must stay out of the
+    code that runs early during start-up.
 
 ## 6. If something goes wrong
 
@@ -116,5 +146,9 @@ From static analysis of the v1.15 loader:
 - the step;
 - what you expected and what you saw.
 
-Then try the official v1.15 update with the official procedure. If the unit no longer starts,
-leave it powered off and open an issue with your notes.
+Then try the official v1.15 update with the official procedure. **Check whether MAIN really
+progressed** (section 4). After a rebuild the updater may skip the official file as
+`Ver1.15 -> Ver1.15`. That is harmless after a no-op rebuild, whose application is already the
+official one, but it does **not** restore a modified application. Restoring one needs a stock
+no-op rebuild under a label different from the version the unit reports. That route is untested.
+If the unit no longer starts, leave it powered off and open an issue with your notes.

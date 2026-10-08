@@ -8,9 +8,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 
 ### Added
 - `patch_core::xdj700::FALLBACK_SECTION_OFFSET` (`0x10000`) records the loader's fallback
-  updater section. Static analysis of the v1.15 loader shows it runs this section instead of the
-  application when the application section's checksum does not match, which is the device's
-  recovery path after an interrupted update. The owner-input tests pin its decoded identity and
+  updater section. Static analysis of the v1.15 loader, not yet observed on hardware, shows it
+  runs this section instead of the application when the application section is left with a bad
+  checksum. The owner-input tests pin its decoded identity and
   check that a rebuild keeps it intact. They also pin the stage-1 hardware file (the no-op
   rebuild labelled `Ver1.90`).
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:

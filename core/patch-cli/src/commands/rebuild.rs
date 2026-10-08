@@ -22,8 +22,9 @@ pub struct RebuildArgs {
     #[arg(long, value_enum)]
     pub application: ApplicationSource,
 
-    /// MAIN version label for the rebuilt update, e.g. `Ver1.15`. Required: which labels the
-    /// device's updater accepts is not yet confirmed, so there is no default.
+    /// MAIN version label for the rebuilt update, e.g. `Ver1.90`. Required, with no default: the
+    /// updater skips a label equal to the installed version, and its handling of lower versions is
+    /// not yet known.
     #[arg(long)]
     pub label: String,
 
