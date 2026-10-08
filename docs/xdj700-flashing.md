@@ -131,7 +131,7 @@ file is skipped.)
    - **Stock no-op rebuild labelled `Ver1.16`**, built **without** `--report-version` (the
      stage-1b file, `9e1ac10e…`; check the SHA-256, since the stage-3 file has the same name and
      label): the official
-     application, re-compressed. On a unit that reports 1.15 it is written in normal update mode
+     application, re-compressed. On a unit that reports 1.15 it is accepted in normal update mode
      (stage 1b, over the official application). It is higher than any version a modified
      application reports (lower than 1.15), so it is the backup restore stick for those too
      (untested over a modified application: stage 4 did not need it).
