@@ -76,6 +76,15 @@ over strings or tables: text passes the value check but is easy to guess. Window
 per release; a future release that shares code with this one needs the same care. Review is the
 backstop.
 
+## Writing a recipe
+
+Write recipes against your own copy of the official file, and commit only the recipe. The CLI
+does not yet print a window's SHA-256; a helper that does, after the same leak checks, is
+planned. Until then, compute it with `patch-core`: decode the stock application with
+`xdj700::decode_application`, take `sha256_hex` of the window, and check the recipe with
+`xdj700::apply_recipe_v2` before you commit it. Never paste stock bytes into an issue or a
+commit, only their hash.
+
 ## What the engine checks
 
 Before the input is read (`check_recipe_v2`):
