@@ -12,11 +12,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   runs this section instead of the application when the application section is left with a bad
   checksum. The owner-input tests pin its decoded identity and
   check that a rebuild keeps it intact. They also pin the hardware stage files: the no-op
-  rebuild labelled `Ver0.90` (stage 1) and `Ver1.90` (stage 1b, only if the lower label is
-  refused).
+  rebuild labelled `Ver0.90` (stage 1, the lower probe) and `Ver1.16` (stage 1b).
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
-  a document whose version equals the installed one is skipped. Stage 1 therefore uses a lower
-  label first (`Ver0.90`), which is reversible in every case. The guide also covers telling a
+  the updater writes only versions higher than the installed one; equal and lower versions
+  (including the project's `Ver0.90` probe) are skipped. Stage 1b therefore uses `Ver1.16`, the
+  smallest higher label. The guide also covers telling a
   real flash from a skip, the official update procedure, and what does and does not protect the
   unit.
 - Initial project documentation for versioning, releasing, and safety disclaimers.

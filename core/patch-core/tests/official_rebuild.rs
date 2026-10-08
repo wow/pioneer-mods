@@ -27,15 +27,15 @@ const ALPHA2_ENV: &str = "PIONEER_XDJ700_REFERENCE_ALPHA2_DECODED";
 const UPD_SHA256: &str = "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c";
 
 /// The stock application re-encoded under the stock label. (On a v1.15 unit the updater skips
-/// this label; the hardware stage files are the `Ver0.90` and `Ver1.90` variants below.)
+/// this label; the hardware stage files are the `Ver0.90` and `Ver1.16` variants below.)
 /// Cross-checked byte-identical against the reference serializer (2026-10-07).
 const NOOP_UPD_LEN: usize = 17_368_545;
 const NOOP_UPD_SHA256: &str = "f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c";
 const NOOP_MAIN_LEN: usize = 7_250_754;
 const NOOP_MAIN_SHA256: &str = "c03360e5e93493d2d3a292707c74d7889e503ac4f7e7bfa81cbe8d9af88e9eef";
-/// The same no-op rebuild under the hardware-stage labels. The updater skips a document whose
-/// version equals the installed one, so a v1.15 unit needs another label: `Ver0.90` (lower,
-/// stage 1) first, and `Ver1.90` (stage 1b) only if the lower label is refused. The MAIN image is
+/// The same no-op rebuild under the hardware-stage labels. The updater writes only versions
+/// higher than the installed one (observed on an owner's unit): `Ver0.90` (stage 1, the lower
+/// probe) was skipped, so stage 1b uses `Ver1.16`, the smallest higher label. The MAIN image is
 /// unchanged; only the descriptor and the CRCs differ. Both are cross-checked byte-identical
 /// against the reference serializer.
 const STAGE_FILES: [(&str, &str); 2] = [
@@ -44,8 +44,8 @@ const STAGE_FILES: [(&str, &str); 2] = [
         "79f25fa1be84e0e5323273eb36ca5cbfd0f532824f6a2fde0a80db6965380252",
     ),
     (
-        "Ver1.90",
-        "aff3a1b9f887dc6d6e35f5686d0edfa644ce9e661011775489315ddbcf928f99",
+        "Ver1.16",
+        "9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08",
     ),
 ];
 const FALLBACK_DECODED_SHA256: &str =

@@ -69,12 +69,12 @@ fn rebuild_writes_the_pinned_noop_update_once() {
     assert_eq!(std::fs::read(&output).expect("reread output"), written);
 }
 
-/// The hardware stage-1 file (`Ver0.90`), pinned in `patch-core`'s `official_rebuild` test.
-const STAGE1_UPD_SHA256: &str = "79f25fa1be84e0e5323273eb36ca5cbfd0f532824f6a2fde0a80db6965380252";
+/// The hardware stage-1b file (`Ver1.16`), pinned in `patch-core`'s `official_rebuild` test.
+const STAGE1B_UPD_SHA256: &str = "9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08";
 
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
-fn rebuild_writes_the_pinned_stage1_file() {
+fn rebuild_writes_the_pinned_stage1b_file() {
     let input = std::env::var_os(ENV_VAR)
         .map(PathBuf::from)
         .unwrap_or_else(|| panic!("set {ENV_VAR} to an owner-supplied official XDJ700.UPD"));
@@ -82,7 +82,7 @@ fn rebuild_writes_the_pinned_stage1_file() {
     let output = dir.path().join("XDJ700.UPD");
 
     let result = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
-        .args(["rebuild", "--application", "stock", "--label", "Ver0.90"])
+        .args(["rebuild", "--application", "stock", "--label", "Ver1.16"])
         .arg("--input")
         .arg(&input)
         .arg("--output")
@@ -97,5 +97,5 @@ fn rebuild_writes_the_pinned_stage1_file() {
     );
     let written = std::fs::read(&output).expect("read output");
     assert_eq!(written.len(), NOOP_UPD_LEN);
-    assert_eq!(sha256_hex(&written), STAGE1_UPD_SHA256);
+    assert_eq!(sha256_hex(&written), STAGE1B_UPD_SHA256);
 }
