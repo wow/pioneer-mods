@@ -111,3 +111,20 @@ fn a_mistyped_offset_moves_the_window_and_fails_the_precondition() {
         "{result:?}"
     );
 }
+
+#[test]
+fn a_mistyped_offset_is_reported_as_a_mismatch_before_any_leak_rule() {
+    let fixture = Fixture::new();
+    let mut typo = replacement(0x900, &[0xde, 0xad]);
+    // The stock byte at 0x98d equals the span's first byte, so a leak rule alone would blame the
+    // span's edge instead of the offset.
+    assert_eq!(stock_application()[0x98d], 0xde);
+    typo.offset = 0x98d;
+
+    let result = fixture.apply(&fixture.recipe(vec![typo]));
+
+    assert!(
+        matches!(result, Err(RecipeError::Precondition { index: 0, .. })),
+        "{result:?}"
+    );
+}

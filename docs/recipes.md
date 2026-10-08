@@ -96,9 +96,10 @@ paste stock bytes into an issue or a commit, only their hash.
    ```
 
    Before it computes any hash, the command runs the recipe's own checks (release pins, version
-   order, bounds, protected ranges), checks that its windows are identical to or disjoint from
-   those of the committed recipes, and runs each window's leak checks. So it never prints the
-   hash of a window those rules refuse, and it writes nothing. For each replacement it prints the
+   order, bounds, protected ranges), checks that its windows are disjoint from those of the other
+   committed recipes (the draft's own file is skipped, and the directory must hold another recipe
+   for the release), and runs each window's leak checks. So it never prints the hash of a window
+   those rules refuse, and it writes nothing. For each replacement it prints the
    window and its SHA-256, and says whether the recipe already declares it. Copy the hashes into
    the recipe.
 3. Run `patch` to build the update. It checks every hash, adds the rebuild's own checks (bounded

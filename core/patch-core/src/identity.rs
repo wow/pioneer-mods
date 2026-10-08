@@ -105,7 +105,8 @@ pub fn open_regular_file(path: &Path) -> Result<File, PatchCoreError> {
 }
 
 /// Every `.json` file under `dir`, recursively and sorted: the recipe files of a recipe directory.
-/// Directories are not followed through symbolic links, so a link loop cannot recurse forever.
+/// A symbolic link anywhere in it is refused ([`PatchCoreError::InputNotAFile`]): it could point
+/// outside the directory or loop.
 pub fn recipe_files(dir: &Path) -> Result<Vec<PathBuf>, PatchCoreError> {
     let mut files = Vec::new();
     let mut directories = vec![dir.to_owned()];
@@ -118,7 +119,11 @@ pub fn recipe_files(dir: &Path) -> Result<Vec<PathBuf>, PatchCoreError> {
             let file_type = entry
                 .file_type()
                 .map_err(|source| read_error(&path, source))?;
-            if file_type.is_dir() {
+            if file_type.is_symlink() {
+                return Err(PatchCoreError::InputNotAFile {
+                    path: path.to_string_lossy().into_owned(),
+                });
+            } else if file_type.is_dir() {
                 directories.push(path);
             } else if path
                 .extension()

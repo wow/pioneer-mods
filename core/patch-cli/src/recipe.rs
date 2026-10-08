@@ -92,27 +92,35 @@ impl CheckedRecipe {
         self.target
     }
 
-    /// Checks that the recipe's precondition windows are identical to or disjoint from those of
-    /// every recipe under `dir` for the same release (the committed recipes), so that no hash is
-    /// computed for a window that would overlap one already published. A `dir` without recipes
-    /// is refused, so a mistyped path cannot skip the check.
-    pub fn check_against_committed(&self, dir: &Path) -> Result<()> {
+    /// Checks that the recipe's precondition windows are disjoint from those of every other
+    /// recipe under `dir` for the same release (the committed recipes), so that no hash is
+    /// computed for a window that would overlap one already published. `path` is the recipe's own
+    /// file: if it lies under `dir`, it is skipped. A `dir` without another recipe for the
+    /// release is refused, so a mistyped path cannot skip the check.
+    pub fn check_against_committed(&self, path: &Path, dir: &Path) -> Result<()> {
         let committed_failed = || format!("failed to read committed recipes '{}'", dir.display());
-        let files = recipe_files(dir).with_context(committed_failed)?;
-        if files.is_empty() {
-            bail!(
-                "refusing committed recipes '{}': it holds no recipes; pass the repository's \
-                 recipes directory",
-                dir.display()
-            );
-        }
-        let mut committed = Vec::with_capacity(files.len());
-        for path in files {
-            let raw = read_recipe(&path)?;
+        let own = std::fs::canonicalize(path)
+            .with_context(|| format!("failed to resolve recipe '{}'", path.display()))?;
+        let mut committed = Vec::new();
+        for file in recipe_files(dir).with_context(committed_failed)? {
+            if std::fs::canonicalize(&file).with_context(committed_failed)? == own {
+                continue;
+            }
+            let raw = read_recipe(&file)?;
             let recipe: RecipeV2 = serde_json::from_slice(&raw).with_context(|| {
-                format!("failed to parse committed recipe '{}'", path.display())
+                format!("failed to parse committed recipe '{}'", file.display())
             })?;
-            committed.push(recipe);
+            if recipe.target.release == self.recipe.target.release {
+                committed.push(recipe);
+            }
+        }
+        if committed.is_empty() {
+            bail!(
+                "refusing committed recipes '{}': it holds no other recipe for release {}; pass \
+                 the repository's recipes directory",
+                dir.display(),
+                self.target.id
+            );
         }
         check_windows_across(std::iter::once(&self.recipe).chain(&committed))
             .map_err(|error| anyhow::Error::new(error).context(self.refusing.clone()))

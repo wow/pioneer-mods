@@ -17,7 +17,8 @@ pub struct PreconditionArgs {
     pub recipe: PathBuf,
 
     /// The repository's recipe directory (`recipes`). The recipe's precondition windows must be
-    /// identical to or disjoint from those of these recipes, checked before any hash is computed.
+    /// disjoint from those of these recipes (its own file is skipped), checked before any hash is
+    /// computed.
     #[arg(long)]
     pub committed_recipes: PathBuf,
 
@@ -45,7 +46,7 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
     );
     // Every check that needs no firmware, before the input is read.
     let checked = CheckedRecipe::load(&args.recipe, &raw, refusing)?;
-    checked.check_against_committed(&args.committed_recipes)?;
+    checked.check_against_committed(&args.recipe, &args.committed_recipes)?;
     let (recipe, target) = (checked.recipe(), checked.target());
     let input = checked.read_input(&args.input, "hash preconditions on")?;
     let hashes = precondition_hashes(recipe, target, &input)

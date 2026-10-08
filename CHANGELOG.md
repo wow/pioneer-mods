@@ -10,13 +10,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - `patch-cli precondition --input --recipe --committed-recipes [--check]`
   (`xdj700::precondition_hashes`): prints the precondition hashes of a schema-v2 recipe, typically
   a draft with placeholder hashes. Before the input is read, the recipe is checked and its windows
-  must be identical to or disjoint from those of the committed recipes
-  (`patch_schema::check_windows_across`, shared with CI); each window then passes the leak checks
-  before its hash is computed (`checked_window`, shared with applying a recipe), so no hash of a
-  refused window is ever shown. It writes nothing; `--check` fails unless every declared hash
-  matches. The recipe reader, the version dispatch and the v2 checks are shared with `patch`
-  (`patch_cli::recipe`), and the recipe walk with the tests (`patch_core::recipe_files`). Across
-  committed recipes, identical windows are now allowed (their hashes are equal).
+  must be disjoint from those of the other committed recipes (`patch_schema::check_windows_across`,
+  shared with CI; the draft's own file is skipped, and the directory must hold another recipe for
+  the release); each window then passes the leak checks before its hash is computed
+  (`checked_window`, shared with applying a recipe), so no hash of a refused window is ever shown.
+  It writes nothing; `--check` fails unless every declared hash matches. The recipe reader, the
+  version dispatch and the v2 checks are shared with `patch` (`patch_cli::recipe`), and the recipe
+  walk with the tests (`patch_core::recipe_files`, which refuses symbolic links).
 - **Recipe schema v2** (`patch_schema::RecipeV2`, `docs/recipes.md`): same-length replacements in
   the decoded application of a pinned release. Each replacement has a precondition: the SHA-256 of
   the stock bytes `before` and `after` the span, with at least 32 bytes outside the span

@@ -14,11 +14,10 @@
 
 use super::app_version::VERSION_TEXT_LEN;
 use super::is_label_higher;
-use super::precondition::{checked_window, window};
+use super::precondition::{DeclaredHash, checked_window, window};
 use super::rebuild::{RebuiltUpdate, rebuild_with_edited_stock_application};
 use super::release::{OFFICIAL_V115, StockRelease};
 use crate::error::RebuildError;
-use crate::identity::sha256_hex;
 use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2, RecipeV2Error};
 use std::ops::Range;
 use thiserror::Error;
@@ -293,14 +292,7 @@ pub fn apply_recipe_v2_to(
         rebuild_with_edited_stock_application(input, release, &recipe.label, |decoded| {
             // Every precondition is checked on the stock application before anything changes.
             for (index, replacement) in recipe.replacements.iter().enumerate() {
-                let range = checked_window(index, replacement, decoded)?;
-                let actual = sha256_hex(&decoded[range]);
-                if !actual.eq_ignore_ascii_case(&replacement.precondition.sha256) {
-                    return Err(RecipeError::Precondition {
-                        index,
-                        expected: replacement.precondition.sha256.clone(),
-                    });
-                }
+                checked_window(index, replacement, decoded, DeclaredHash::Compare)?;
             }
             // The version string, then every replaced span.
             let mut declared = Vec::with_capacity(recipe.replacements.len() + 1);

@@ -1,18 +1,19 @@
 //! Precondition windows across schema-v2 recipes. Within one recipe, windows are disjoint
-//! ([`RecipeV2::validate`]); across recipes for the same release, any two windows must be
-//! identical or disjoint. Otherwise windows shifted from recipe to recipe would share all but a
-//! few bytes, and each hash would reveal the difference. Identical windows are allowed: their
-//! hashes are equal, so a second one reveals nothing new.
+//! ([`RecipeV2::validate`]); across recipes for the same release they must be disjoint too.
+//! Windows shifted from recipe to recipe would share all but a few bytes, and each hash would
+//! reveal the difference. Even identical windows are refused: each recipe's rules assume that the
+//! bytes around its span are published nowhere, and that its own span alone decides which stock
+//! bytes `bytes_hex` keeps, so another recipe's span inside the same window breaks both.
 
 use crate::v2::RecipeV2;
 use std::ops::Range;
 use thiserror::Error;
 
-/// Two precondition windows of recipes for the same release that overlap without being identical.
+/// Two overlapping precondition windows of recipes for the same release.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error(
     "{first} and {second}: precondition windows {first_window:#x?} and {second_window:#x?} \
-     overlap; windows of recipes for the same release must be identical or disjoint"
+     overlap; windows of recipes for the same release must be disjoint"
 )]
 pub struct WindowOverlap {
     /// `recipe_id replacements[index]` of the window that starts first.
@@ -22,9 +23,9 @@ pub struct WindowOverlap {
     pub second_window: Range<u64>,
 }
 
-/// Checks that, per release, any two precondition windows of `recipes` are identical or
-/// disjoint. Each recipe should already be valid; a window that does not fit the 64-bit range is
-/// skipped (validation refuses it).
+/// Checks that, per release, the precondition windows of `recipes` are pairwise disjoint. Each
+/// recipe should already be valid; a window that does not fit the 64-bit range is skipped
+/// (validation refuses it).
 ///
 /// # Errors
 ///
@@ -42,9 +43,7 @@ pub fn check_windows_across<'a>(
         }
     }
     windows.sort_by(|a, b| (a.0, a.1.start, a.1.end).cmp(&(b.0, b.1.start, b.1.end)));
-    // Identical windows of one release reveal nothing new; keep one of each.
-    windows.dedup_by(|later, earlier| later.0 == earlier.0 && later.1 == earlier.1);
-    // Sorted by start, the remaining windows are pairwise disjoint if neighbours are.
+    // Sorted by start, the windows are pairwise disjoint if neighbours are.
     for pair in windows.windows(2) {
         let ((release, first, first_name), (next_release, next, next_name)) = (&pair[0], &pair[1]);
         if release == next_release && next.start < first.end {

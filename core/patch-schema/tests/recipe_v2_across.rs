@@ -1,4 +1,4 @@
-//! Precondition windows across recipes: per release, identical or disjoint.
+//! Precondition windows across recipes: per release, disjoint.
 
 use patch_schema::{RecipeV2, WindowOverlap, check_windows_across};
 use serde_json::json;
@@ -51,28 +51,31 @@ fn windows_shifted_across_recipes_are_refused() {
 }
 
 #[test]
-fn touching_identical_and_other_release_windows_are_accepted() {
+fn touching_windows_and_windows_of_other_releases_are_accepted() {
     let a = recipe("a", "r", &[(0x900, 32, 0)]);
     let touching = recipe("touching", "r", &[(0x901, 0, 32)]);
-    let identical = recipe("identical", "r", &[(0x900, 32, 0)]);
     let other_release = recipe("other", "s", &[(0x8f0, 16, 16)]);
 
     assert_eq!(
-        check_windows_across([&a, &touching, &identical, &other_release]),
+        check_windows_across([&a, &touching, &other_release]),
         Ok(())
     );
 }
 
+/// Identical windows have equal hashes, but each recipe's span would sit among the other's
+/// "unpublished" window bytes, and their kept stock bytes would add up.
 #[test]
-fn an_identical_window_does_not_hide_an_overlap_behind_it() {
+fn identical_windows_across_recipes_are_refused() {
     let a = recipe("a", "r", &[(0x900, 32, 0)]);
     let identical = recipe("identical", "r", &[(0x900, 32, 0)]);
-    let shifted = recipe("shifted", "r", &[(0x8f0, 0, 32)]);
 
-    let result = check_windows_across([&a, &identical, &shifted]);
-
-    assert!(
-        matches!(&result, Err(overlap) if overlap.second_window == (0x8f0..0x911)),
-        "{result:?}"
+    assert_eq!(
+        check_windows_across([&a, &identical]),
+        Err(WindowOverlap {
+            first: "a replacements[0]".to_owned(),
+            first_window: 0x8e0..0x901,
+            second: "identical replacements[0]".to_owned(),
+            second_window: 0x8e0..0x901,
+        })
     );
 }

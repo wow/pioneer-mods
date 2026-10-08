@@ -1,7 +1,7 @@
 //! Every committed recipe (`recipes/**/*.json`) must be a valid schema-v2 recipe for a known
 //! release, pass every check that needs no firmware, and pin its output identities; across the
-//! committed recipes of a release, precondition windows must be identical or disjoint. Applying
-//! them needs the official file; see the owner-input tests.
+//! committed recipes of a release, precondition windows must be disjoint. Applying them needs the
+//! official file; see the owner-input tests.
 
 #[path = "common/recipe_files.rs"]
 mod recipe_files;
@@ -36,7 +36,7 @@ fn every_committed_recipe_passes_the_firmware_free_checks() {
 }
 
 #[test]
-fn committed_precondition_windows_are_identical_or_disjoint_across_recipes() {
+fn committed_precondition_windows_are_disjoint_across_recipes() {
     let recipes = committed_recipes();
 
     let result = check_windows_across(recipes.iter().map(|(_, recipe)| recipe));

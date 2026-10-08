@@ -46,23 +46,43 @@ pub fn precondition_hashes(
     let stock = StockMain::load(input, &target.release)?.application()?;
     let stock = stock.decoded();
     let hash = |(index, replacement)| {
-        Ok(sha256_hex(
-            &stock[checked_window(index, replacement, stock)?],
-        ))
+        let range = checked_window(index, replacement, stock, DeclaredHash::Ignore)?;
+        Ok(sha256_hex(&stock[range]))
     };
     recipe.replacements.iter().enumerate().map(hash).collect()
 }
 
+/// Whether [`checked_window`] compares the window with the hash the recipe declares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum DeclaredHash {
+    /// Applying a recipe: the window must hash to the declared SHA-256.
+    Compare,
+    /// Computing hashes for a draft, whose declared hashes are placeholders.
+    Ignore,
+}
+
 /// The replacement's precondition window on the stock application, after every per-window rule:
-/// inside the application, and the leak checks. Applying a recipe and [`precondition_hashes`]
-/// both go through it, so the hashes shown to authors and the windows `patch` accepts cannot
-/// drift apart.
+/// inside the application, matching the declared hash when `declared` asks for it, and the leak
+/// checks. Applying a recipe and [`precondition_hashes`] both go through it, so the hashes shown
+/// to authors and the windows `patch` accepts cannot drift apart. The hash is compared first, so
+/// a mistyped offset reads as a mismatch rather than as a leak rule; nothing is printed either
+/// way.
 pub(super) fn checked_window(
     index: usize,
     replacement: &Replacement,
     stock: &[u8],
+    declared: DeclaredHash,
 ) -> Result<Range<usize>, RecipeError> {
     let range = window(index, replacement, stock.len())?;
+    let expected = &replacement.precondition.sha256;
+    if declared == DeclaredHash::Compare
+        && !sha256_hex(&stock[range.clone()]).eq_ignore_ascii_case(expected)
+    {
+        return Err(RecipeError::Precondition {
+            index,
+            expected: expected.clone(),
+        });
+    }
     check_leaks(index, replacement, stock, range.clone())?;
     Ok(range)
 }

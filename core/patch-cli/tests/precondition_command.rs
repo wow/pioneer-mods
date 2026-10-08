@@ -88,8 +88,8 @@ fn refuses_windows_outside_the_application_or_in_the_header_before_reading_the_i
     assert_refused(&recipe, None, "overlaps protected range 0x0..0x800");
 }
 
-#[test]
-fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
+/// A committed recipe directory holding one recipe, `published`, with a window `0x8e0..0x902`.
+fn published_dir() -> tempfile::TempDir {
     let committed = tempfile::tempdir().expect("tempdir");
     let mut published = committed_recipe();
     published["recipe_id"] = json!("published");
@@ -98,20 +98,35 @@ fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
         &committed.path().join("published.json"),
         &serde_json::to_vec(&published).expect("serialize"),
     );
+    committed
+}
+
+#[test]
+fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
+    let committed = published_dir();
     let mut recipe = committed_recipe();
     recipe["recipe_id"] = json!("draft");
 
-    // Shifted by one byte: refused. Identical: accepted (its hash equals the published one), so
-    // the command goes on to the (missing) input.
+    // Shifted by one byte, and identical: both refused.
     recipe["replacements"] = json!([draft_replacement(0x901, 32, 0)]);
     assert_refused_with(
         &recipe,
         None,
         committed.path(),
         "published replacements[0] and draft replacements[0]: precondition windows 0x8e0..0x902 \
-         and 0x8e1..0x903 overlap",
+         and 0x8e1..0x903 overlap; windows of recipes for the same release must be disjoint",
     );
     recipe["replacements"] = json!([draft_replacement(0x900, 32, 0)]);
+    assert_refused_with(
+        &recipe,
+        None,
+        committed.path(),
+        "draft replacements[0] and published replacements[0]: precondition windows 0x8e0..0x902 \
+         and 0x8e0..0x902 overlap",
+    );
+
+    // Disjoint: the command goes on to the (missing) input.
+    recipe["replacements"] = json!([draft_replacement(0x902, 0, 32)]);
     assert_refused_with(
         &recipe,
         None,
@@ -121,14 +136,83 @@ fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
 }
 
 #[test]
-fn refuses_a_committed_directory_without_recipes() {
-    let empty = tempfile::tempdir().expect("tempdir");
+fn skips_the_drafts_own_file_among_the_committed_recipes() {
+    let committed = published_dir();
+    let mut recipe = committed_recipe();
+    recipe["recipe_id"] = json!("draft");
+    recipe["replacements"] = json!([draft_replacement(0x1000, 32, 0)]);
+    let draft = committed.path().join("draft.json");
+    write_bytes(&draft, &serde_json::to_vec(&recipe).expect("serialize"));
+    let missing_input = committed.path().join("XDJ700.UPD");
 
+    let result = run_precondition(&missing_input, &draft, committed.path());
+
+    // Compared with `published` only, not with itself: the command reaches the input.
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains("failed to read input update"), "{stderr}");
+    assert!(result.stdout.is_empty());
+}
+
+#[test]
+fn refuses_a_committed_directory_without_another_recipe_for_the_release() {
+    let empty = tempfile::tempdir().expect("tempdir");
     assert_refused_with(
         &committed_recipe(),
         None,
         empty.path(),
-        "it holds no recipes; pass the repository's recipes directory",
+        "it holds no other recipe for release xdj700-v1.15; pass the repository's recipes \
+         directory",
+    );
+
+    // A directory holding only a recipe for another release.
+    let other = tempfile::tempdir().expect("tempdir");
+    let mut elsewhere = committed_recipe();
+    elsewhere["target"]["release"] = json!("another-release");
+    write_bytes(
+        &other.path().join("elsewhere.json"),
+        &serde_json::to_vec(&elsewhere).expect("serialize"),
+    );
+    assert_refused_with(
+        &committed_recipe(),
+        None,
+        other.path(),
+        "it holds no other recipe for release xdj700-v1.15",
+    );
+
+    // A directory holding only the draft itself.
+    let only_draft = tempfile::tempdir().expect("tempdir");
+    let draft = only_draft.path().join("draft.json");
+    write_bytes(
+        &draft,
+        &serde_json::to_vec(&committed_recipe()).expect("serialize"),
+    );
+    let result = run_precondition(
+        &only_draft.path().join("XDJ700.UPD"),
+        &draft,
+        only_draft.path(),
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("it holds no other recipe for release"),
+        "{stderr}"
+    );
+    assert!(result.stdout.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn refuses_a_symbolic_link_among_the_committed_recipes() {
+    let committed = published_dir();
+    let elsewhere = tempfile::tempdir().expect("tempdir");
+    let target = elsewhere.path().join("outside.json");
+    write_bytes(&target, b"{}");
+    std::os::unix::fs::symlink(&target, committed.path().join("link.json")).expect("symlink");
+
+    assert_refused_with(
+        &committed_recipe(),
+        None,
+        committed.path(),
+        "input path does not point to a regular file",
     );
 }
 
