@@ -4,8 +4,8 @@
 use super::grid::{S2_ADDRESS_SPACE, follows_grid};
 use super::release::{StockRelease, VersionBlock};
 use super::{
-    APPLICATION_SECTION_OFFSET, decode_section, main_document, reported_version_at, section_frame,
-    verify_main_layout,
+    APPLICATION_SECTION_OFFSET, DecodedSection, decode_section, main_document, reported_version_at,
+    section_frame, verify_main_layout,
 };
 use crate::error::{RebuildCheck, RebuildError, SectionError};
 use crate::identity::sha256_hex;
@@ -50,7 +50,7 @@ impl<'a> StockMain<'a> {
             let base = image.base();
             return Err(RebuildError::InputSection(SectionError::ImageBase { base }));
         }
-        // Framing only here; callers that need the stock application decode it themselves.
+        // Framing only here; `application` decodes the stock application for callers that need it.
         let frame = section_frame(image.bytes(), APPLICATION_SECTION_OFFSET)
             .map_err(RebuildError::InputSection)?;
         if image.bytes()[frame.end()..]
@@ -75,6 +75,12 @@ impl<'a> StockMain<'a> {
             max_image_len: release.max_main_image_len.min(S2_ADDRESS_SPACE),
             version_block: release.version_block,
         })
+    }
+
+    /// The stock application, decoded from the verified input.
+    pub(super) fn application(&self) -> Result<DecodedSection, RebuildError> {
+        decode_section(self.image.bytes(), APPLICATION_SECTION_OFFSET)
+            .map_err(RebuildError::InputSection)
     }
 
     pub(super) fn main(&self) -> &UpdDocument {

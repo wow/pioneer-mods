@@ -18,7 +18,7 @@
 use super::grid::grid_records;
 use super::release::StockRelease;
 use super::stock::StockMain;
-use super::{APPLICATION_SECTION_OFFSET, decode_section, encode_section, validate_version_label};
+use super::{APPLICATION_SECTION_OFFSET, encode_section, validate_version_label};
 use crate::engine::verify_bounded_diff;
 use crate::error::{PatchEngineError, RebuildCheck, RebuildError};
 use crate::identity::sha256_hex;
@@ -150,9 +150,7 @@ pub fn rebuild_with_edited_stock_application<E: From<RebuildError>>(
 ) -> Result<RebuiltUpdate, E> {
     validate_version_label(label)?;
     let stock = StockMain::load(input, release)?;
-    let original = decode_section(stock.image.bytes(), APPLICATION_SECTION_OFFSET)
-        .map_err(RebuildError::InputSection)?
-        .into_decoded();
+    let original = stock.application()?.into_decoded();
     let mut decoded = original.clone();
     let declared = edit(&mut decoded)?;
     verify_bounded_diff(&original, &decoded, &declared).map_err(|error| match error {
@@ -180,8 +178,7 @@ pub fn rebuild_with_stock_application(
 ) -> Result<RebuiltUpdate, RebuildError> {
     validate_version_label(version)?;
     let stock = StockMain::load(input, release)?;
-    let application = decode_section(stock.image.bytes(), APPLICATION_SECTION_OFFSET)
-        .map_err(RebuildError::InputSection)?;
+    let application = stock.application()?;
     rebuild_from(&stock, input, application.decoded(), version)
 }
 

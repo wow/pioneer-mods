@@ -12,6 +12,6 @@ pub use error::{
 };
 pub use identity::{
     FirmwareIdentity, firmware_file_name, identify_bytes, identify_firmware, open_regular_file,
-    read_firmware, read_regular_file, sha256_hex,
+    read_firmware, read_regular_file, recipe_files, sha256_hex,
 };
 pub use upd::{UpdContainer, parse_upd, verify_roundtrip};

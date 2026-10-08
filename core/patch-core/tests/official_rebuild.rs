@@ -243,7 +243,8 @@ fn every_committed_recipe_applies_and_the_version_marker_reproduces_stage3() {
 }
 
 /// On the real application, a precondition window over zero padding is refused although its hash
-/// matches, so a recipe cannot publish the few bytes next to padding. Prints no bytes.
+/// matches, so a recipe cannot publish the few bytes next to padding, and `precondition_hashes`
+/// refuses to compute its hash. Prints no bytes.
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
 fn a_window_over_real_padding_is_refused() {
@@ -271,12 +272,19 @@ fn a_window_over_real_padding_is_refused() {
     }];
 
     let result = xdj700::apply_recipe_v2(&recipe, &official);
+    let target = xdj700::recipe_target("xdj700-v1.15").expect("target");
+    let hashed = xdj700::precondition_hashes(&recipe, target, &official);
 
-    assert!(
-        matches!(
-            result,
-            Err(xdj700::RecipeError::PredictableWindow { index: 0, .. })
-        ),
-        "a window over padding must be refused"
-    );
+    for (call, result) in [
+        ("apply_recipe_v2", result.map(|_| ())),
+        ("precondition_hashes", hashed.map(|_| ())),
+    ] {
+        assert!(
+            matches!(
+                result,
+                Err(xdj700::RecipeError::PredictableWindow { index: 0, .. })
+            ),
+            "{call} must refuse a window over padding"
+        );
+    }
 }

@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub mod across;
 pub mod v2;
 
+pub use across::{WindowOverlap, check_windows_across};
 pub use v2::{
     ExpectedV2, MAX_PRECONDITION_LEN, MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error,
     Replacement, SCHEMA_VERSION_V2, SchemaVersionProbe, TargetV2, bare_version_number,

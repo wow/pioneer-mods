@@ -3,17 +3,10 @@
 
 mod common;
 
-use common::write_bytes;
+use common::{committed_recipe, write_bytes};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-
-const VERSION_MARKER: &str = "../../recipes/xdj700-v1.15/version-marker-0.10.json";
-
-fn committed_recipe() -> Value {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(VERSION_MARKER);
-    serde_json::from_slice(&std::fs::read(path).expect("read recipe")).expect("recipe JSON")
-}
 
 fn run_patch(input: &Path, recipe: &Value, output: &Path, extra: &[&str]) -> Output {
     let dir = output.parent().expect("output directory");
@@ -102,6 +95,22 @@ fn refuses_an_input_of_the_wrong_length_without_reading_it() {
         &result,
         &output,
         "it is not the official update of release xdj700-v1.15 (23 bytes, expected 17371335)",
+    );
+}
+
+#[test]
+fn refuses_an_input_of_the_right_length_that_is_not_the_official_update() {
+    let (_dir, input, output) = paths();
+    // Zeros, as long as the official update.
+    let file = std::fs::File::create(&input).expect("create");
+    file.set_len(17_371_335).expect("grow");
+
+    let result = run_patch(&input, &committed_recipe(), &output, &[]);
+
+    assert_refused(
+        &result,
+        &output,
+        "it is not the official update of release xdj700-v1.15 (SHA-256 ",
     );
 }
 

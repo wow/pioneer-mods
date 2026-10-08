@@ -78,12 +78,42 @@ backstop.
 
 ## Writing a recipe
 
-Write recipes against your own copy of the official file, and commit only the recipe. The CLI
-does not yet print a window's SHA-256; a helper that does, after the same leak checks, is
-planned. Until then, compute it with `patch-core`: decode the stock application with
-`xdj700::decode_application`, take `sha256_hex` of the window, and check the recipe with
-`xdj700::apply_recipe_v2` before you commit it. Never paste stock bytes into an issue or a
-commit, only their hash.
+Write recipes against your own copy of the official file, and commit only the recipe. Never
+paste stock bytes into an issue or a commit, only their hash.
+
+1. Choose each span and its window in your own analysis of the decoded application. The CLI
+   does not extract it; `patch-core` decodes it (`xdj700::decode_application` on the parsed
+   official update), and it stays on your machine. Write the recipe with every field filled in,
+   and use any 64 hex digits (for example all zeros) as the placeholder for each
+   `precondition.sha256`. Leave `expected` out for now.
+2. Compute the hashes:
+
+   ```bash
+   cargo run --release -p patch-cli -- precondition \
+     --input /path/to/XDJ700.UPD \
+     --recipe /path/to/draft.json \
+     --committed-recipes recipes
+   ```
+
+   Before it computes any hash, the command runs the recipe's own checks (release pins, version
+   order, bounds, protected ranges), checks that its windows are disjoint from those of the other
+   committed recipes (the draft's own file is skipped, and the directory must hold another recipe
+   for the release), and runs each window's leak checks. So it never prints the hash of a window
+   those rules refuse, and it writes nothing. For each replacement it prints the window and its
+   SHA-256, and says whether the recipe already declares it. Copy the hashes into the recipe.
+   (The first recipe for a newly added release therefore needs a committed recipe for that
+   release first, such as its version marker.)
+3. Run `patch` to build the update. It checks every hash, adds the rebuild's own checks (bounded
+   diff, version rule, image size), and prints the output identities; copy them into `expected`.
+   `precondition --check` then exits with an error unless every hash is `as declared`.
+
+Settle your windows before you push: hashes of windows that later move stay in the history, and
+two overlapping windows reveal the bytes between them. CI checks the committed recipes again.
+
+A hash covers whatever is at the declared offset, so it cannot show that the offset is the one
+you meant. Check offsets against your own analysis before step 2. After that, the hash catches a
+later change to an offset, unless the same bytes also occur at the new offset (code and tables
+can repeat), so prefer windows long enough to be unique.
 
 ## What the engine checks
 

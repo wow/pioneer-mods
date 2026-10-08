@@ -1,16 +1,19 @@
-//! Owner-input test of `patch-cli rebuild` against the official XDJ-700 v1.15 update.
+//! Owner-input tests of `patch-cli rebuild`, `patch` and `precondition` against the official
+//! XDJ-700 v1.15 update.
 //!
 //! Vendor firmware and rebuilt files are never committed; the output goes to a temporary
-//! directory. To run locally:
+//! directory, and no firmware byte is printed. To run locally:
 //!
 //! ```text
 //! PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD \
 //!     cargo test -p patch-cli --test official_rebuild_command -- --ignored
 //! ```
 
+mod common;
 #[path = "../../patch-core/tests/common/official_pins.rs"]
 mod official_pins;
 
+use common::{committed_recipe, recipes_dir, version_marker_path};
 use official_pins::{
     NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES, STAGE3_APPLICATION_SHA256, STAGE3_LABEL,
     STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STOCK_APPLICATION_SHA256, UPD_ENV,
@@ -34,6 +37,30 @@ fn run_rebuild(input: &Path, label: &str, output: &Path) -> Output {
         .arg(output)
         .output()
         .expect("run patch-cli rebuild")
+}
+
+/// Runs `patch` on `input` and `recipe`, writing `output`.
+fn run_patch(input: &Path, recipe: &Path, output: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_patch-cli"))
+        .arg("patch")
+        .args(["--input".as_ref(), input.as_os_str()])
+        .args(["--recipe".as_ref(), recipe.as_os_str()])
+        .args(["--output".as_ref(), output.as_os_str()])
+        .output()
+        .expect("run patch-cli patch")
+}
+
+/// Runs `precondition` on `input` and `recipe`, against the committed recipes, with `extra`.
+fn run_precondition(input: &Path, recipe: &Path, extra: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_patch-cli"))
+        .arg("precondition")
+        .args(["--input".as_ref(), input.as_os_str()])
+        .args(["--recipe".as_ref(), recipe.as_os_str()])
+        .arg("--committed-recipes")
+        .arg(recipes_dir())
+        .args(extra)
+        .output()
+        .expect("run patch-cli precondition")
 }
 
 fn text(bytes: &[u8]) -> String {
@@ -185,23 +212,125 @@ fn patch_with_the_version_marker_recipe_writes_the_stage3_file() {
     let input = official_input();
     let dir = tempfile::tempdir().expect("tempdir");
     let output = dir.path().join("XDJ700.UPD");
-    let recipe = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../recipes/xdj700-v1.15/version-marker-0.10.json");
+    let recipe = version_marker_path();
 
-    let result = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
-        .arg("patch")
-        .arg("--input")
-        .arg(&input)
-        .arg("--recipe")
-        .arg(&recipe)
-        .arg("--output")
-        .arg(&output)
-        .output()
-        .expect("run patch-cli patch");
+    let result = run_patch(&input, &recipe, &output);
 
     assert!(result.status.success(), "{}", text(&result.stderr));
     assert!(text(&result.stdout).contains(&format!("output_sha256_hex: {STAGE3_UPD_SHA256}")));
     let written = std::fs::read(&output).expect("read output");
     assert_eq!(written.len(), STAGE3_UPD_LEN);
     assert_eq!(sha256_hex(&written), STAGE3_UPD_SHA256);
+}
+
+/// The stock application of the official file, and the offset of a 2-byte span in the code after
+/// the header whose window of 16 bytes on each side holds distinct bytes. Nothing is printed.
+fn stock_and_code_offset(input: &Path) -> (Vec<u8>, usize) {
+    let official = std::fs::read(input).expect("read official update");
+    let stock = xdj700::decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    let decoded = stock.into_decoded();
+    let distinct = |offset: usize| {
+        let mut seen = [false; 256];
+        decoded[offset - 16..offset]
+            .iter()
+            .chain(&decoded[offset + 2..offset + 18])
+            .all(|&byte| !std::mem::replace(&mut seen[usize::from(byte)], true))
+    };
+    let offset = (0x1000..decoded.len() - 18)
+        .find(|&offset| distinct(offset))
+        .expect("a window of distinct bytes");
+    (decoded, offset)
+}
+
+/// A draft replacement inverting the two stock bytes at `offset`, with a placeholder hash.
+fn inverting(decoded: &[u8], offset: usize, before: usize, after: usize) -> serde_json::Value {
+    serde_json::json!({
+        "offset": offset,
+        "bytes_hex": format!("{:02x}{:02x}", !decoded[offset], !decoded[offset + 1]),
+        "precondition": {"before": before, "after": after, "sha256": "00".repeat(32)},
+        "purpose": "an authoring test; never flashed"
+    })
+}
+
+/// The authoring flow on the official file: `precondition` hashes a draft's window, `--check`
+/// refuses the draft and accepts the completed recipe, and `patch` applies it. No byte is printed.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn precondition_completes_a_draft_that_patch_then_applies() {
+    let input = official_input();
+    let (decoded, offset) = stock_and_code_offset(&input);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let recipe_path = dir.path().join("draft.json");
+    let mut recipe = committed_recipe();
+    recipe.as_object_mut().expect("object").remove("expected");
+    recipe["replacements"] = serde_json::json!([inverting(&decoded, offset, 16, 16)]);
+    let write = |recipe: &serde_json::Value| {
+        std::fs::write(&recipe_path, serde_json::to_vec(recipe).expect("JSON")).expect("write")
+    };
+    write(&recipe);
+    let sha256 = sha256_hex(&decoded[offset - 16..offset + 18]);
+
+    let draft = run_precondition(&input, &recipe_path, &[]);
+    assert!(draft.status.success(), "{}", text(&draft.stderr));
+    let line = format!(
+        "replacements[0].precondition: {:#x}..{:#x} sha256 {sha256} (the recipe declares another \
+         hash)",
+        offset - 16,
+        offset + 18
+    );
+    assert!(
+        text(&draft.stdout).contains(&line),
+        "{}",
+        text(&draft.stdout)
+    );
+    let draft_checked = run_precondition(&input, &recipe_path, &["--check"]);
+    assert!(!draft_checked.status.success());
+    assert!(
+        text(&draft_checked.stderr).contains("1 of 1 declared precondition hashes differ"),
+        "{}",
+        text(&draft_checked.stderr)
+    );
+
+    recipe["replacements"][0]["precondition"]["sha256"] = serde_json::json!(sha256);
+    write(&recipe);
+    let complete = run_precondition(&input, &recipe_path, &["--check"]);
+    assert!(complete.status.success(), "{}", text(&complete.stderr));
+    assert!(text(&complete.stdout).contains(&format!("sha256 {sha256} (as declared)")));
+
+    let output = dir.path().join("XDJ700.UPD");
+    let patched = run_patch(&input, &recipe_path, &output);
+    assert!(patched.status.success(), "{}", text(&patched.stderr));
+    assert!(text(&patched.stdout).contains("application_reported_version: 0.10"));
+}
+
+/// When a later window is refused, `precondition` prints no hash at all, not even the earlier
+/// window's: here the second window lies over zero padding.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn precondition_prints_nothing_when_a_later_window_is_refused() {
+    let input = official_input();
+    let (decoded, offset) = stock_and_code_offset(&input);
+    // Zero padding after the code window, so the refused window is the second.
+    let padding = (offset + 64..decoded.len() - 40)
+        .find(|&start| decoded[start..start + 32].iter().all(|&byte| byte == 0))
+        .expect("zero padding after the code window");
+    let spans = [(offset, 16, 16), (padding + 32, 32, 6)];
+    let dir = tempfile::tempdir().expect("tempdir");
+    let recipe_path = dir.path().join("draft.json");
+    let mut recipe = committed_recipe();
+    recipe["replacements"] = spans
+        .iter()
+        .map(|&(at, before, after)| inverting(&decoded, at, before, after))
+        .collect();
+    std::fs::write(&recipe_path, serde_json::to_vec(&recipe).expect("JSON")).expect("write");
+
+    let result = run_precondition(&input, &recipe_path, &[]);
+
+    assert!(!result.status.success());
+    assert!(
+        text(&result.stderr).contains("replacements[1]: the 4 most common byte values fill"),
+        "{}",
+        text(&result.stderr)
+    );
+    assert!(result.stdout.is_empty(), "no hash may be printed");
 }

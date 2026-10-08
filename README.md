@@ -43,6 +43,9 @@ This repository currently includes:
   "Verified" means checked against the input and the recipe, not safe to flash: the start-up
   code is not mapped, so staying out of it is enforced by review and staged hardware tests, not
   by the tool. See [docs/recipes.md](./docs/recipes.md) and the flashing guide.
+- `precondition` command: prints a draft recipe's precondition hashes, computed on the official
+  file only after the recipe, committed-recipe and leak checks, so authors never compute a hash
+  themselves and never see one for a window those rules refuse
 
 ## Quick start (developer)
 
@@ -90,6 +93,18 @@ cargo run --release -p patch-cli -- patch \
   --input /path/to/XDJ700.UPD \
   --recipe recipes/xdj700-v1.15/version-marker-0.10.json \
   --output /path/to/new-dir/XDJ700.UPD
+```
+
+To write a recipe, `precondition` prints its precondition hashes, computed on the official file
+after the recipe, committed-recipe and leak checks, so a draft's placeholders can be filled in;
+`--check` confirms a completed recipe (see "Writing a recipe" in
+[docs/recipes.md](./docs/recipes.md)):
+
+```bash
+cargo run --release -p patch-cli -- precondition \
+  --input /path/to/XDJ700.UPD \
+  --recipe /path/to/draft.json \
+  --committed-recipes recipes
 ```
 
 Notes:
