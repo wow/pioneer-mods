@@ -12,7 +12,8 @@
 mod official_pins;
 
 use official_pins::{
-    NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES, STOCK_APPLICATION_SHA256, UPD_ENV,
+    NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES, STAGE3_APPLICATION_SHA256, STAGE3_LABEL,
+    STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STOCK_APPLICATION_SHA256, UPD_ENV,
 };
 use patch_core::{parse_upd, sha256_hex, xdj700};
 use std::path::{Path, PathBuf};
@@ -121,4 +122,58 @@ fn rebuild_writes_every_pinned_stage_file() {
             "{label}: {report}"
         );
     }
+}
+
+/// The stage-3 file (stock application reporting `0.10`), written by the binary and checked with
+/// `inspect`, as an owner would.
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn rebuild_writes_the_pinned_stage3_reported_version_file() {
+    let input = official_input();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let output = dir.path().join("XDJ700.UPD");
+
+    let result = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
+        .args(["rebuild", "--application", "stock", "--label", STAGE3_LABEL])
+        .args(["--report-version", STAGE3_REPORTED_VERSION, "--input"])
+        .arg(&input)
+        .arg("--output")
+        .arg(&output)
+        .output()
+        .expect("run patch-cli rebuild");
+
+    assert!(result.status.success(), "{}", text(&result.stderr));
+    assert!(
+        !text(&result.stderr).contains("warning:"),
+        "{}",
+        text(&result.stderr)
+    );
+    let stdout = text(&result.stdout);
+    assert!(
+        stdout.contains("application_reported_version: 0.10"),
+        "{stdout}"
+    );
+    assert!(stdout.contains(&format!(
+        "application_sha256_hex: {STAGE3_APPLICATION_SHA256}"
+    )));
+    let written = std::fs::read(&output).expect("read output");
+    assert_eq!(written.len(), STAGE3_UPD_LEN);
+    assert_eq!(sha256_hex(&written), STAGE3_UPD_SHA256);
+
+    let inspect = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
+        .args(["inspect", "--structure", "--format", "json", "--input"])
+        .arg(&output)
+        .output()
+        .expect("run patch-cli inspect");
+
+    assert!(inspect.status.success(), "{}", text(&inspect.stderr));
+    let report: serde_json::Value = serde_json::from_slice(&inspect.stdout).expect("inspect JSON");
+    assert_eq!(
+        report["application"]["reported_version"],
+        STAGE3_REPORTED_VERSION
+    );
+    assert_eq!(
+        report["application"]["decoded_sha256"],
+        STAGE3_APPLICATION_SHA256
+    );
 }

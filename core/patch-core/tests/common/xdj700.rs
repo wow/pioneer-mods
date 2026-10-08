@@ -155,6 +155,7 @@ pub fn release(len: usize, sha256: &str) -> StockRelease<'_> {
         upd_len: len,
         upd_sha256: sha256,
         max_main_image_len: SYNTHETIC_MAX_MAIN_IMAGE_LEN,
+        version_block: None,
     }
 }
 

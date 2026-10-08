@@ -51,3 +51,17 @@ pub const STAGE_FILES: [(&str, &str); 3] = [
         "2d0a4a09a90494c8af26fd585ec5bc1b058b2d731f9d5d72d8ed03fafc4a758d",
     ),
 ];
+
+/// Stage 3: the stock application with only its version string set to `0.10` (lower than the
+/// official 1.15, so the official update is written over it), labelled `Ver1.16`.
+/// Cross-checked byte-identical against the reference serializer (2026-10-08).
+pub const STAGE3_REPORTED_VERSION: &str = "0.10";
+pub const STAGE3_LABEL: &str = "Ver1.16";
+pub const STAGE3_APPLICATION_SHA256: &str =
+    "74afbf4409242f58f11caac5142ccc220d39199f28c50155d0a2af9ed42d5ad3";
+pub const STAGE3_MAIN_LEN: usize = 7_250_753;
+pub const STAGE3_MAIN_SHA256: &str =
+    "d183e5d580a9c516ec4c1f4ad91218617b7331a52f874afc405354f53c53c979";
+pub const STAGE3_UPD_LEN: usize = 17_368_543;
+pub const STAGE3_UPD_SHA256: &str =
+    "84cbd2637b167893c6ad3ff8bc4a0b4cfb7cf5984dc399f6b018a8b5ddb0be5c";

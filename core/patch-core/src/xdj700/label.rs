@@ -36,9 +36,15 @@ pub fn is_label_higher(label: &str, installed: &str) -> Result<bool, RebuildErro
 }
 
 /// `VerX.YY` as `X * 100 + YY`, or `None` for any other form.
-fn version_number(version: &str) -> Option<u16> {
+fn version_number(label: &str) -> Option<u16> {
+    label.strip_prefix("Ver").and_then(bare_version_number)
+}
+
+/// A bare `X.YY` (as the application's version string holds it) as `X * 100 + YY`, or `None` for
+/// any other form. The one parser for both labels and reported versions.
+pub(super) fn bare_version_number(version: &str) -> Option<u16> {
     match version.as_bytes() {
-        [b'V', b'e', b'r', major, b'.', tens, units]
+        [major, b'.', tens, units]
             if [major, tens, units]
                 .iter()
                 .all(|digit| digit.is_ascii_digit()) =>

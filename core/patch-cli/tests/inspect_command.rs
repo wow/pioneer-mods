@@ -1,6 +1,6 @@
 use patch_core::sha256_hex;
 use patch_core::upd::crc16_xmodem;
-use patch_core::xdj700::section_checksum;
+use patch_core::xdj700::{VERSION_STRING_OFFSET, encode_section, section_checksum};
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -266,6 +266,36 @@ fn inspect_structure_decodes_xdj700_application_section() {
     let mut decoded = vec![0u8; 19];
     decoded.extend(1..=8);
     assert_eq!(application["decoded_sha256"], sha256_hex(&decoded));
+    assert!(
+        application["reported_version"].is_null() && application.get("reported_version").is_some(),
+        "a 27-byte application holds no version string, reported as null: {application}"
+    );
+    let text = run_inspect(&input, &["--structure"]);
+    assert!(String::from_utf8_lossy(&text.stdout).contains(" reported_version=none"));
+}
+
+#[test]
+fn inspect_structure_reports_the_application_reported_version() {
+    let mut decoded = vec![0u8; 0x800];
+    decoded[VERSION_STRING_OFFSET..VERSION_STRING_OFFSET + 5].copy_from_slice(b"0.10\0");
+    let mut image = vec![0xFF; 0x40000];
+    image.extend(encode_section(&decoded).expect("encode"));
+    let mut lines = vec![srec('0', 2, 0, &[])];
+    for (index, chunk) in image.chunks(32).enumerate() {
+        lines.push(srec('2', 3, (index * 32) as u32, chunk));
+    }
+    lines.push(srec('7', 4, 0, &[]));
+    let tempdir = tempfile::tempdir().expect("create tempdir");
+    let input = tempdir.path().join("XDJ700.UPD");
+    fs::write(&input, upd_for("XDJ-700", "Ver1.15", &lines)).expect("write input");
+
+    let json_output = run_inspect(&input, &["--structure", "--format", "json"]);
+    let text_output = run_inspect(&input, &["--structure"]);
+
+    let json: serde_json::Value = serde_json::from_slice(&json_output.stdout).expect("valid JSON");
+    assert_eq!(json["application"]["reported_version"], "0.10", "{json}");
+    let text = String::from_utf8_lossy(&text_output.stdout);
+    assert!(text.contains(" reported_version=0.10"), "{text}");
 }
 
 #[test]

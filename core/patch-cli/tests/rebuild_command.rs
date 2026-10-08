@@ -220,3 +220,35 @@ fn warns_about_labels_the_updater_skips_on_v115() {
         assert_eq!(warned, warns, "{label}: {}", stderr(&result));
     }
 }
+
+#[test]
+fn refuses_a_reported_version_not_lower_than_official_before_reading_the_input() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let missing_input = dir.path().join("missing.UPD");
+    let output = dir.path().join("rebuilt.UPD");
+
+    for (version, message) in [
+        (
+            "1.15",
+            "reported version 1.15 is not lower than the official 1.15",
+        ),
+        ("0.1", "reported version \"0.1\" is not of the form X.YY"),
+    ] {
+        let result = run_rebuild(&[
+            "--input",
+            missing_input.to_str().expect("utf-8 path"),
+            "--application",
+            "stock",
+            "--label",
+            "Ver1.16",
+            "--report-version",
+            version,
+            "--output",
+            output.to_str().expect("utf-8 path"),
+        ]);
+
+        assert!(!result.status.success());
+        assert!(stderr(&result).contains(message), "{}", stderr(&result));
+        assert!(!output.exists());
+    }
+}

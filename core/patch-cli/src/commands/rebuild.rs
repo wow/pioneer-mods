@@ -1,7 +1,8 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
 use patch_core::xdj700::{
-    OFFICIAL_V115, OFFICIAL_V115_LABEL, is_label_higher, rebuild_with_stock_application,
+    OFFICIAL_V115, OFFICIAL_V115_LABEL, OFFICIAL_V115_VERSION_BLOCK, is_label_higher,
+    rebuild_with_stock_application, rebuild_with_stock_application_reporting,
 };
 use patch_core::{RebuildError, firmware_file_name, open_regular_file};
 use std::io::Read;
@@ -10,7 +11,8 @@ use std::path::{Path, PathBuf};
 /// Where the rebuilt application comes from.
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApplicationSource {
-    /// The input's own application, unchanged (re-encoded only): a no-op rebuild.
+    /// The input's own application, re-encoded: a no-op rebuild, unless `--report-version` changes
+    /// its version string.
     Stock,
 }
 
@@ -32,6 +34,13 @@ pub struct RebuildArgs {
     /// Path for the rebuilt update. Must not exist; it is never overwritten.
     #[arg(long)]
     pub output: PathBuf,
+
+    /// Version the application reports about itself (`X.YY`, lower than 1.15), e.g. `0.10`.
+    /// Only the application's version string changes. The unit then reports this version, so the
+    /// official v1.15 update is written over it and restores stock (observed; see the guide's
+    /// stages 3 and 4). Without it the application keeps `1.15`.
+    #[arg(long, value_name = "X.YY")]
+    pub report_version: Option<String>,
 }
 
 pub fn rebuild(args: RebuildArgs) -> Result<()> {
@@ -44,26 +53,35 @@ pub fn rebuild(args: RebuildArgs) -> Result<()> {
             args.label
         );
     }
+    if let Some(version) = &args.report_version {
+        OFFICIAL_V115_VERSION_BLOCK.validate_reported_version(version)?;
+    }
     ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;
     let input = read_official_input(&args.input)?;
 
-    let rebuilt = match args.application {
-        ApplicationSource::Stock => {
+    let rebuilt = match (args.application, &args.report_version) {
+        (ApplicationSource::Stock, None) => {
             rebuild_with_stock_application(&input, &OFFICIAL_V115, &args.label)
         }
+        (ApplicationSource::Stock, Some(version)) => {
+            rebuild_with_stock_application_reporting(&input, &OFFICIAL_V115, version, &args.label)
+        }
     }
-    .map_err(|error| match error {
-        RebuildError::UnpinnedInput { sha256 } => not_official(&args.input, &sha256),
-        other => anyhow::Error::new(other)
-            .context(format!("refusing to rebuild '{}'", args.input.display())),
-    })?;
+    .map_err(|error| refusal(&args.input, error))?;
 
     write_output_atomically(&args.output, rebuilt.bytes(), Overwrite::Never)?;
 
     println!("release: XDJ-700 v1.15 (official)");
     println!("input_file: {}", firmware_file_name(&args.input));
     println!("input_sha256_hex: {}", OFFICIAL_V115.upd_sha256);
-    println!("application: stock (re-encoded, unchanged)");
+    match &args.report_version {
+        None => println!("application: stock (re-encoded, unchanged)"),
+        Some(_) => println!("application: stock with only its version string changed"),
+    }
+    println!(
+        "application_reported_version: {}",
+        rebuilt.application_reported_version().unwrap_or("none")
+    );
     println!("application_sha256_hex: {}", rebuilt.application_sha256());
     println!("version_label: {}", args.label);
     println!("main_image_len: {}", rebuilt.main_image_len());
@@ -98,6 +116,15 @@ fn read_official_input(path: &Path) -> Result<Vec<u8>> {
         .read_to_end(&mut bytes)
         .with_context(read_failed)?;
     Ok(bytes)
+}
+
+fn refusal(path: &Path, error: RebuildError) -> anyhow::Error {
+    match error {
+        RebuildError::UnpinnedInput { sha256 } => not_official(path, &sha256),
+        other => {
+            anyhow::Error::new(other).context(format!("refusing to rebuild '{}'", path.display()))
+        }
+    }
 }
 
 fn not_official(path: &Path, sha256: &str) -> anyhow::Error {

@@ -54,6 +54,9 @@ enum ApplicationReport {
         checksum: String,
         decoded_len: usize,
         decoded_sha256: String,
+        /// The version string the application reports about itself (`null` when it holds no
+        /// well-formed one).
+        reported_version: Option<String>,
     },
     /// Neither the MAIN version nor its loader region has a verified section layout, so nothing
     /// was decoded.
@@ -71,6 +74,7 @@ impl ApplicationReport {
                 checksum: format!("0x{:04X}", section.checksum()),
                 decoded_len: section.decoded().len(),
                 decoded_sha256: section.decoded_sha256(),
+                reported_version: xdj700::reported_version(section.decoded()).map(str::to_owned),
             },
             Err(error @ SectionError::UnverifiedVersion { .. }) => Self::Unsupported {
                 reason: error.to_string(),
@@ -178,10 +182,15 @@ fn print_text(report: &InspectReport) {
             checksum,
             decoded_len,
             decoded_sha256,
-        }) => println!(
-            "application: offset={offset} compressed_len={compressed_len} checksum={checksum} (ok) \
-             decoded_len={decoded_len} decoded_sha256={decoded_sha256}"
-        ),
+            reported_version,
+        }) => {
+            let reported = reported_version.as_deref().unwrap_or("none");
+            println!(
+                "application: offset={offset} compressed_len={compressed_len} checksum={checksum} \
+                 (ok) decoded_len={decoded_len} decoded_sha256={decoded_sha256} \
+                 reported_version={reported}"
+            );
+        }
         Some(ApplicationReport::Unsupported { reason }) => {
             println!("application: unsupported ({reason})");
         }

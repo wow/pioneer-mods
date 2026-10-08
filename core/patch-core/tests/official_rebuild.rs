@@ -20,7 +20,9 @@ mod official_pins;
 
 use official_pins::{
     NOOP_MAIN_LEN, NOOP_MAIN_SHA256, NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES,
-    STOCK_APPLICATION_SHA256, UPD_ENV, UPD_SHA256,
+    STAGE3_APPLICATION_SHA256, STAGE3_LABEL, STAGE3_MAIN_LEN, STAGE3_MAIN_SHA256,
+    STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STOCK_APPLICATION_SHA256, UPD_ENV,
+    UPD_SHA256,
 };
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115, decode_application, rebuild_with_application,
@@ -113,6 +115,8 @@ fn rebuild_reproduces_the_reference_alpha2_pins() {
     assert_eq!(rebuilt.main_image_sha256(), ALPHA2_MAIN_SHA256);
     assert_eq!(rebuilt.bytes().len(), ALPHA2_UPD_LEN);
     assert_eq!(rebuilt.sha256(), ALPHA2_UPD_SHA256);
+    // Why the release rule accepts alpha.2: it reports a version lower than 1.15.
+    assert_eq!(rebuilt.application_reported_version(), Some("0.96"));
 }
 
 #[test]
@@ -145,4 +149,63 @@ fn stage_files_are_pinned_and_decode_to_the_stock_application() {
             "{label}"
         );
     }
+}
+
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn stage3_reported_version_file_is_pinned() {
+    let official = official_upd();
+    let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    assert_eq!(xdj700::reported_version(stock.decoded()), Some("1.15"));
+
+    let mut modified = stock.decoded().to_vec();
+    xdj700::OFFICIAL_V115_VERSION_BLOCK
+        .set_reported_version(&mut modified, STAGE3_REPORTED_VERSION)
+        .expect("lower version");
+    let rebuilt = rebuild_with_application(&official, &OFFICIAL_V115, &modified, STAGE3_LABEL)
+        .expect("rebuild");
+    let reporting = xdj700::rebuild_with_stock_application_reporting(
+        &official,
+        &OFFICIAL_V115,
+        STAGE3_REPORTED_VERSION,
+        STAGE3_LABEL,
+    )
+    .expect("reporting rebuild");
+    assert_eq!(reporting, rebuilt, "both paths give the same verified file");
+
+    assert_eq!(rebuilt.application_sha256(), STAGE3_APPLICATION_SHA256);
+    assert_eq!(rebuilt.main_image_len(), STAGE3_MAIN_LEN);
+    assert_eq!(rebuilt.main_image_sha256(), STAGE3_MAIN_SHA256);
+    assert_eq!(rebuilt.bytes().len(), STAGE3_UPD_LEN);
+    assert_eq!(rebuilt.sha256(), STAGE3_UPD_SHA256);
+    let application = decode_application(&parse_upd(rebuilt.bytes()).expect("parse output"))
+        .expect("the stage-3 file decodes");
+    assert_eq!(
+        xdj700::reported_version(application.decoded()),
+        Some(STAGE3_REPORTED_VERSION)
+    );
+}
+
+/// The release rule on the real file: `rebuild_with_application` refuses a modified application
+/// that does not report a version lower than 1.15 (the synthetic tests cover `verify_rebuild`).
+#[test]
+#[ignore = "needs owner-supplied firmware; see module docs"]
+fn a_modified_application_reporting_1_16_is_refused() {
+    let official = official_upd();
+    let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    assert_eq!(
+        xdj700::OFFICIAL_V115_VERSION_BLOCK.stock_application_sha256,
+        STOCK_APPLICATION_SHA256
+    );
+    let mut higher = stock.decoded().to_vec();
+    let offset = xdj700::VERSION_STRING_OFFSET;
+    higher[offset..offset + 4].copy_from_slice(b"1.16");
+
+    assert_eq!(
+        rebuild_with_application(&official, &OFFICIAL_V115, &higher, "Ver1.17"),
+        Err(RebuildError::ModifiedApplicationVersion {
+            reported: Some("1.16".to_owned()),
+            official: "1.15".to_owned()
+        })
+    );
 }
