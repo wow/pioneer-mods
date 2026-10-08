@@ -10,23 +10,19 @@
 //! The pinned identities are public (published by the reference implementation; see the README's
 //! Acknowledgements) and contain no firmware bytes.
 
+#[path = "common/official_pins.rs"]
+mod official_pins;
+
+use official_pins::{
+    FALLBACK_COMPRESSED_LEN, FALLBACK_DECODED_LEN, FALLBACK_DECODED_SHA256, STOCK_APPLICATION_LEN,
+    STOCK_APPLICATION_SHA256, UPD_ENV, UPD_LEN, UPD_SHA256,
+};
 use patch_core::upd::ImageReport;
 use patch_core::{read_firmware, sha256_hex, verify_roundtrip, xdj700};
 use std::path::PathBuf;
 
-const ENV_VAR: &str = "PIONEER_XDJ700_V115_UPD";
-const UPD_SIZE: u64 = 17_371_335;
-const UPD_SHA256: &str = "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c";
 const MAIN_IMAGE_SHA256: &str = "de683f253eba02e86ada5c89f2302a0f3a45331ffdcb5e6f9f20359aa6f6ce3a";
 const PANL_IMAGE_SHA256: &str = "52c5a54320c11477c50ed1da93fc585128c50e9e78d624c5ae27a8f4ad4c3a99";
-const APPLICATION_DECODED_LEN: usize = 18_601_864;
-const APPLICATION_DECODED_SHA256: &str =
-    "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939";
-/// The loader's fallback updater section (decoded), run on an application checksum mismatch.
-const FALLBACK_COMPRESSED_LEN: usize = 127_776;
-const FALLBACK_DECODED_LEN: usize = 222_684;
-const FALLBACK_DECODED_SHA256: &str =
-    "ef2e0aaabb2400bd7938ac0c2d737545db276f53ba257a12ed83063eed0cf9a2";
 /// Re-encoding of the stock application (not the stock packer's bytes). Verified byte-identical
 /// to the reference encoder's output for the same input (2026-10-07), and pinned so any
 /// encoder drift is noticed.
@@ -35,16 +31,19 @@ const REENCODED_STREAM_SHA256: &str =
     "00b29057b9b92e20de9b5c899ac36095bbd1128f94e7aa1dd5b8314c8b0c8063";
 
 fn official_upd_path() -> PathBuf {
-    std::env::var_os(ENV_VAR)
+    std::env::var_os(UPD_ENV)
         .map(PathBuf::from)
-        .unwrap_or_else(|| panic!("set {ENV_VAR} to an owner-supplied official XDJ700.UPD"))
+        .unwrap_or_else(|| panic!("set {UPD_ENV} to an owner-supplied official XDJ700.UPD"))
 }
 
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
 fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
     let (identity, bytes) = read_firmware(&official_upd_path()).expect("read official UPD");
-    assert_eq!(identity.size_bytes, UPD_SIZE, "not the official v1.15 file");
+    assert_eq!(
+        identity.size_bytes, UPD_LEN as u64,
+        "not the official v1.15 file"
+    );
     assert_eq!(
         identity.sha256_hex, UPD_SHA256,
         "not the official v1.15 file"
@@ -66,6 +65,11 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
     assert_eq!(main_image.base(), 0);
     assert_eq!(main_image.bytes().len(), 0x6E_A7C0);
     assert_eq!(sha256_hex(main_image.bytes()), MAIN_IMAGE_SHA256);
+    assert_eq!(
+        [sha256_hex(&main_image.bytes()[..xdj700::APPLICATION_SECTION_OFFSET]).as_str()],
+        xdj700::VERIFIED_LOADER_SHA256,
+        "the verified loader region is the official v1.15 one"
+    );
 
     let panel_image = panel.image().expect("PANL image");
     assert_eq!(panel_image.base(), 0x0C_0000);
@@ -86,8 +90,8 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
 
     let application = xdj700::decode_application(&container).expect("application section");
     assert_eq!(application.offset(), xdj700::APPLICATION_SECTION_OFFSET);
-    assert_eq!(application.decoded().len(), APPLICATION_DECODED_LEN);
-    assert_eq!(application.decoded_sha256(), APPLICATION_DECODED_SHA256);
+    assert_eq!(application.decoded().len(), STOCK_APPLICATION_LEN);
+    assert_eq!(application.decoded_sha256(), STOCK_APPLICATION_SHA256);
     assert_eq!(&application.decoded()[..19], &[0; 19]);
 
     let fallback = xdj700::decode_section(main_image.bytes(), xdj700::FALLBACK_SECTION_OFFSET)
@@ -101,5 +105,5 @@ fn official_xdj700_v115_roundtrips_and_matches_pinned_images() {
     assert_eq!(stream.len(), REENCODED_STREAM_LEN);
     assert_eq!(sha256_hex(stream), REENCODED_STREAM_SHA256);
     let redecoded = xdj700::decode_section(&reencoded, 0).expect("decode re-encoded");
-    assert_eq!(redecoded.decoded_sha256(), APPLICATION_DECODED_SHA256);
+    assert_eq!(redecoded.decoded_sha256(), STOCK_APPLICATION_SHA256);
 }

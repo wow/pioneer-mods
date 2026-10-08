@@ -32,8 +32,20 @@ pub struct RebuildArgs {
     pub output: PathBuf,
 }
 
+/// MAIN label of the official release the rebuild starts from.
+const OFFICIAL_LABEL: &str = "Ver1.15";
+
 pub fn rebuild(args: RebuildArgs) -> Result<()> {
     validate_version_label(&args.label)?;
+    // Validated labels are fixed-width `VerD.DD`, so byte order is version order.
+    if args.label.as_str() <= OFFICIAL_LABEL {
+        eprintln!(
+            "warning: label {} is not higher than the official {OFFICIAL_LABEL}; a unit running \
+             official v1.15 or later skips it (MAIN jumps straight to 100% and nothing is \
+             written). See docs/xdj700-flashing.md",
+            args.label
+        );
+    }
     ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;
     let input = read_official_input(&args.input)?;
 

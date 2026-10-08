@@ -18,7 +18,7 @@
 use super::grid::{S2_ADDRESS_SPACE, follows_grid, grid_records};
 use super::{
     APPLICATION_SECTION_OFFSET, decode_section, encode_section, main_document, section_frame,
-    verify_main_version,
+    verify_main_layout,
 };
 use crate::error::{RebuildCheck, RebuildError, SectionError};
 use crate::identity::sha256_hex;
@@ -28,10 +28,11 @@ use crate::upd::{
 };
 use std::ops::Range;
 
-/// Most a rebuilt MAIN image may grow beyond the official one. Where the device keeps its
-/// fallback updater, and how large the application flash region is, are unconfirmed (ambiguity
-/// A3), so growth is bounded. The hardware-tested reference alpha.2 build grows by 44,399 bytes.
-/// Raise this only with evidence about the flash layout.
+/// Most a rebuilt MAIN image may grow beyond the official one. The fallback updater lies in the
+/// loader region, which every rebuild keeps byte-identical (see
+/// [`FALLBACK_SECTION_OFFSET`](super::FALLBACK_SECTION_OFFSET)), but the size of the application
+/// flash region is unconfirmed, so growth is bounded. The hardware-tested reference alpha.2
+/// build grows by 44,399 bytes. Raise this only with evidence about the flash layout.
 pub const MAX_MAIN_GROWTH: usize = 256 * 1024;
 
 /// An official release a rebuild may start from.
@@ -247,10 +248,10 @@ impl StockMain {
         }
         let container = verify_roundtrip(input).map_err(RebuildError::Input)?;
         let main = main_document(&container).map_err(RebuildError::InputSection)?;
-        verify_main_version(main).map_err(RebuildError::InputSection)?;
         let image = main
             .image()
             .map_err(|error| RebuildError::InputSection(SectionError::Image(error)))?;
+        verify_main_layout(main, &image).map_err(RebuildError::InputSection)?;
         if image.base() != 0 {
             let base = image.base();
             return Err(RebuildError::InputSection(SectionError::ImageBase { base }));

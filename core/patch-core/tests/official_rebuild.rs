@@ -15,6 +15,13 @@
 //! Its identities, and those of the hardware-tested alpha.2 MAIN image and update, are public
 //! pins and contain no firmware bytes.
 
+#[path = "common/official_pins.rs"]
+mod official_pins;
+
+use official_pins::{
+    NOOP_MAIN_LEN, NOOP_MAIN_SHA256, NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES,
+    STOCK_APPLICATION_SHA256, UPD_ENV, UPD_SHA256,
+};
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115, decode_application, rebuild_with_application,
     rebuild_with_stock_application, verify_rebuild,
@@ -22,41 +29,7 @@ use patch_core::xdj700::{
 use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex, xdj700};
 use std::path::PathBuf;
 
-const UPD_ENV: &str = "PIONEER_XDJ700_V115_UPD";
 const ALPHA2_ENV: &str = "PIONEER_XDJ700_REFERENCE_ALPHA2_DECODED";
-const UPD_SHA256: &str = "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c";
-
-/// The stock application re-encoded under the stock label. (On a v1.15 unit the updater skips
-/// this label; the hardware stage files are the `Ver0.90` and `Ver1.16` variants below.)
-/// Cross-checked byte-identical against the reference serializer (2026-10-07).
-const NOOP_UPD_LEN: usize = 17_368_545;
-const NOOP_UPD_SHA256: &str = "f2dd19d47b8253fbea189009166f958b2d9f29a0bb8a5d7d258f98144134d06c";
-const NOOP_MAIN_LEN: usize = 7_250_754;
-const NOOP_MAIN_SHA256: &str = "c03360e5e93493d2d3a292707c74d7889e503ac4f7e7bfa81cbe8d9af88e9eef";
-/// The same no-op rebuild under the hardware-stage labels. The updater writes only versions
-/// higher than the installed one (observed on an owner's unit): `Ver0.90` (stage 1, the lower
-/// probe) was skipped, so stage 1b uses `Ver1.16`, the smallest higher label, and the recovery
-/// stick uses `Ver1.17`. The MAIN image is unchanged; only the descriptor and the CRCs differ.
-/// All are cross-checked byte-identical against the reference serializer.
-const STAGE_FILES: [(&str, &str); 3] = [
-    (
-        "Ver0.90",
-        "79f25fa1be84e0e5323273eb36ca5cbfd0f532824f6a2fde0a80db6965380252",
-    ),
-    (
-        "Ver1.16",
-        "9e1ac10e09c701cb6863b8667131e03452156a0bd7702823bc5f0502a88b6a08",
-    ),
-    // Recovery stick: a label above anything installed, because the official v1.15 file is
-    // skipped in normal update mode on a unit that reports 1.15 or higher.
-    (
-        "Ver1.17",
-        "2d0a4a09a90494c8af26fd585ec5bc1b058b2d731f9d5d72d8ed03fafc4a758d",
-    ),
-];
-const FALLBACK_DECODED_SHA256: &str =
-    "ef2e0aaabb2400bd7938ac0c2d737545db276f53ba257a12ed83063eed0cf9a2";
-
 const ALPHA2_DECODED_LEN: usize = 18_655_132;
 const ALPHA2_DECODED_SHA256: &str =
     "9bfb9df00336bf79c9c0acc529f29ed1a23afaa82c5fb49df7ed4dffd214d2b6";
@@ -144,7 +117,7 @@ fn rebuild_reproduces_the_reference_alpha2_pins() {
 
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
-fn stage_files_are_pinned_and_keep_the_fallback_updater() {
+fn stage_files_are_pinned_and_decode_to_the_stock_application() {
     let official = official_upd();
 
     for (label, sha256) in STAGE_FILES {
@@ -153,16 +126,22 @@ fn stage_files_are_pinned_and_keep_the_fallback_updater() {
 
         assert_eq!(rebuilt.bytes().len(), NOOP_UPD_LEN, "{label}");
         assert_eq!(rebuilt.sha256(), sha256, "{label}");
+        // Pins every MAIN byte, so the loader region, and the fallback updater pinned in
+        // `official_firmware`, are the official ones.
         assert_eq!(rebuilt.main_image_sha256(), NOOP_MAIN_SHA256, "{label}");
         let parsed = parse_upd(rebuilt.bytes()).expect("parse");
-        let main = xdj700::main_document(&parsed).expect("main");
-        assert_eq!(main.descriptor().version(), label);
-        let image = main.image().expect("image");
-        let fallback = xdj700::decode_section(image.bytes(), xdj700::FALLBACK_SECTION_OFFSET)
-            .expect("fallback updater section survives the rebuild");
         assert_eq!(
-            fallback.decoded_sha256(),
-            FALLBACK_DECODED_SHA256,
+            xdj700::main_document(&parsed)
+                .expect("main")
+                .descriptor()
+                .version(),
+            label
+        );
+        // The label is not verified, but the loader region is, so the layout is accepted.
+        let application = decode_application(&parsed).expect("stage file decodes");
+        assert_eq!(
+            application.decoded_sha256(),
+            STOCK_APPLICATION_SHA256,
             "{label}"
         );
     }

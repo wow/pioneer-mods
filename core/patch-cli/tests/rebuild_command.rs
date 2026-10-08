@@ -195,3 +195,28 @@ fn refuses_a_missing_output_directory_before_reading_the_input() {
         stderr(&result)
     );
 }
+
+#[test]
+fn warns_about_labels_the_updater_skips_on_v115() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = dir.path().join("XDJ700.UPD");
+    let output = dir.path().join("rebuilt.UPD");
+    write_bytes(&input, b"not the official update");
+
+    for (label, warns) in [
+        ("Ver0.90", true),
+        ("Ver1.14", true),
+        ("Ver1.15", true),
+        ("Ver1.16", false),
+        ("Ver1.17", false),
+        ("Ver9.99", false),
+    ] {
+        // The input is refused afterwards; the warning comes first, where the owner looks.
+        let result = rebuild(&input, &output, label);
+
+        let warned = stderr(&result).contains(&format!(
+            "warning: label {label} is not higher than the official Ver1.15"
+        ));
+        assert_eq!(warned, warns, "{label}: {}", stderr(&result));
+    }
+}

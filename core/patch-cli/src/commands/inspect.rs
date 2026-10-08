@@ -55,7 +55,8 @@ enum ApplicationReport {
         decoded_len: usize,
         decoded_sha256: String,
     },
-    /// The MAIN version's section layout has not been verified, so nothing was decoded.
+    /// Neither the MAIN version nor its loader region has a verified section layout, so nothing
+    /// was decoded.
     Unsupported { reason: String },
     /// The section failed verification; reported rather than failing the structure report.
     Invalid { reason: String },
@@ -84,12 +85,7 @@ impl ApplicationReport {
 /// Summarizes the container and, for XDJ-700 updates, decodes the application section from the
 /// MAIN image the summary builds, so the image is built once and within the image budget.
 fn summarize(container: &UpdContainer) -> Result<(UpdSummary, Option<ApplicationReport>)> {
-    let main = xdj700::is_xdj700(container).then(|| {
-        xdj700::main_document(container).and_then(|main| {
-            xdj700::verify_main_version(main)?;
-            Ok(main)
-        })
-    });
+    let main = xdj700::is_xdj700(container).then(|| xdj700::main_document(container));
     let mut decoded = None;
     let summary = container.summary_with_images(|document, image| {
         if let Some(Ok(main)) = &main

@@ -15,6 +15,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   rebuild labelled `Ver0.90` (stage 1, the lower probe), `Ver1.16` (stage 1b) and `Ver1.17`
   (the recovery stick; the official v1.15 file is skipped in normal update mode on a unit that
   reports 1.15 or higher).
+- The XDJ-700 application layout is accepted when the MAIN label is verified (`Ver1.15`) **or**
+  the loader region `[0, 0x40000)` matches the official v1.15 loader
+  (`xdj700::VERIFIED_LOADER_SHA256`). The loader fixes the application offset, and rebuilds keep
+  that region byte-identical, so `inspect --structure` decodes the stage files instead of
+  reporting them as unsupported. `verify_main_version` is replaced by `verify_main_layout`.
+- `patch-cli rebuild` warns on stderr when the label is not higher than `Ver1.15`, since a unit
+  running official v1.15 or later skips such a file.
 - The owner flashing guide (`docs/xdj700-flashing.md`) records the observed updater behaviour:
   the updater writes only versions higher than the installed one; equal and lower versions
   (including the project's `Ver0.90` probe) are skipped. Stage 1b therefore uses `Ver1.16`, the
@@ -110,7 +117,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   produced, and each failed property has its own `RebuildCheck` variant. With the official v1.15
   file, the rebuild reproduces the reference alpha.2 MAIN image and update byte-for-byte
   (owner-input test `official_rebuild`). The no-op rebuild (the stock application re-encoded)
-  is pinned as the first hardware candidate.
+  is pinned. Under the stock label `Ver1.15` (`f2dd19d4…`) a v1.15 unit skips it; the hardware
+  candidate is the `Ver1.16` file (`9e1ac10e…`, see `docs/xdj700-flashing.md`).
 - Deterministic LZSS encoder (`patch_core::lzss::encode`, `encode_section_stream`). It is
   decision-identical to the reference encoder (see README, Acknowledgements). It was verified byte-identical on random,
   exhaustive and adversarial inputs and on the official v1.15 application. CI pins golden vectors
