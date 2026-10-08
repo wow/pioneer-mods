@@ -65,9 +65,9 @@ impl RebuiltUpdate {
         &self.application_sha256
     }
 
-    /// The version the verified application reports about itself
-    /// at the release's [`VersionBlock`] offset, if the release pins one and the application holds
-    /// a well-formed version string there.
+    /// The version the verified application reports about itself, at the release's
+    /// [`VersionBlock`](super::VersionBlock) offset, if the release pins one and the application
+    /// holds a well-formed version string there.
     pub fn application_reported_version(&self) -> Option<&str> {
         self.application_reported_version.as_deref()
     }
@@ -237,9 +237,9 @@ fn rebuild_from(
 ///
 /// The input refusals of [`rebuild_with_application`], [`RebuildError::OutputUnparseable`],
 /// [`RebuildError::OutputSection`] if the output's MAIN image cannot be built
-/// ([`SectionError::Image`]) or its section is invalid, [`RebuildError::ImageTooLarge`],
-/// [`RebuildError::Verification`] naming the failed property, or
-/// [`RebuildError::ModifiedApplicationVersion`] under the release's version rule.
+/// ([`SectionError::Image`](crate::SectionError::Image)) or its section is invalid,
+/// [`RebuildError::ImageTooLarge`], [`RebuildError::Verification`] naming the failed property,
+/// or [`RebuildError::ModifiedApplicationVersion`] under the release's version rule.
 pub fn verify_rebuild(
     input: &[u8],
     release: &StockRelease<'_>,
