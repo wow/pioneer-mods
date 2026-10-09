@@ -237,7 +237,7 @@ fn precondition_pins_the_output_that_patch_then_writes() {
     let (stock, edited) = (decode(&input), decode(&output));
     assert_eq!(sha256_hex(&edited), application);
     assert_eq!(sha256_hex(&std::fs::read(&output).expect("read")), upd);
-    // The stock image's hash appears nowhere (never printed, even on failure).
+    // The stock image's hash appears nowhere (no code path computes it).
     let image_hash = sha256_hex(&stock[PAD as usize..(PAD + PAD_LEN) as usize]);
     let recipe_text = serde_json::to_string(&complete_recipe).expect("JSON");
     let printed = [stdout, checked_stdout, text(&patched.stdout), recipe_text];

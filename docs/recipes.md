@@ -72,9 +72,9 @@ unless the bytes are predictable or other hashes overlap them. So:
   windows these rules refuse.
 
 These checks are heuristics against accidental leaks, not a proof. Choose windows over code, not
-over strings or tables: text passes the value check but is easy to guess. Windows are compared
-per release; a future release that shares code with this one needs the same care. Review is the
-backstop.
+over strings, tables or images: text passes the value check but is easy to guess, and so can an
+image be (a label rendered in a known font). Windows are compared per release; a future release
+that shares code with this one needs the same care. Review is the backstop.
 
 ### Known exceptions
 
