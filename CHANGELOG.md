@@ -218,17 +218,20 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
-- `docs/xdj700-flashing.md` section 5 and the recipe rules in `docs/recipes.md` carry the
-  findings of a local emulation of the board (not part of this repository; not hardware): in
-  four traced updates the application's updater never wrote the loader region `0x000000`–
-  `0x03FFFF`; the IN + RELOOP/EXIT decision is one branch (`0x08D50D78`) taken after the kernel,
-  tasks and panel link run; the code before it, an update-mode boot and two complete updates
-  (file reading, version check, flash erase and write) form a measured lower-bound set that
-  recipe windows must avoid (both committed recipes do); bytes a recipe replaces must not be
-  read during a normal or an update-mode boot (stage 5's byte is not, until BEAT LOOP 16 is
-  touched); and every stage file is now rehearsed in emulation both ways, installing it and
-  restoring the official file over it, before it is offered. An interruption while the loader
-  region is written is still treated as uncovered.
+- `docs/xdj700-flashing.md` section 5 carries the findings of a local emulation of the board
+  (not part of this repository; not hardware) and becomes the authoritative statement of the
+  rules for modifications, which `docs/recipes.md` and the `RECIPE_TARGETS` doc comment now
+  refer to. In seven rehearsals (stages 1b, 3 and 5 installed over stock and the official file
+  over each, plus a same-version skip) the updater never wrote the loader region `0x000000`–
+  `0x03FFFF`; the IN + RELOOP/EXIT decision is one branch (`0x08D50D78`); the code before it,
+  an update-mode boot and complete updates form a measured lower-bound set of run-time
+  addresses that recipe windows must avoid (both committed recipes do); bytes a recipe replaces
+  must not be read during start-up or an update (stage 5's byte is not, until BEAT LOOP 16 is
+  touched); and from now on every new stage file is rehearsed before it is offered, in reverse
+  as well when it reports a version below 1.15. Section 5 also explains run-time and flash
+  addresses; skips are described as leaving the application unwritten, and section 3 asks
+  owners to note their settings, since an update erased the settings area in emulation. An
+  interruption while the loader region is written is still treated as uncovered.
 - `patch-cli` output-file safety (input-path check, no-clobber atomic write) moved to a
   library module, `patch_cli::output`, used by `patch` and `rebuild` and tested directly.
   `patch` output is now also read back before it is renamed into place. The overwrite refusal
