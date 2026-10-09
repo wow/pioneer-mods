@@ -44,8 +44,8 @@ pub enum ProtectedSetError {
     Reversed { line: usize, start: u64, end: u64 },
 
     #[error(
-        "line {line}: bytes is {count}, but {start:#010x}..={end:#010x} holds {expected} (`end` is the \
-         last address, inclusive)"
+        "line {line}: bytes is {count}, but {start:#010x}..={end:#010x} holds {expected} \
+         (`end` is the last address, inclusive)"
     )]
     ByteCount {
         line: usize,
@@ -57,8 +57,8 @@ pub enum ProtectedSetError {
 
     #[error(
         "line {line}: {start:#010x}..={end:#010x} is not inside the application, run-time \
-         {app_start:#010x}..={app_end:#010x} (the set uses run-time addresses: the load address plus \
-         a decoded offset)"
+         {app_start:#010x}..={app_end:#010x} (the set uses run-time addresses: the load address \
+         plus a decoded offset)"
     )]
     OutsideApplication {
         line: usize,
