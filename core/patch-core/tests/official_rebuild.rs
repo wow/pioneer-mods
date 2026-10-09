@@ -25,10 +25,8 @@ use official_pins::{
     STAGE3_APPLICATION_SHA256, STAGE3_LABEL, STAGE3_MAIN_LEN, STAGE3_MAIN_SHA256, STAGE3_RECIPE,
     STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STAGE5_APPLICATION_SHA256,
     STAGE5_MAIN_LEN, STAGE5_MAIN_SHA256, STAGE5_RECIPE, STAGE5_REPORTED_VERSION,
-    STAGE5_TABLE_ENTRY_OFFSET, STAGE5_UPD_LEN, STAGE5_UPD_SHA256, STAGE7_APPLICATION_SHA256,
-    STAGE7_FIRST_IMAGE_OFFSET, STAGE7_MAIN_LEN, STAGE7_MAIN_SHA256, STAGE7_RECIPE,
-    STAGE7_REPORTED_VERSION, STAGE7_UPD_LEN, STAGE7_UPD_SHA256, STOCK_APPLICATION_SHA256, UPD_ENV,
-    UPD_SHA256,
+    STAGE5_TABLE_ENTRY_OFFSET, STAGE5_UPD_LEN, STAGE5_UPD_SHA256, STOCK_APPLICATION_SHA256,
+    UPD_ENV, UPD_SHA256,
 };
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115, RecipeChecks, decode_application,
@@ -217,31 +215,16 @@ fn a_modified_application_reporting_1_16_is_refused() {
     );
 }
 
-/// The decoded offsets where `rebuilt`'s application differs from the official one, in order.
-fn changed_offsets(official: &[u8], rebuilt: &xdj700::RebuiltUpdate) -> Vec<usize> {
-    let stock = decode_application(&parse_upd(official).expect("parse")).expect("decode");
-    let output = decode_application(&parse_upd(rebuilt.bytes()).expect("parse")).expect("decode");
-    assert_eq!(output.decoded().len(), stock.decoded().len());
-    (stock.decoded().iter().zip(output.decoded()))
-        .enumerate()
-        .filter(|(_, (stock, output))| stock != output)
-        .map(|(offset, _)| offset)
-        .collect()
-}
-
 /// Every committed recipe applies to the official file and produces its pinned identities (the
 /// engine checks `expected`). The version marker reproduces the hardware-tested stage-3 file, and
 /// the beat-loop experiment the stage-5 file, whose application differs from stock in exactly
 /// three bytes: two in the version string (`1.15` to `0.11`) and the last entry of the BEAT LOOP
-/// button table. The labelled experiment (stage 7) changes the same three, and otherwise only
-/// bytes inside the label box (x 30..50, y 18..34) of each of the button's six images. Compares
-/// offsets only; prints no bytes.
+/// button table. Compares offsets only; prints no bytes.
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
 fn every_committed_recipe_applies_and_reproduces_its_stage_file() {
     let official = official_upd();
     let (mut reproduced_stage3, mut reproduced_stage5) = (false, false);
-    let mut reproduced_stage7 = false;
 
     for (path, recipe) in committed_recipes() {
         let name = path.display();
@@ -270,7 +253,15 @@ fn every_committed_recipe_applies_and_reproduces_its_stage_file() {
                 rebuilt.application_reported_version(),
                 Some(STAGE5_REPORTED_VERSION)
             );
-            let changed = changed_offsets(&official, &rebuilt);
+            let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+            let output =
+                decode_application(&parse_upd(rebuilt.bytes()).expect("parse")).expect("decode");
+            assert_eq!(output.decoded().len(), stock.decoded().len());
+            let changed: Vec<usize> = (stock.decoded().iter().zip(output.decoded()))
+                .enumerate()
+                .filter(|(_, (stock, output))| stock != output)
+                .map(|(offset, _)| offset)
+                .collect();
             let version = xdj700::VERSION_STRING_OFFSET;
             assert_eq!(
                 changed,
@@ -279,47 +270,9 @@ fn every_committed_recipe_applies_and_reproduces_its_stage_file() {
             );
             reproduced_stage5 = true;
         }
-        if path.ends_with(STAGE7_RECIPE) {
-            assert_eq!(rebuilt.application_sha256(), STAGE7_APPLICATION_SHA256);
-            assert_eq!(rebuilt.main_image_len(), STAGE7_MAIN_LEN);
-            assert_eq!(rebuilt.main_image_sha256(), STAGE7_MAIN_SHA256);
-            assert_eq!(rebuilt.bytes().len(), STAGE7_UPD_LEN);
-            assert_eq!(rebuilt.sha256(), STAGE7_UPD_SHA256);
-            assert_eq!(
-                rebuilt.application_reported_version(),
-                Some(STAGE7_REPORTED_VERSION)
-            );
-            let changed = changed_offsets(&official, &rebuilt);
-            let version = xdj700::VERSION_STRING_OFFSET;
-            assert_eq!(
-                changed[..3],
-                [version, version + 3, STAGE5_TABLE_ENTRY_OFFSET],
-                "{name}: the version string and the table entry change"
-            );
-            // Which of the six images an offset lies in, if inside that image's label box.
-            const IMAGE_LEN: usize = 80 * 53 * 2;
-            let label_box = |offset: usize| {
-                let relative = offset.checked_sub(STAGE7_FIRST_IMAGE_OFFSET)?;
-                let (image, within) = (relative / IMAGE_LEN, relative % IMAGE_LEN);
-                let (x, y) = (within % 160 / 2, within / 160);
-                (image < 6 && (30..50).contains(&x) && (18..34).contains(&y)).then_some(image)
-            };
-            let mut images = [0usize; 6];
-            for &offset in &changed[3..] {
-                let image = label_box(offset)
-                    .unwrap_or_else(|| panic!("{name}: {offset:#x} is outside every label box"));
-                images[image] += 1;
-            }
-            assert!(images.iter().all(|&count| count > 0), "{name}: {images:?}");
-            reproduced_stage7 = true;
-        }
     }
     assert!(reproduced_stage3, "the version marker is committed");
     assert!(reproduced_stage5, "the beat-loop experiment is committed");
-    assert!(
-        reproduced_stage7,
-        "the labelled beat-loop experiment is committed"
-    );
 }
 
 /// On the real application, a precondition window over zero padding is refused although its hash

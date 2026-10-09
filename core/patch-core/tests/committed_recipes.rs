@@ -83,11 +83,7 @@ fn committed_recipes_avoid_the_protected_set() {
     }
 
     // A renamed or moved recipe directory must not turn this into a check of nothing.
-    for known in [
-        "version-marker-0.10",
-        "beat-loop-16-plays-32",
-        "beat-loop-32-labelled",
-    ] {
+    for known in ["version-marker-0.10", "beat-loop-16-plays-32"] {
         assert!(
             checked.iter().any(|id| id.ends_with(known)),
             "{known} was not checked; checked: {checked:?}"

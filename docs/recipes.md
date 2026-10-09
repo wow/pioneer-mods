@@ -83,7 +83,7 @@ that shares code with this one needs the same care. Review is the backstop.
 ### Known exceptions
 
 Windows over data that review accepted, and why. No later recipe can use these ranges, except by
-repeating the replacement exactly (`beat-loop-32-labelled.json` repeats the beat-loop entry).
+repeating the replacement exactly.
 
 - **`xdj700-v1.15/beat-loop-16-plays-32.json`:** decoded `0xD6234..0xD66F5`, the span and the
   1,216 bytes after it.
@@ -330,7 +330,6 @@ window rules) and check those identities.
 | --- | --- | --- |
 | `xdj700-v1.15/version-marker-0.10.json` | Only the reported version, `0.10`. The unit shows `0.10` on UTILITY. | The hardware-tested stage-3 file, `84cbd263…` |
 | `xdj700-v1.15/beat-loop-16-plays-32.json` | **Experimental; passed on an owner's unit (2026-10-09).** The BEAT LOOP button labelled 16 sets a 32-beat loop (its label still reads 16); reports `0.11`. One table entry changes: the length list the player uses already holds 32 beats, and the button table selects it instead of 16. | Stage 5, `144f4b55…` |
-| `xdj700-v1.15/beat-loop-32-labelled.json` | **Experimental; rehearsed in emulation, not yet flashed.** The same table change, repeated exactly, and the button's label redrawn as 32 in its six images ([image edits](#image-edits): the project's own glyph, in the colour of the old label's stroke); reports `0.12`. | Stage 7, `891aa963…` |
 
 ```bash
 cargo run --release -p patch-cli -- patch \
