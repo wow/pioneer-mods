@@ -149,8 +149,11 @@ Before the input is read (`check_recipe_v2`):
 5. No replacement or precondition window overlaps a protected range. For v1.15 that is
    `[0, 0x800)`: the application header and its version block. The version changes only through
    `reported_version`.
-6. With `--protected-set` (on `patch` and `precondition`): no replacement or precondition window
-   overlaps the [protected set](#the-protected-set).
+
+Then, with `--protected-set`, `patch` and `precondition` check that no replacement or
+precondition window overlaps the [protected set](#the-protected-set)
+(`check_recipe_against_protected_set`, called by the CLI after `check_recipe_v2`), still before
+the input is read.
 
 Then, on the official file:
 1. The input is pinned by length (checked before reading) and by SHA-256.

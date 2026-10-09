@@ -69,17 +69,19 @@ pub fn read_protected_set(path: &Path) -> Result<String> {
     })
 }
 
-/// Prints the outcome of the protected-set check, or that none was given, so a run without the set
-/// does not read like a checked one.
-pub fn print_protected_set(set: Option<&ProtectedSet>) {
+/// The report line for the protected-set check, or that none was given, so a run without the set
+/// does not read like a checked one. Both commands print it on success.
+pub fn protected_set_line(set: Option<&ProtectedSet>) -> String {
     match set {
-        Some(set) => println!(
-            "protected_set: {} ranges; no span or precondition window overlaps them",
-            set.len()
+        Some(set) => format!(
+            "protected_set: {} {}; no span or precondition window overlaps {}",
+            set.len(),
+            if set.len() == 1 { "range" } else { "ranges" },
+            if set.len() == 1 { "it" } else { "them" }
         ),
-        None => println!(
-            "protected_set: not given (--protected-set); start-up and update-path code not checked"
-        ),
+        None => "protected_set: not given (--protected-set); start-up and update-path code not \
+                 checked"
+            .to_owned(),
     }
 }
 

@@ -244,6 +244,32 @@ fn patch_with_the_beat_loop_recipe_writes_the_stage5_file() {
     let result = run_patch_command_with_args_in_dir(&input, &recipe, &output, &[], Some(&root));
 
     assert_wrote(&result, &output, STAGE5_UPD_LEN, STAGE5_UPD_SHA256);
+    assert!(
+        text(&result.stdout).contains("protected_set: not given (--protected-set)"),
+        "{}",
+        text(&result.stdout)
+    );
+
+    // With a protected set clear of the recipe (synthetic: the application's first byte), the
+    // output is the same and the report names the set.
+    let set = dir.path().join("set.tsv");
+    std::fs::write(&set, "08000000 08000000 1\n").expect("write set");
+    let with_set = dir.path().join("with-set.UPD");
+    let set_arg = set.to_str().expect("UTF-8 path");
+    let result = run_patch_command_with_args_in_dir(
+        &input,
+        &recipe,
+        &with_set,
+        &["--protected-set", set_arg],
+        Some(&root),
+    );
+
+    assert_wrote(&result, &with_set, STAGE5_UPD_LEN, STAGE5_UPD_SHA256);
+    assert!(
+        text(&result.stdout).contains("protected_set: 1 range; no span or precondition window"),
+        "{}",
+        text(&result.stdout)
+    );
 }
 
 /// The stock application of the official file, and the offset of a 2-byte span in the code after
@@ -319,6 +345,7 @@ fn precondition_completes_a_draft_that_patch_then_applies() {
     let complete = run_precondition(&input, &recipe_path, &["--check"]);
     assert!(complete.status.success(), "{}", text(&complete.stderr));
     assert!(text(&complete.stdout).contains(&format!("sha256 {sha256} (as declared)")));
+    assert!(text(&complete.stdout).contains("protected_set: not given (--protected-set)"));
 
     let output = dir.path().join("XDJ700.UPD");
     let patched = run_patch(&input, &recipe_path, &output);

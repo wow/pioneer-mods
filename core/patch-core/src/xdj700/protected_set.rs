@@ -40,11 +40,11 @@ pub enum ProtectedSetError {
     #[error("line {line}: bytes {value:?} is not a decimal count")]
     NotCount { line: usize, value: String },
 
-    #[error("line {line}: end {end:#x} is below start {start:#x}")]
+    #[error("line {line}: end {end:#010x} is below start {start:#010x}")]
     Reversed { line: usize, start: u64, end: u64 },
 
     #[error(
-        "line {line}: bytes is {count}, but {start:#x}..={end:#x} holds {expected} (`end` is the \
+        "line {line}: bytes is {count}, but {start:#010x}..={end:#010x} holds {expected} (`end` is the \
          last address, inclusive)"
     )]
     ByteCount {
@@ -56,8 +56,8 @@ pub enum ProtectedSetError {
     },
 
     #[error(
-        "line {line}: {start:#x}..={end:#x} is not inside the application, run-time \
-         {app_start:#x}..={app_end:#x} (the set uses run-time addresses: the load address plus \
+        "line {line}: {start:#010x}..={end:#010x} is not inside the application, run-time \
+         {app_start:#010x}..={app_end:#010x} (the set uses run-time addresses: the load address plus \
          a decoded offset)"
     )]
     OutsideApplication {
@@ -111,6 +111,16 @@ impl ProtectedSet {
             if end < start {
                 return Err(ProtectedSetError::Reversed { line, start, end });
             }
+            // Bounds first: inside the application, the count below cannot overflow.
+            if start < app_start || end > app_end {
+                return Err(ProtectedSetError::OutsideApplication {
+                    line,
+                    start,
+                    end,
+                    app_start,
+                    app_end,
+                });
+            }
             let expected = end - start + 1;
             if let Some(value) = fields.get(2) {
                 let count = value
@@ -128,15 +138,6 @@ impl ProtectedSet {
                         expected,
                     });
                 }
-            }
-            if start < app_start || end > app_end {
-                return Err(ProtectedSetError::OutsideApplication {
-                    line,
-                    start,
-                    end,
-                    app_start,
-                    app_end,
-                });
             }
             // Inside the application, so both fit in usize.
             let offset = |address: u64| (address - app_start) as usize;

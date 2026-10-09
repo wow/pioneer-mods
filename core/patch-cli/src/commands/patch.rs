@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
-use patch_cli::recipe::{CheckedRecipe, print_protected_set, read_recipe_versioned};
+use patch_cli::recipe::{CheckedRecipe, protected_set_line, read_recipe_versioned};
 use patch_core::xdj700::apply_recipe_v2_to;
 use patch_core::{apply_recipe, firmware_file_name, read_regular_file};
 use patch_schema::{RecipeManifest, SCHEMA_VERSION_V2};
@@ -94,7 +94,7 @@ fn patch_v2(args: &PatchArgs, raw: &[u8]) -> Result<()> {
     println!("output_file: {}", args.output.display());
     println!("output_len: {}", rebuilt.bytes().len());
     println!("output_sha256_hex: {}", rebuilt.sha256());
-    print_protected_set(protected_set.as_ref());
+    println!("{}", protected_set_line(protected_set.as_ref()));
     println!(
         "verified: preconditions, protected ranges and bounded diff checked; rebuild re-parsed \
          and checked against the input; file read back through the file system before it was \

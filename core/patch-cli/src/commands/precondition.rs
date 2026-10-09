@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use patch_cli::recipe::{CheckedRecipe, print_protected_set, read_recipe_versioned};
+use patch_cli::recipe::{CheckedRecipe, protected_set_line, read_recipe_versioned};
 use patch_core::firmware_file_name;
 use patch_core::xdj700::precondition_hashes;
 use patch_schema::SCHEMA_VERSION_V2;
@@ -83,7 +83,7 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
             window.start, window.end
         );
     }
-    print_protected_set(protected_set.as_ref());
+    println!("{}", protected_set_line(protected_set.as_ref()));
     println!(
         "checked: recipe, release pins, bounds, protected ranges, committed recipes' windows and \
          leak checks; each hash covers whatever is at its declared offset, so check the offsets \

@@ -166,6 +166,9 @@ fn refuses_decoded_offsets_and_ranges_past_the_application() {
         parse("ffffffffffffffff ffffffffffffffff\n"),
         outside(1, u64::MAX, u64::MAX)
     );
+    // The widest range: refused by its bounds before its byte count is computed.
+    assert_eq!(parse("0 ffffffffffffffff\n"), outside(1, 0, u64::MAX));
+    assert_eq!(parse("0 ffffffffffffffff 0\n"), outside(1, 0, u64::MAX));
     assert_eq!(
         parse("123456789abcdef01 123456789abcdef02\n"),
         Err(ProtectedSetError::NotHex {
@@ -206,7 +209,7 @@ fn refuses_a_precondition_window_that_overlaps_a_range() {
     );
     let message = result.unwrap_err().to_string();
     assert!(
-        message.contains("run-time 0x80d6234..=0x80d66f4"),
+        message.contains("run-time 0x080d6234..=0x080d66f4"),
         "{message}"
     );
     assert!(message.contains("section 5"), "{message}");

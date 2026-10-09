@@ -125,11 +125,11 @@ pub enum RecipeError {
         protected_end: usize,
     },
 
-    /// Run-time addresses, inclusive, as in the set's file.
+    /// Run-time addresses, inclusive and zero-padded to eight digits, as in the set's file.
     #[error(
-        "replacements[{index}] {what} at run-time {start:#x}..={last:#x} overlaps the protected \
-         set's range {set_start:#x}..={set_last:#x}: code that runs at start-up or in the update \
-         path (docs/xdj700-flashing.md, section 5)"
+        "replacements[{index}] {what} at run-time {start:#010x}..={last:#010x} overlaps the \
+         protected set's range {set_start:#010x}..={set_last:#010x}: code that runs at start-up \
+         or in the update path (docs/xdj700-flashing.md, section 5)"
     )]
     ProtectedSet {
         index: usize,

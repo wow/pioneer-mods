@@ -88,8 +88,8 @@ fn patch_refuses_a_recipe_overlapping_the_set_before_reading_the_input() {
     assert_refused(
         &result,
         &run,
-        "replacements[0] precondition window at run-time 0x80d6234..=0x80d66f4 overlaps the \
-         protected set's range 0x80d6300..=0x80d63ff",
+        "replacements[0] precondition window at run-time 0x080d6234..=0x080d66f4 overlaps the \
+         protected set's range 0x080d6300..=0x080d63ff",
     );
     assert!(stderr(&result).contains("refusing to apply recipe"));
 }
@@ -118,7 +118,7 @@ fn precondition_refuses_a_recipe_overlapping_the_set_before_hashing() {
     assert_refused(
         &result,
         &run,
-        "overlaps the protected set's range 0x80d6300..=0x80d63ff",
+        "overlaps the protected set's range 0x080d6300..=0x080d63ff",
     );
     assert!(stderr(&result).contains("refusing to hash the preconditions"));
 }
@@ -140,7 +140,7 @@ fn refuses_a_malformed_set_with_its_line_number() {
 
     assert_refused(&result, &run, "refusing protected set");
     assert!(
-        stderr(&result).contains("line 2: bytes is 5, but 0x8000600..=0x8000605 holds 6"),
+        stderr(&result).contains("line 2: bytes is 5, but 0x08000600..=0x08000605 holds 6"),
         "{}",
         stderr(&result)
     );
@@ -203,5 +203,28 @@ fn patch_refuses_the_set_with_a_schema_v1_manifest() {
         &result,
         &run,
         "--protected-set applies only to schema-v2 recipes",
+    );
+}
+
+#[test]
+fn the_report_line_says_whether_a_set_was_checked() {
+    use patch_cli::recipe::protected_set_line;
+    use patch_core::xdj700::{ProtectedSet, recipe_target};
+
+    let target = recipe_target("xdj700-v1.15").expect("known release");
+    let one = ProtectedSet::parse("08000000 08000000\n", target).expect("valid");
+    let two = ProtectedSet::parse(CLEAR, target).expect("valid");
+
+    assert_eq!(
+        protected_set_line(None),
+        "protected_set: not given (--protected-set); start-up and update-path code not checked"
+    );
+    assert_eq!(
+        protected_set_line(Some(&one)),
+        "protected_set: 1 range; no span or precondition window overlaps it"
+    );
+    assert_eq!(
+        protected_set_line(Some(&two)),
+        "protected_set: 2 ranges; no span or precondition window overlaps them"
     );
 }
