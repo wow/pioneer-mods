@@ -29,8 +29,8 @@ use official_pins::{
     UPD_ENV, UPD_SHA256,
 };
 use patch_core::xdj700::{
-    APPLICATION_SECTION_OFFSET, OFFICIAL_V115, decode_application, rebuild_with_application,
-    rebuild_with_stock_application, verify_rebuild,
+    APPLICATION_SECTION_OFFSET, OFFICIAL_V115, RecipeChecks, decode_application,
+    rebuild_with_application, rebuild_with_stock_application, verify_rebuild,
 };
 use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex, xdj700};
 use recipe_files::committed_recipes;
@@ -228,7 +228,7 @@ fn every_committed_recipe_applies_and_reproduces_its_stage_file() {
 
     for (path, recipe) in committed_recipes() {
         let name = path.display();
-        let rebuilt = xdj700::apply_recipe_v2(&recipe, &official)
+        let rebuilt = xdj700::apply_recipe_v2(&recipe, &official, RecipeChecks::NONE)
             .unwrap_or_else(|error| panic!("{name}: {error}"));
         assert!(recipe.expected.is_some(), "{name}: pins its outputs");
 
@@ -305,9 +305,9 @@ fn a_window_over_real_padding_is_refused() {
         purpose: "a window over padding".to_owned(),
     }];
 
-    let result = xdj700::apply_recipe_v2(&recipe, &official);
+    let result = xdj700::apply_recipe_v2(&recipe, &official, RecipeChecks::NONE);
     let target = xdj700::recipe_target("xdj700-v1.15").expect("target");
-    let hashed = xdj700::precondition_hashes(&recipe, target, &official);
+    let hashed = xdj700::precondition_hashes(&recipe, target, &official, RecipeChecks::NONE);
 
     for (call, result) in [
         ("apply_recipe_v2", result.map(|_| ())),

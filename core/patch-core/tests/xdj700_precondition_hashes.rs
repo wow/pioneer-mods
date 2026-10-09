@@ -5,7 +5,7 @@ mod common;
 
 use common::recipe::{Fixture, PADDING, replacement, stock_application, windowed};
 use patch_core::RebuildError;
-use patch_core::xdj700::{RecipeError, precondition_hashes};
+use patch_core::xdj700::{RecipeChecks, RecipeError, precondition_hashes};
 use patch_schema::Replacement;
 
 const PLACEHOLDER: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -22,7 +22,13 @@ fn hashes_every_window_of_a_draft_and_the_completed_recipe_applies() {
     let complete = [replacement(0x900, &[0xde, 0xad]), replacement(0xa00, &[1])];
     let mut recipe = fixture.recipe(complete.iter().cloned().map(draft).collect());
 
-    let hashes = precondition_hashes(&recipe, &fixture.target(), &fixture.update).expect("hash");
+    let hashes = precondition_hashes(
+        &recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    )
+    .expect("hash");
 
     let expected: Vec<&str> = complete
         .iter()
@@ -39,7 +45,12 @@ fn hashes_every_window_of_a_draft_and_the_completed_recipe_applies() {
 fn hashes_nothing_for_a_recipe_without_replacements() {
     let fixture = Fixture::new();
 
-    let hashes = precondition_hashes(&fixture.recipe(vec![]), &fixture.target(), &fixture.update);
+    let hashes = precondition_hashes(
+        &fixture.recipe(vec![]),
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    );
 
     assert_eq!(hashes, Ok(vec![]));
 }
@@ -53,6 +64,7 @@ fn refuses_a_window_over_padding_instead_of_hashing_it() {
         &fixture.recipe(vec![padded]),
         &fixture.target(),
         &fixture.update,
+        RecipeChecks::NONE,
     );
 
     assert!(
@@ -71,6 +83,7 @@ fn refuses_a_span_that_would_publish_stock_bytes_instead_of_hashing_it() {
         &fixture.recipe(vec![unchanged]),
         &fixture.target(),
         &fixture.update,
+        RecipeChecks::NONE,
     );
 
     assert_eq!(result, Err(RecipeError::UnchangedSpanEdge { index: 0 }));
@@ -83,7 +96,12 @@ fn runs_the_firmware_free_checks_before_looking_at_the_input() {
     header.precondition.before = 16;
     header.precondition.after = 16;
 
-    let result = precondition_hashes(&fixture.recipe(vec![header]), &fixture.target(), b"not it");
+    let result = precondition_hashes(
+        &fixture.recipe(vec![header]),
+        &fixture.target(),
+        b"not it",
+        RecipeChecks::NONE,
+    );
 
     assert!(
         matches!(result, Err(RecipeError::Protected { index: 0, .. })),
@@ -96,7 +114,7 @@ fn refuses_an_input_that_is_not_the_release() {
     let fixture = Fixture::new();
     let recipe = fixture.recipe(vec![draft(replacement(0x900, &[0xde, 0xad]))]);
 
-    let result = precondition_hashes(&recipe, &fixture.target(), b"not it");
+    let result = precondition_hashes(&recipe, &fixture.target(), b"not it", RecipeChecks::NONE);
 
     assert!(
         matches!(
@@ -115,7 +133,12 @@ fn returns_no_hash_at_all_when_a_later_window_is_refused() {
         draft(windowed(PADDING.end, &[1], 32, 7)),
     ]);
 
-    let result = precondition_hashes(&recipe, &fixture.target(), &fixture.update);
+    let result = precondition_hashes(
+        &recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    );
 
     assert!(
         matches!(result, Err(RecipeError::PredictableWindow { index: 1, .. })),

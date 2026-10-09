@@ -134,11 +134,13 @@ owner-input tests check.
    mkdir -p ~/xdj700-stage5
    cargo run --release -p patch-cli -- patch --input /path/to/XDJ700.UPD \
      --recipe recipes/xdj700-v1.15/beat-loop-16-plays-32.json \
-     --output ~/xdj700-stage5/XDJ700.UPD
+     --output ~/xdj700-stage5/XDJ700.UPD --no-protected-set
    ```
 
    Each command checks the result against the official file, writes atomically, reads the file
-   back, and prints `output_sha256_hex`. None overwrites an existing file.
+   back, and prints `output_sha256_hex`. None overwrites an existing file. `--no-protected-set`
+   skips the check against the protected set (section 5) on purpose: the set is not published,
+   and the maintainer has checked the committed recipes against it.
 3. **USB stick:**
    - use a stick formatted **FAT32**. On macOS the writer refuses exFAT; copying a finished file
      onto a FAT32 stick is the supported path everywhere;
@@ -261,9 +263,12 @@ compressed, so a flash offset does not map to a run-time address.
     erasing and writing flash). That is 1,692 ranges of run-time addresses, about 460 KiB of
     the application; the seven rehearsals below added no new function to it. It is a lower bound:
     the unit runs code the model does not (the real panel and storage, the DSP's replies).
-    Every recipe window must lie outside it; both committed recipes do. A check in `patch-cli`
-    is planned; until then the maintainer checks it by hand before a recipe is committed,
-    since the set is kept outside this repository;
+    Every recipe window must lie outside it; both committed recipes do. The set is kept outside
+    this repository. `patch` and `precondition` refuse a recipe whose span or window overlaps it,
+    or a set for another release or one that covers the version string, before reading the
+    firmware; without a set they refuse to run unless `--no-protected-set` skips the check on
+    purpose. The maintainer checks the committed recipes against it (`docs/recipes.md`, "The
+    protected set");
   - **the set covers code, not the data that code reads.** Every recipe must also show, *in
     emulation*, that the bytes its replacements change are not read during a normal boot, an
     update-mode boot, or a complete update in either rehearsal direction (code bytes included:

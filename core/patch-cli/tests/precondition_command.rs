@@ -17,6 +17,9 @@ fn run_precondition(input: &Path, recipe: &Path, committed: &Path) -> Output {
         .arg(recipe)
         .arg("--committed-recipes")
         .arg(committed)
+        // These tests are about other refusals: skip the protected set explicitly.
+        .arg("--no-protected-set")
+        .env_remove("XDJ700_PROTECTED_SET")
         .output()
         .expect("run patch-cli precondition")
 }

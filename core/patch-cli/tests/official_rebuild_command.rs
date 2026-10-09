@@ -49,6 +49,8 @@ fn run_patch(input: &Path, recipe: &Path, output: &Path) -> Output {
         .args(["--input".as_ref(), input.as_os_str()])
         .args(["--recipe".as_ref(), recipe.as_os_str()])
         .args(["--output".as_ref(), output.as_os_str()])
+        .arg("--no-protected-set")
+        .env_remove("XDJ700_PROTECTED_SET")
         .output()
         .expect("run patch-cli patch")
 }
@@ -61,6 +63,8 @@ fn run_precondition(input: &Path, recipe: &Path, extra: &[&str]) -> Output {
         .args(["--recipe".as_ref(), recipe.as_os_str()])
         .arg("--committed-recipes")
         .arg(recipes_dir())
+        .arg("--no-protected-set")
+        .env_remove("XDJ700_PROTECTED_SET")
         .args(extra)
         .output()
         .expect("run patch-cli precondition")
@@ -241,9 +245,42 @@ fn patch_with_the_beat_loop_recipe_writes_the_stage5_file() {
     let root = recipes_dir().join("..");
     let recipe = Path::new("recipes").join(STAGE5_RECIPE);
 
-    let result = run_patch_command_with_args_in_dir(&input, &recipe, &output, &[], Some(&root));
+    let result = run_patch_command_with_args_in_dir(
+        &input,
+        &recipe,
+        &output,
+        &["--no-protected-set"],
+        Some(&root),
+    );
 
     assert_wrote(&result, &output, STAGE5_UPD_LEN, STAGE5_UPD_SHA256);
+    assert!(
+        text(&result.stdout).contains("protected_set: skipped (--no-protected-set)"),
+        "{}",
+        text(&result.stdout)
+    );
+    assert!(text(&result.stderr).contains("warning: --no-protected-set"));
+
+    // With a protected set clear of the recipe (synthetic: the application's first byte), the
+    // output is the same and the report names the set.
+    let set = dir.path().join("set.tsv");
+    std::fs::write(&set, "release xdj700-v1.15\n08000000 08000000 1\n").expect("write set");
+    let with_set = dir.path().join("with-set.UPD");
+    let set_arg = set.to_str().expect("UTF-8 path");
+    let result = run_patch_command_with_args_in_dir(
+        &input,
+        &recipe,
+        &with_set,
+        &["--protected-set", set_arg],
+        Some(&root),
+    );
+
+    assert_wrote(&result, &with_set, STAGE5_UPD_LEN, STAGE5_UPD_SHA256);
+    assert!(
+        text(&result.stdout).contains("protected_set: 1 range; no span or precondition window"),
+        "{}",
+        text(&result.stdout)
+    );
 }
 
 /// The stock application of the official file, and the offset of a 2-byte span in the code after
@@ -319,6 +356,7 @@ fn precondition_completes_a_draft_that_patch_then_applies() {
     let complete = run_precondition(&input, &recipe_path, &["--check"]);
     assert!(complete.status.success(), "{}", text(&complete.stderr));
     assert!(text(&complete.stdout).contains(&format!("sha256 {sha256} (as declared)")));
+    assert!(text(&complete.stdout).contains("protected_set: skipped (--no-protected-set)"));
 
     let output = dir.path().join("XDJ700.UPD");
     let patched = run_patch(&input, &recipe_path, &output);

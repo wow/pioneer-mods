@@ -6,7 +6,9 @@ mod common;
 
 use common::recipe::{Fixture, replacement, stock_application};
 use patch_core::RebuildError;
-use patch_core::xdj700::{RecipeError, VERSION_STRING_OFFSET, apply_recipe_v2, apply_recipe_v2_to};
+use patch_core::xdj700::{
+    RecipeChecks, RecipeError, VERSION_STRING_OFFSET, apply_recipe_v2, apply_recipe_v2_to,
+};
 use patch_schema::ExpectedV2;
 #[test]
 fn a_version_only_recipe_changes_only_the_version_string() {
@@ -34,8 +36,20 @@ fn replacements_are_applied_and_nothing_else_changes() {
     expected[0x900..0x902].copy_from_slice(&[0xde, 0xad]);
     expected[0xa00..0xa04].copy_from_slice(&[1, 2, 3, 4]);
     assert_eq!(output, expected);
-    let again = apply_recipe_v2_to(&recipe, &fixture.target(), &fixture.update).expect("again");
-    let first = apply_recipe_v2_to(&recipe, &fixture.target(), &fixture.update).expect("first");
+    let again = apply_recipe_v2_to(
+        &recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    )
+    .expect("again");
+    let first = apply_recipe_v2_to(
+        &recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    )
+    .expect("first");
     assert_eq!(again, first, "deterministic");
 }
 
@@ -109,7 +123,12 @@ fn refuses_an_unknown_release() {
     let fixture = Fixture::new();
 
     assert_eq!(
-        apply_recipe_v2(&fixture.recipe(Vec::new()), &fixture.update).map(|_| ()),
+        apply_recipe_v2(
+            &fixture.recipe(Vec::new()),
+            &fixture.update,
+            RecipeChecks::NONE
+        )
+        .map(|_| ()),
         Err(RecipeError::UnknownRelease {
             release: "synthetic".to_owned(),
             known: "xdj700-v1.15".to_owned()
@@ -121,12 +140,26 @@ fn refuses_an_unknown_release() {
 fn checks_declared_output_identities() {
     let fixture = Fixture::new();
     let mut recipe = fixture.recipe(Vec::new());
-    let rebuilt = apply_recipe_v2_to(&recipe, &fixture.target(), &fixture.update).expect("apply");
+    let rebuilt = apply_recipe_v2_to(
+        &recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    )
+    .expect("apply");
     recipe.expected = Some(ExpectedV2 {
         application_sha256: Some(rebuilt.application_sha256().to_owned()),
         upd_sha256: Some(rebuilt.sha256().to_uppercase()),
     });
-    assert!(apply_recipe_v2_to(&recipe, &fixture.target(), &fixture.update).is_ok());
+    assert!(
+        apply_recipe_v2_to(
+            &recipe,
+            &fixture.target(),
+            &fixture.update,
+            RecipeChecks::NONE
+        )
+        .is_ok()
+    );
 
     for (expected, field) in [
         (
@@ -145,7 +178,12 @@ fn checks_declared_output_identities() {
         ),
     ] {
         recipe.expected = Some(expected);
-        let result = apply_recipe_v2_to(&recipe, &fixture.target(), &fixture.update);
+        let result = apply_recipe_v2_to(
+            &recipe,
+            &fixture.target(),
+            &fixture.update,
+            RecipeChecks::NONE,
+        );
 
         assert!(
             matches!(&result, Err(RecipeError::UnexpectedOutput { field: f, .. }) if *f == field),
@@ -161,7 +199,12 @@ fn refuses_an_invalid_recipe_before_anything_else() {
     recipe.schema_version = 1;
 
     assert!(matches!(
-        apply_recipe_v2_to(&recipe, &fixture.target(), b"not an update"),
+        apply_recipe_v2_to(
+            &recipe,
+            &fixture.target(),
+            b"not an update",
+            RecipeChecks::NONE
+        ),
         Err(RecipeError::Invalid(_))
     ));
 }

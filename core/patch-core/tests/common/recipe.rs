@@ -2,8 +2,8 @@
 
 use super::xdj700::{release, stock_update};
 use patch_core::xdj700::{
-    APPLICATION_SECTION_OFFSET, RecipeError, RecipeTarget, StockRelease, VERSION_STRING_OFFSET,
-    VersionBlock, apply_recipe_v2_to, decode_section, main_document,
+    APPLICATION_SECTION_OFFSET, RecipeChecks, RecipeError, RecipeTarget, StockRelease,
+    VERSION_STRING_OFFSET, VersionBlock, apply_recipe_v2_to, decode_section, main_document,
 };
 use patch_core::{parse_upd, sha256_hex};
 use patch_schema::{Precondition, RecipeV2, Replacement, TargetV2};
@@ -60,6 +60,7 @@ impl Fixture {
                 ..release(self.update.len(), &self.upd_sha256)
             },
             application_len: 0x1000,
+            load_address: 0x0800_0000,
             protected: PROTECTED,
         }
     }
@@ -82,7 +83,7 @@ impl Fixture {
     }
 
     pub fn apply(&self, recipe: &RecipeV2) -> Result<Vec<u8>, RecipeError> {
-        let rebuilt = apply_recipe_v2_to(recipe, &self.target(), &self.update)?;
+        let rebuilt = apply_recipe_v2_to(recipe, &self.target(), &self.update, RecipeChecks::NONE)?;
         let parsed = parse_upd(rebuilt.bytes()).expect("parse");
         let image = main_document(&parsed)
             .expect("main")

@@ -14,8 +14,10 @@ mod app_version;
 mod grid;
 mod label;
 mod precondition;
+mod protected_set;
 mod rebuild;
 mod recipe;
+mod recipe_checks;
 mod release;
 mod stock;
 
@@ -23,6 +25,7 @@ pub use app_version::{VERSION_STRING_OFFSET, reported_version, reported_version_
 pub use grid::RECORD_DATA_LEN;
 pub use label::{OFFICIAL_V115_LABEL, is_label_higher, validate_version_label};
 pub use precondition::precondition_hashes;
+pub use protected_set::{ProtectedSet, ProtectedSetError, check_recipe_against_protected_set};
 pub use rebuild::{
     RebuiltUpdate, rebuild_with_application, rebuild_with_edited_stock_application,
     rebuild_with_stock_application, rebuild_with_stock_application_reporting, verify_rebuild,
@@ -31,6 +34,7 @@ pub use recipe::{
     RECIPE_TARGETS, RecipeError, RecipeTarget, apply_recipe_v2, apply_recipe_v2_to,
     check_recipe_v2, recipe_target, unknown_release,
 };
+pub use recipe_checks::RecipeChecks;
 pub use release::{
     MAX_MAIN_GROWTH, OFFICIAL_V115, OFFICIAL_V115_VERSION_BLOCK, StockRelease, VersionBlock,
 };

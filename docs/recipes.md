@@ -114,8 +114,12 @@ paste stock bytes into an issue or a commit, only their hash.
    cargo run --release -p patch-cli -- precondition \
      --input /path/to/XDJ700.UPD \
      --recipe /path/to/draft.json \
-     --committed-recipes recipes
+     --committed-recipes recipes \
+     --protected-set /path/to/xdj700-v1.15-protected-set.tsv
    ```
+
+   Without the set, pass `--no-protected-set` instead; the maintainer then checks the recipe
+   against it ([The protected set](#the-protected-set)).
 
    Before it computes any hash, the command runs the recipe's own checks (release pins, version
    order, bounds, protected ranges), checks that its windows are disjoint from those of the other
@@ -150,6 +154,11 @@ Before the input is read (`check_recipe_v2`):
    `[0, 0x800)`: the application header and its version block. The version changes only through
    `reported_version`.
 
+Then, unless it is skipped with `--no-protected-set`, `patch` and `precondition` check the recipe
+against the [protected set](#the-protected-set) (`check_recipe_against_protected_set`, called by
+the CLI after `check_recipe_v2` and again by the engine entry points), still before the input is
+read.
+
 Then, on the official file:
 1. The input is pinned by length (checked before reading) and by SHA-256.
 2. On the stock application, before anything is replaced, each precondition window matches its
@@ -175,11 +184,69 @@ into place.
   authoritative statement: windows outside the protected set measured in emulation, replaced
   bytes not read during start-up or an update, and an emulator rehearsal before a file is
   offered. Its addresses are run-time addresses, `0x08000000` plus a recipe's `offset`. The
-  engine enforces only the header (`[0, 0x800)`); the maintainer checks the rest by hand until
-  a `patch-cli` check lands.
+  engine always enforces the header (`[0, 0x800)`), and the protected set when it is given
+  ([below](#the-protected-set)); the data rule and the rehearsal remain the maintainer's.
 - **Same length only.** Growing the application (for example appending code) is not supported
   until the memory after the application is understood.
 - **Test on hardware in stages**, as the flashing guide describes, and record the result.
+
+## The protected set
+
+The code that runs at start-up and in the update path, measured in emulation (flashing guide,
+section 5), is a list of address ranges kept outside this repository. With it, `patch` and
+`precondition` refuse a schema-v2 recipe, before the firmware is read, if:
+- the set was measured on another release;
+- the set covers the version string, which every rebuild writes (the set must then be checked);
+- a replacement's span or precondition window overlaps it.
+
+Skipping the check is a decision, never an omission. Each command takes the set from
+`--protected-set <file>`, else from the `XDJ700_PROTECTED_SET` environment variable, and
+refuses to run without one unless `--no-protected-set` is given. That flag prints a warning, and
+the report line says `protected_set: skipped`. Owners applying a committed recipe pass it: the
+maintainer has checked the committed recipes against the set, which is not published.
+Contributors without the set pass it too, and the maintainer checks the recipe before it is
+committed.
+
+The library entry points (`apply_recipe_v2_to`, `precondition_hashes`) take the set through
+their `RecipeChecks` argument and run the check again themselves. The set covers code only:
+whether a recipe's replaced bytes are read during start-up or an update is still shown in
+emulation, not by the tool.
+
+```bash
+cargo run --release -p patch-cli -- precondition \
+  --input /path/to/XDJ700.UPD \
+  --recipe /path/to/draft.json \
+  --committed-recipes recipes \
+  --protected-set /path/to/xdj700-v1.15-protected-set.tsv
+```
+
+The file is UTF-8 text:
+
+```text
+# comments and blank lines are ignored
+release xdj700-v1.15
+start   end       bytes
+08000600 08000605 6
+```
+
+- The first line that is not blank or a comment names the release the set was measured on:
+  `release <id>`, the id recipes use in `target.release`.
+- The next line may be a header, exactly `start end` or `start end bytes`.
+- Every other line is a range. `start` and `end` are hexadecimal **run-time** addresses
+  (`0x08000000` plus a decoded offset; the `0x` prefix is optional), and `end` is the last
+  address of the range, **inclusive**. The optional `bytes` column, in decimal digits, must
+  equal `end - start + 1`, which catches exclusive ends.
+- Every range must lie inside the application; ranges may overlap and need not be sorted. A
+  leading byte-order mark is ignored. A file without ranges, or larger than 8 MiB, is refused.
+
+The maintainer checks the committed recipes against it with an ignored test. Without the
+variable it is skipped and says so; with it, it fails unless every known v1.15 recipe was
+checked:
+
+```bash
+XDJ700_PROTECTED_SET=/path/to/xdj700-v1.15-protected-set.tsv \
+  cargo test -p patch-core --test committed_recipes -- --ignored --nocapture
+```
 
 ## The committed recipes
 
@@ -197,8 +264,12 @@ window rules) and check those identities.
 cargo run --release -p patch-cli -- patch \
   --input /path/to/XDJ700.UPD \
   --recipe recipes/xdj700-v1.15/version-marker-0.10.json \
-  --output /path/to/new-dir/XDJ700.UPD
+  --output /path/to/new-dir/XDJ700.UPD \
+  --no-protected-set
 ```
+
+`--no-protected-set`: the maintainer has checked the committed recipes against the
+[protected set](#the-protected-set), which is not published.
 
 ## Schema v1
 

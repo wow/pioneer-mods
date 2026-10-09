@@ -23,6 +23,9 @@ fn run_patch(input: &Path, recipe: &Value, output: &Path, extra: &[&str]) -> Out
         .arg(&recipe_path)
         .arg("--output")
         .arg(output)
+        // These tests are about other refusals: skip the protected set explicitly.
+        .arg("--no-protected-set")
+        .env_remove("XDJ700_PROTECTED_SET")
         .args(extra)
         .output()
         .expect("run patch-cli patch")
