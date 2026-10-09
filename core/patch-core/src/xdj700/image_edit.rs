@@ -2,19 +2,16 @@
 //! an image lies, whether it is the stock image the recipe was written for, and the edited pixels.
 //!
 //! An image's precondition is the SHA-256 of the whole stock image, which the recipe publishes. So
-//! the image must hold at least [`MIN_IMAGE_DISTINCT_PIXELS`] distinct pixel values and
-//! [`MIN_IMAGE_UNPREDICTED_PIXELS`] pixels its neighbours do not predict: a fill, a two-colour
-//! pattern or a smooth gradient could be recovered from its hash by trying its few parameters. The
-//! edit reads every pixel it uses from the owner's file; the recipe carries only coordinates and
-//! the author's own glyph mask.
+//! the image must hold at least [`patch_schema::MIN_IMAGE_DISTINCT_PIXELS`] distinct pixel values
+//! and [`patch_schema::MIN_IMAGE_UNPREDICTED_PIXELS`] pixels its neighbours do not predict: a fill,
+//! a two-colour pattern or a smooth gradient could be recovered from its hash by trying its few
+//! parameters. The edit reads every pixel it uses from the owner's file; the recipe carries only
+//! coordinates and the author's own glyph mask.
 
 use super::precondition::DeclaredHash;
 use super::recipe_error::RecipeError;
 use crate::identity::sha256_hex;
-use patch_schema::{
-    ImageEdit, MIN_IMAGE_DISTINCT_PIXELS, MIN_IMAGE_UNPREDICTED_PIXELS, blend, unpredicted_pixels,
-};
-use std::collections::HashSet;
+use patch_schema::{ImageEdit, blend, predictability};
 use std::ops::Range;
 
 /// The edit's image, if it lies inside an application of `application_len`.
@@ -58,13 +55,12 @@ pub(super) fn checked_image(
         });
     }
     let image: Vec<u16> = pixels(&stock[range.clone()]).collect();
-    let distinct = image.iter().collect::<HashSet<_>>().len();
-    let unpredicted = unpredicted_pixels(&image, edit.width as usize);
-    if distinct < MIN_IMAGE_DISTINCT_PIXELS || unpredicted < MIN_IMAGE_UNPREDICTED_PIXELS {
+    let measured = predictability(&image, edit.width as usize);
+    if !measured.passes() {
         return Err(RecipeError::PredictableImage {
             index,
-            distinct,
-            unpredicted,
+            distinct: measured.distinct,
+            unpredicted: measured.unpredicted,
         });
     }
     Ok(range)

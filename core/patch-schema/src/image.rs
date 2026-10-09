@@ -168,8 +168,9 @@ impl ImageEdit {
             .collect()
     }
 
-    /// For each image row the edit may change, the columns it may change: the union of the erase
-    /// box and the glyph box on that row. A validated edit only; rows in ascending order.
+    /// For each image row the edit may change, the columns it may change: the span covering the
+    /// erase box and the glyph box on that row (so any columns between two separated boxes are
+    /// included). A validated edit only; rows in ascending order.
     pub fn changed_rows(&self) -> Vec<(u32, Range<u32>)> {
         let boxes: Vec<PixelBox> = self.erase.iter().copied().chain([self.glyph.at]).collect();
         let (first, last) = boxes.iter().fold((u32::MAX, 0), |(first, last), b| {
@@ -282,6 +283,36 @@ impl Channels {
 
 fn pack(Channels([red, green, blue]): Channels) -> u16 {
     ((red << 11) | (green << 5) | blue) as u16
+}
+
+/// How predictable a stock image is: the two measures behind the rule an image must pass before
+/// its hash may be published.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Predictability {
+    /// Distinct pixel values.
+    pub distinct: usize,
+    /// Pixels its neighbours do not predict ([`unpredicted_pixels`]).
+    pub unpredicted: usize,
+}
+
+impl Predictability {
+    /// Whether the image passes: at least [`MIN_IMAGE_DISTINCT_PIXELS`] distinct values and
+    /// [`MIN_IMAGE_UNPREDICTED_PIXELS`] unpredicted pixels.
+    pub fn passes(&self) -> bool {
+        self.distinct >= MIN_IMAGE_DISTINCT_PIXELS
+            && self.unpredicted >= MIN_IMAGE_UNPREDICTED_PIXELS
+    }
+}
+
+/// Both measures of an RGB565 image (`pixels`, rows `width` apart).
+pub fn predictability(pixels: &[u16], width: usize) -> Predictability {
+    let mut values = pixels.to_vec();
+    values.sort_unstable();
+    values.dedup();
+    Predictability {
+        distinct: values.len(),
+        unpredicted: unpredicted_pixels(pixels, width),
+    }
 }
 
 /// How many pixels of an RGB565 image (`pixels`, rows `width` apart) its neighbours do not

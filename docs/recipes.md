@@ -189,8 +189,8 @@ The rules:
 - The glyph mask must be the author's own drawing, never traced from vendor pixels.
 - Images are subject to the protected ranges and the [protected set](#the-protected-set), like
   replacements.
-- The output may differ from stock only in the edited rows: per row, the union of the erase box
-  and the glyph box.
+- The output may differ from stock only in the edited rows: per row, the span covering the
+  erase box and the glyph box.
 - Whether the image is read during start-up or an update is shown in emulation, as for any
   replaced bytes (flashing guide, section 5). Images are normally read only when they are drawn.
 

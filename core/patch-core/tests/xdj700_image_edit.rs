@@ -291,3 +291,24 @@ fn refuses_an_image_its_neighbours_predict_despite_many_values() {
         })
     );
 }
+
+/// As for a relabelled button: the colour pixel lies inside the erase box (a stroke of the old
+/// label), so it must be read before the erase removes it.
+#[test]
+fn reads_the_glyph_colour_before_the_erase() {
+    let fixture = Fixture::new();
+    let stock = stock_application();
+    let mut inside = edit(IMAGE);
+    inside.glyph.colour_from = Pixel { x: 6, y: 3 };
+
+    let output = fixture
+        .apply(&with_edits(&fixture, vec![inside]))
+        .expect("apply");
+
+    // The erase changes that pixel, so reading it afterwards would give another colour.
+    let erased_row = ImageEdit::erase_row(pixel(&stock, 3, 3), pixel(&stock, 10, 3), 6);
+    assert_ne!(erased_row[2], pixel(&stock, 6, 3));
+    // Full-coverage glyph pixels carry the stock colour.
+    assert_eq!(pixel(&output, 5, 3), pixel(&stock, 6, 3));
+    assert_eq!(pixel(&output, 7, 4), pixel(&stock, 6, 3));
+}

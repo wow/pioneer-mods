@@ -2,8 +2,8 @@
 //! may change, and the static checks.
 
 use patch_schema::{
-    ImageEdit, ImageEditError, RecipeV2, RecipeV2Error, blend, check_windows_across,
-    unpredicted_pixels,
+    ImageEdit, ImageEditError, MIN_IMAGE_DISTINCT_PIXELS, MIN_IMAGE_UNPREDICTED_PIXELS, RecipeV2,
+    RecipeV2Error, blend, check_windows_across, predictability, unpredicted_pixels,
 };
 use serde_json::{Value, json};
 
@@ -338,4 +338,46 @@ fn fills_and_gradients_are_predicted_and_detail_is_not() {
     dot[5 * 20 + 7] = 0xffff;
     assert_eq!(unpredicted_pixels(&dot, 20), 3);
     assert_eq!(unpredicted_pixels(&[], 0), 0);
+}
+
+/// A 30x30 black image with `interior` isolated dots (each missed three times: itself, to its right
+/// and below it) and, if `corner`, one in the bottom-right corner (missed once), coloured from a
+/// palette of `colours` values.
+fn dots(interior: usize, corner: bool, colours: u16) -> Vec<u16> {
+    let width = 30;
+    let mut image = vec![0u16; width * width];
+    let colour = |i: usize| 0x8000 | ((i as u16 % colours) * 0x0841);
+    let positions = (0..3).flat_map(|row| (0..7).map(move |col| (2 + 3 * col, 2 + 3 * row)));
+    for (i, (x, y)) in positions.take(interior).enumerate() {
+        image[y * width + x] = colour(i);
+    }
+    if corner {
+        image[width * width - 1] = colour(interior);
+    }
+    image
+}
+
+#[test]
+fn the_unpredicted_threshold_is_inclusive() {
+    let at = predictability(&dots(21, true, 64), 30);
+    let below = predictability(&dots(21, false, 64), 30);
+
+    assert_eq!(at.unpredicted, MIN_IMAGE_UNPREDICTED_PIXELS);
+    assert!(at.distinct >= MIN_IMAGE_DISTINCT_PIXELS);
+    assert!(at.passes());
+    assert_eq!(below.unpredicted, MIN_IMAGE_UNPREDICTED_PIXELS - 1);
+    assert!(!below.passes());
+}
+
+#[test]
+fn the_distinct_threshold_is_inclusive() {
+    // Black plus 15 dot colours, then black plus 14.
+    let at = predictability(&dots(21, true, 15), 30);
+    let below = predictability(&dots(21, true, 14), 30);
+
+    assert_eq!(at.distinct, MIN_IMAGE_DISTINCT_PIXELS);
+    assert_eq!(at.unpredicted, MIN_IMAGE_UNPREDICTED_PIXELS);
+    assert!(at.passes());
+    assert_eq!(below.distinct, MIN_IMAGE_DISTINCT_PIXELS - 1);
+    assert!(!below.passes());
 }
