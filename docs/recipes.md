@@ -180,8 +180,13 @@ The rules:
 - An image's precondition window is the **whole image**. Images may not overlap each other or any
   replacement's window, and across the committed recipes of a release image windows count like
   replacement windows: they must be disjoint.
-- The stock image must hold at least 16 distinct pixel values, so that its published hash could
-  not be inverted by trying the few images a near-flat one could be.
+- The stock image must hold at least 16 distinct pixel values and at least 64 pixels that its
+  neighbours do not predict (per channel, the median edge predictor from the left, upper and
+  upper-left pixels misses by more than 1). A fill, a two-colour pattern or a smooth gradient
+  fails, since its published hash could be inverted by trying its few parameters; anti-aliased
+  text and dither pass easily (the BEAT LOOP pad images have 89 to 272 such pixels). Like the
+  window rules, this is a heuristic against accidental leaks, and review is the backstop.
+- The glyph mask must be the author's own drawing, never traced from vendor pixels.
 - Images are subject to the protected ranges and the [protected set](#the-protected-set), like
   replacements.
 - The output may differ from stock only in the edited rows: per row, the union of the erase box
@@ -215,7 +220,8 @@ Then, on the official file:
 2. On the stock application, before anything is replaced, each precondition window matches its
    SHA-256 and passes the [window rules](#precondition-windows), and each span changes its first
    and last bytes and keeps at most half of its stock bytes, fewer than 32 in a row.
-3. Each edited image matches its SHA-256 and holds at least 16 distinct pixel values.
+3. Each edited image matches its SHA-256, holds at least 16 distinct pixel values, and has at
+   least 64 pixels its neighbours do not predict.
 4. The modified application differs from stock **only** in the declared spans, the edited image
    rows and the version string (a byte-by-byte check that the rebuild entry point runs for every
    edit).

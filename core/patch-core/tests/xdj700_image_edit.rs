@@ -12,9 +12,10 @@ use patch_core::xdj700::{
 };
 use patch_schema::{Glyph, ImageEdit, Pixel, PixelBox};
 
-/// A 16x8 image of the synthetic application's byte pattern, at 0xd00.
+/// A 17x8 image of the synthetic application's byte pattern, at 0xd00 (17 pixels wide, its rows do
+/// not line the pattern up, so its neighbours do not predict it).
 const IMAGE: usize = 0xd00;
-const WIDTH: u32 = 16;
+const WIDTH: u32 = 17;
 const HEIGHT: u32 = 8;
 
 fn pixel(bytes: &[u8], x: u32, y: u32) -> u16 {
@@ -105,6 +106,7 @@ fn edits_exactly_the_documented_pixels_and_nothing_else() {
     }
     // Outside the image, only the version string changed.
     let image = IMAGE..IMAGE + (WIDTH * HEIGHT * 2) as usize;
+    assert_eq!(image.end, 0xe10);
     let version = VERSION_STRING_OFFSET..VERSION_STRING_OFFSET + 4;
     for (i, (a, b)) in stock.iter().zip(&output).enumerate() {
         if !image.contains(&i) && !version.contains(&i) {
@@ -176,7 +178,8 @@ fn refuses_a_flat_image_whose_hash_could_be_inverted() {
         fixture.apply(&recipe),
         Err(RecipeError::PredictableImage {
             index: 0,
-            distinct: 1
+            distinct: 1,
+            unpredicted: 0
         })
     );
     // No hash is computed for it either.
@@ -190,7 +193,8 @@ fn refuses_a_flat_image_whose_hash_could_be_inverted() {
         hashes,
         Err(RecipeError::PredictableImage {
             index: 0,
-            distinct: 1
+            distinct: 1,
+            unpredicted: 0
         })
     );
 }
@@ -203,7 +207,7 @@ fn refuses_an_image_past_the_end_or_in_the_protected_header() {
         fixture.apply(&past),
         Err(RecipeError::ImageOutOfBounds {
             index: 0,
-            end: 0x1080,
+            end: 0x1090,
             len: 0x1000
         })
     );
@@ -215,7 +219,7 @@ fn refuses_an_image_past_the_end_or_in_the_protected_header() {
         Err(RecipeError::ImageProtected {
             index: 0,
             start: 0x700,
-            end: 0x800,
+            end: 0x810,
             protected_start: 0,
             protected_end: 0x800
         })
@@ -240,7 +244,7 @@ fn refuses_an_image_in_the_protected_set() {
         Err(RecipeError::ImageProtectedSet {
             index: 0,
             start: 0x0800_0d00,
-            last: 0x0800_0dff,
+            last: 0x0800_0e0f,
             set_start: 0x0800_0d80,
             set_last: 0x0800_0d81
         })
@@ -267,4 +271,23 @@ fn draft_hashes_include_every_image_and_complete_the_recipe() {
     assert_eq!(hashes.image_edits, vec![complete.sha256.clone()]);
     recipe.image_edits[0].sha256 = hashes.image_edits[0].clone();
     assert!(fixture.apply(&recipe).is_ok());
+}
+
+#[test]
+fn refuses_an_image_its_neighbours_predict_despite_many_values() {
+    let fixture = Fixture::new();
+    // 16 pixels wide, the pattern repeats from row to row: 128 distinct values, but a smooth
+    // structure whose hash could be inverted.
+    let mut aligned = edit(IMAGE);
+    aligned.width = 16;
+    aligned.sha256 = sha256_hex(&stock_application()[IMAGE..IMAGE + 256]);
+
+    assert_eq!(
+        fixture.apply(&with_edits(&fixture, vec![aligned])),
+        Err(RecipeError::PredictableImage {
+            index: 0,
+            distinct: 128,
+            unpredicted: 24
+        })
+    );
 }

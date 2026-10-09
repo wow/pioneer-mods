@@ -7,8 +7,8 @@ pub mod v2;
 
 pub use across::{WindowOverlap, check_windows_across};
 pub use image::{
-    Glyph, ImageEdit, ImageEditError, MAX_IMAGE_BYTES, MIN_IMAGE_DISTINCT_PIXELS, Pixel, PixelBox,
-    blend,
+    Glyph, ImageEdit, ImageEditError, MAX_IMAGE_BYTES, MIN_IMAGE_DISTINCT_PIXELS,
+    MIN_IMAGE_UNPREDICTED_PIXELS, Pixel, PixelBox, blend, unpredicted_pixels,
 };
 pub use v2::{
     ExpectedV2, MAX_PRECONDITION_LEN, MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error,

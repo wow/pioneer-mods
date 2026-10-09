@@ -1,15 +1,19 @@
 //! Image edits of schema-v2 recipes on the stock application ([`patch_schema::ImageEdit`]): where
 //! an image lies, whether it is the stock image the recipe was written for, and the edited pixels.
 //!
-//! An image's precondition is the SHA-256 of the whole stock image. The image must hold at least
-//! [`MIN_IMAGE_DISTINCT_PIXELS`] distinct pixel values, so that its published hash could not be
-//! inverted by trying the few images a near-flat one could be. The edit reads every pixel it uses
-//! from the owner's file; the recipe carries only coordinates and the author's own glyph mask.
+//! An image's precondition is the SHA-256 of the whole stock image, which the recipe publishes. So
+//! the image must hold at least [`MIN_IMAGE_DISTINCT_PIXELS`] distinct pixel values and
+//! [`MIN_IMAGE_UNPREDICTED_PIXELS`] pixels its neighbours do not predict: a fill, a two-colour
+//! pattern or a smooth gradient could be recovered from its hash by trying its few parameters. The
+//! edit reads every pixel it uses from the owner's file; the recipe carries only coordinates and
+//! the author's own glyph mask.
 
 use super::precondition::DeclaredHash;
 use super::recipe_error::RecipeError;
 use crate::identity::sha256_hex;
-use patch_schema::{ImageEdit, MIN_IMAGE_DISTINCT_PIXELS, blend};
+use patch_schema::{
+    ImageEdit, MIN_IMAGE_DISTINCT_PIXELS, MIN_IMAGE_UNPREDICTED_PIXELS, blend, unpredicted_pixels,
+};
 use std::collections::HashSet;
 use std::ops::Range;
 
@@ -35,7 +39,7 @@ pub(super) fn image_range(
 }
 
 /// The edit's image on the stock application, after every per-image rule: inside the application,
-/// matching the declared hash when `declared` asks for it, and not near-flat. Applying a recipe
+/// matching the declared hash when `declared` asks for it, and not predictable. Applying a recipe
 /// and computing a draft's hashes both go through it. The hash is compared first, so a mistyped
 /// offset reads as a mismatch.
 pub(super) fn checked_image(
@@ -53,11 +57,14 @@ pub(super) fn checked_image(
             expected: edit.sha256.clone(),
         });
     }
-    let distinct: HashSet<u16> = pixels(&stock[range.clone()]).collect();
-    if distinct.len() < MIN_IMAGE_DISTINCT_PIXELS {
+    let image: Vec<u16> = pixels(&stock[range.clone()]).collect();
+    let distinct = image.iter().collect::<HashSet<_>>().len();
+    let unpredicted = unpredicted_pixels(&image, edit.width as usize);
+    if distinct < MIN_IMAGE_DISTINCT_PIXELS || unpredicted < MIN_IMAGE_UNPREDICTED_PIXELS {
         return Err(RecipeError::PredictableImage {
             index,
-            distinct: distinct.len(),
+            distinct,
+            unpredicted,
         });
     }
     Ok(range)

@@ -3,6 +3,7 @@
 
 use patch_schema::{
     ImageEdit, ImageEditError, RecipeV2, RecipeV2Error, blend, check_windows_across,
+    unpredicted_pixels,
 };
 use serde_json::{Value, json};
 
@@ -306,4 +307,35 @@ fn image_windows_count_across_recipes() {
     assert_eq!(error.first, "image-test image_edits[0]");
     assert_eq!(error.second, "other image_edits[0]");
     assert_eq!(error.second_window, 0xd80..0xe80);
+}
+
+#[test]
+fn fills_and_gradients_are_predicted_and_detail_is_not() {
+    let rgb = |r: u16, g: u16, b: u16| (r << 11) | (g << 5) | b;
+    let (w, h) = (20u16, 10u16);
+    let image = |f: &dyn Fn(u16, u16) -> u16| -> Vec<u16> {
+        (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .map(|(x, y)| f(x, y))
+            .collect()
+    };
+
+    assert_eq!(unpredicted_pixels(&image(&|_, _| rgb(31, 40, 0)), 20), 0);
+    assert_eq!(
+        unpredicted_pixels(&image(&|x, _| rgb(x, 2 * x, 31 - x)), 20),
+        0
+    );
+    assert_eq!(unpredicted_pixels(&image(&|_, y| rgb(3 * y, y, 0)), 20), 0);
+    assert_eq!(
+        unpredicted_pixels(&image(&|x, y| rgb(x + y, x + y, 0)), 20),
+        0
+    );
+    // A checkerboard of black and white: every counted pixel is missed.
+    let checker = image(&|x, y| if (x + y) % 2 == 0 { 0 } else { 0xffff });
+    assert_eq!(unpredicted_pixels(&checker, 20), 19 * 9);
+    // One white dot on black is missed where it is, to its right and below it.
+    let mut dot = image(&|_, _| 0);
+    dot[5 * 20 + 7] = 0xffff;
+    assert_eq!(unpredicted_pixels(&dot, 20), 3);
+    assert_eq!(unpredicted_pixels(&[], 0), 0);
 }

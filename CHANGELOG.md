@@ -14,8 +14,10 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   own coverage mask (one hex digit per pixel) in the colour of a stock pixel it names. The pixel
   arithmetic is fixed in `patch_schema` (`ImageEdit::erase_row`, `blend`). Images are refused if
   they leave the application, overlap each other, a replacement's window, a protected range or
-  the protected set, or hold fewer than 16 distinct pixel values (a flat image's hash could be
-  inverted); across committed recipes their windows count like replacement windows. The output
+  the protected set, or are predictable: fewer than 16 distinct pixel values, or fewer than 64
+  pixels the median edge predictor misses (`unpredicted_pixels`), since the published hash of a
+  fill or smooth gradient could be inverted; across committed recipes their windows count like
+  replacement windows. The output
   may differ from stock only in the edited rows. `patch-cli precondition` prints each image's
   hash for a draft (`xdj700::PreconditionHashes`), and `patch` reports `image_edits`.
   `RecipeError` moved to its own module, with the image refusals. Format in `docs/recipes.md`,

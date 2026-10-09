@@ -17,9 +17,15 @@ use std::ops::Range;
 /// Largest image an edit may name, in bytes (an 800x480 screen is 768,000).
 pub const MAX_IMAGE_BYTES: u64 = 1024 * 1024;
 
-/// Fewest distinct pixel values the stock image must hold, so that its hash, which the recipe
-/// publishes, could not be inverted by trying the few images that a near-flat one could be.
+/// Fewest distinct pixel values the stock image must hold: with fewer (a fill, a two-colour
+/// pattern), its published hash could be inverted by trying the few images it could be.
 pub const MIN_IMAGE_DISTINCT_PIXELS: usize = 16;
+
+/// Fewest pixels of the stock image that [`unpredicted_pixels`] counts: a fill or a smooth gradient
+/// has none, so its published hash could be inverted by trying its few parameters, while
+/// anti-aliased text or dither has hundreds. A heuristic against accidental leaks, like the
+/// replacement windows' rules; review is the backstop.
+pub const MIN_IMAGE_UNPREDICTED_PIXELS: usize = 64;
 
 /// An edit to one RGB565 image (16-bit little-endian pixels, rows `width` pixels apart).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -276,4 +282,34 @@ impl Channels {
 
 fn pack(Channels([red, green, blue]): Channels) -> u16 {
     ((red << 11) | (green << 5) | blue) as u16
+}
+
+/// How many pixels of an RGB565 image (`pixels`, rows `width` apart) its neighbours do not
+/// predict: per channel, the median edge predictor (from the left, upper and upper-left pixels)
+/// misses by more than 1. The first row and column are not counted. Fills and linear gradients
+/// score 0; edges, anti-aliased text and dither score high.
+pub fn unpredicted_pixels(pixels: &[u16], width: usize) -> usize {
+    let median = |left: u32, up: u32, corner: u32| {
+        if corner >= left.max(up) {
+            left.min(up)
+        } else if corner <= left.min(up) {
+            left.max(up)
+        } else {
+            left + up - corner
+        }
+    };
+    if width == 0 {
+        return 0;
+    }
+    let rows = pixels.len() / width;
+    let mut count = 0;
+    for y in 1..rows {
+        for x in 1..width {
+            let at = |dx: usize, dy: usize| channels(pixels[(y - dy) * width + x - dx]).0;
+            let (left, up, corner, value) = (at(1, 0), at(0, 1), at(1, 1), at(0, 0));
+            let missed = (0..3).any(|c| median(left[c], up[c], corner[c]).abs_diff(value[c]) > 1);
+            count += usize::from(missed);
+        }
+    }
+    count
 }
