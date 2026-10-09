@@ -16,6 +16,7 @@
 //! after these checks, so it never shows the hash of a window the engine would refuse.
 
 use super::recipe::{RecipeError, RecipeTarget, check_recipe_v2};
+use super::recipe_checks::RecipeChecks;
 use super::stock::StockMain;
 use crate::identity::sha256_hex;
 use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2, Replacement};
@@ -26,9 +27,10 @@ use std::ops::Range;
 const TOP_VALUES: usize = 4;
 
 /// The SHA-256 of every precondition window of `recipe`, computed on `input`, the official update
-/// of `target`, for an author completing a draft. The recipe first passes [`check_recipe_v2`], and
-/// each window the bounds and leak checks, before its hash is computed. The hashes the recipe
-/// declares are not compared (a draft holds placeholders); applying the recipe compares them.
+/// of `target`, for an author completing a draft. The recipe first passes [`check_recipe_v2`] and
+/// the checks in `checks`, and each window the bounds and leak checks, before its hash is
+/// computed. The hashes the recipe declares are not compared (a draft holds placeholders);
+/// applying the recipe compares them.
 ///
 /// A hash covers whatever is at the declared offset, so it cannot show that the offset is the
 /// intended one: check offsets against your own analysis first. It then catches later changes.
@@ -41,8 +43,10 @@ pub fn precondition_hashes(
     recipe: &RecipeV2,
     target: &RecipeTarget<'_>,
     input: &[u8],
+    checks: RecipeChecks<'_>,
 ) -> Result<Vec<String>, RecipeError> {
     check_recipe_v2(recipe, target)?;
+    checks.run(recipe, target)?;
     let stock = StockMain::load(input, &target.release)?.application()?;
     let stock = stock.decoded();
     let hash = |(index, replacement)| {

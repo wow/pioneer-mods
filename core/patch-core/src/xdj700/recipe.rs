@@ -14,8 +14,9 @@
 
 use super::app_version::VERSION_TEXT_LEN;
 use super::is_label_higher;
-use super::precondition::{DeclaredHash, checked_window, window};
+use super::precondition::{DeclaredHash, checked_window};
 use super::rebuild::{RebuiltUpdate, rebuild_with_edited_stock_application};
+use super::recipe_checks::{RecipeChecks, check_ranges};
 use super::release::{OFFICIAL_V115, StockRelease};
 use crate::error::RebuildError;
 use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2, RecipeV2Error};
@@ -51,9 +52,9 @@ pub struct RecipeTarget<'a> {
 /// only through `reported_version`). The entry point is at `0x800`, but code below it also runs at
 /// start-up (the set measured in emulation starts at `0x600`), so this range must not be narrowed
 /// to the version block. Keeping recipes out of the code that start-up and the update path run is
-/// checked against a protected set kept outside the repository, when one is given
-/// ([`check_recipe_against_protected_set`](super::check_recipe_against_protected_set)); keeping
-/// them out of the data that code reads is not checked by the tool. The rules are in
+/// checked against a protected set kept outside the repository, which the entry points take in
+/// [`RecipeChecks`] (see [`super::check_recipe_against_protected_set`]); keeping them out of the
+/// data that code reads is not checked by the tool. The rules are in
 /// `docs/xdj700-flashing.md`, section 5. The application is linked at `0x0800_0000` (its entry
 /// point runs at `0x0800_0800`).
 pub const RECIPE_TARGETS: &[RecipeTarget<'static>] = &[RecipeTarget {
@@ -141,6 +142,24 @@ pub enum RecipeError {
     },
 
     #[error(
+        "the protected set was measured on release {set}, not {target}; code moves between \
+         releases"
+    )]
+    ProtectedSetRelease { set: String, target: String },
+
+    /// Every rebuild writes the version string, so a set that covers it refuses every recipe.
+    #[error(
+        "the version string every rebuild writes, run-time {start:#010x}..={last:#010x}, lies in \
+         the protected set's range {set_start:#010x}..={set_last:#010x}; check the set"
+    )]
+    ProtectedSetVersion {
+        start: u64,
+        last: u64,
+        set_start: u64,
+        set_last: u64,
+    },
+
+    #[error(
         "replacements[{index}].precondition ends at {end:#x}, past the application's end at \
          {len:#x}"
     )]
@@ -201,10 +220,14 @@ pub enum RecipeError {
 /// # Errors
 ///
 /// [`RecipeError::UnknownRelease`], or any [`apply_recipe_v2_to`] error.
-pub fn apply_recipe_v2(recipe: &RecipeV2, input: &[u8]) -> Result<RebuiltUpdate, RecipeError> {
+pub fn apply_recipe_v2(
+    recipe: &RecipeV2,
+    input: &[u8],
+    checks: RecipeChecks<'_>,
+) -> Result<RebuiltUpdate, RecipeError> {
     let target = recipe_target(&recipe.target.release)
         .ok_or_else(|| unknown_release(&recipe.target.release))?;
-    apply_recipe_v2_to(recipe, target, input)
+    apply_recipe_v2_to(recipe, target, input, checks)
 }
 
 /// [`RecipeError::UnknownRelease`] for `release`, listing the known targets.
@@ -287,49 +310,9 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
     })
 }
 
-/// A replacement's span or precondition window that overlaps a protected range (half-open
-/// decoded offsets).
-pub(super) struct Overlap<'r> {
-    pub index: usize,
-    pub what: &'static str,
-    pub start: u64,
-    pub end: u64,
-    pub protected: &'r Range<usize>,
-}
-
-/// Checks every replacement's span and precondition window against `protected`, returning
-/// `refuse` of the first overlap. Windows are bounds-checked first.
-pub(super) fn check_ranges(
-    recipe: &RecipeV2,
-    target: &RecipeTarget<'_>,
-    protected: &[Range<usize>],
-    refuse: impl Fn(Overlap<'_>) -> RecipeError,
-) -> Result<(), RecipeError> {
-    for (index, replacement) in recipe.replacements.iter().enumerate() {
-        let window = window(index, replacement, target.application_len)?;
-        // `validate` has checked that this cannot overflow.
-        let span = replacement.offset..replacement.offset.saturating_add(replacement.len());
-        let window = window.start as u64..window.end as u64;
-        for (what, range) in [("span", span), ("precondition window", window)] {
-            let overlap = |protected: &&Range<usize>| {
-                range.start < protected.end as u64 && (protected.start as u64) < range.end
-            };
-            if let Some(protected) = protected.iter().find(overlap) {
-                return Err(refuse(Overlap {
-                    index,
-                    what,
-                    start: range.start,
-                    end: range.end,
-                    protected,
-                }));
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Applies `recipe` to `input` for an explicit `target` (tests pass synthetic targets; production
-/// code uses [`apply_recipe_v2`] or a target from [`recipe_target`]).
+/// code uses [`apply_recipe_v2`] or a target from [`recipe_target`]), after the built-in checks and
+/// those in `checks`.
 ///
 /// # Errors
 ///
@@ -338,8 +321,10 @@ pub fn apply_recipe_v2_to(
     recipe: &RecipeV2,
     target: &RecipeTarget<'_>,
     input: &[u8],
+    checks: RecipeChecks<'_>,
 ) -> Result<RebuiltUpdate, RecipeError> {
     check_recipe_v2(recipe, target)?;
+    checks.run(recipe, target)?;
     let release = &target.release;
     let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
     let rebuilt =

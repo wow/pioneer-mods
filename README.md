@@ -42,8 +42,9 @@ This repository currently includes:
   and a bounded diff, written as a complete, verified update by `patch`.
   "Verified" means checked against the input and the recipe, not safe to flash. The start-up
   and update-path code is mapped only in emulation, as a protected set kept outside this
-  repository: given it with `--protected-set`, `patch` and `precondition` refuse a recipe that
-  overlaps it, and emulator rehearsals and staged hardware tests do the rest. See
+  repository: given it, `patch` and `precondition` refuse a recipe that overlaps it, and without
+  it they run only when `--no-protected-set` skips that check on purpose; emulator rehearsals
+  and staged hardware tests do the rest. See
   [docs/recipes.md](./docs/recipes.md) and the flashing guide.
 - `precondition` command: prints a draft recipe's precondition hashes, computed on the official
   file only after the recipe, committed-recipe and leak checks, so authors never compute a hash
@@ -94,8 +95,13 @@ version marker, which reproduces the hardware-tested stage-3 file:
 cargo run --release -p patch-cli -- patch \
   --input /path/to/XDJ700.UPD \
   --recipe recipes/xdj700-v1.15/version-marker-0.10.json \
-  --output /path/to/new-dir/XDJ700.UPD
+  --output /path/to/new-dir/XDJ700.UPD \
+  --no-protected-set
 ```
+
+`--no-protected-set` skips the start-up and update-path check deliberately: the maintainer has
+checked the committed recipes against the protected set, which is not published (see "The
+protected set" in [docs/recipes.md](./docs/recipes.md)).
 
 To write a recipe, `precondition` prints its precondition hashes, computed on the official file
 after the recipe, committed-recipe and leak checks, so a draft's placeholders can be filled in;
@@ -106,7 +112,8 @@ after the recipe, committed-recipe and leak checks, so a draft's placeholders ca
 cargo run --release -p patch-cli -- precondition \
   --input /path/to/XDJ700.UPD \
   --recipe /path/to/draft.json \
-  --committed-recipes recipes
+  --committed-recipes recipes \
+  --protected-set /path/to/xdj700-v1.15-protected-set.tsv   # or --no-protected-set
 ```
 
 Notes:

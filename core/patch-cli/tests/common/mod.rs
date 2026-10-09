@@ -1,6 +1,8 @@
 // Each test crate uses a different subset of these helpers.
 #![allow(dead_code)]
 
+pub mod protected_set;
+
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};

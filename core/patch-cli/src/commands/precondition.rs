@@ -1,7 +1,9 @@
 use anyhow::{Result, bail};
-use patch_cli::recipe::{CheckedRecipe, protected_set_line, read_recipe_versioned};
+use patch_cli::recipe::{
+    CheckedRecipe, PROTECTED_SET_ENV, ProtectedSetSource, protected_set_line, read_recipe_versioned,
+};
 use patch_core::firmware_file_name;
-use patch_core::xdj700::precondition_hashes;
+use patch_core::xdj700::{RecipeChecks, precondition_hashes};
 use patch_schema::SCHEMA_VERSION_V2;
 use std::path::PathBuf;
 
@@ -31,9 +33,13 @@ pub struct PreconditionArgs {
     /// A protected set: run-time address ranges of the code that runs at start-up or in the update
     /// path, measured in emulation and kept outside the repository (format in docs/recipes.md).
     /// A recipe whose span or precondition window overlaps it is refused before any hash is
-    /// computed.
-    #[arg(long)]
+    /// computed. Without it, `XDJ700_PROTECTED_SET` names the file.
+    #[arg(long, conflicts_with = "no_protected_set")]
     pub protected_set: Option<PathBuf>,
+
+    /// Skip the protected-set check on purpose (a recipe without a set is refused otherwise).
+    #[arg(long, default_value_t = false)]
+    pub no_protected_set: bool,
 }
 
 /// Prints the SHA-256 of every precondition window of a schema-v2 recipe. Each is computed on the
@@ -55,13 +61,19 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
     // Every check that needs no firmware, before the input is read.
     let checked = CheckedRecipe::load(&args.recipe, &raw, refusing)?;
     checked.check_against_committed(&args.recipe, &args.committed_recipes)?;
-    let protected_set = match &args.protected_set {
-        Some(path) => Some(checked.check_against_protected_set(path)?),
-        None => None,
-    };
+    let source = ProtectedSetSource::choose(
+        args.protected_set.as_deref(),
+        args.no_protected_set,
+        std::env::var_os(PROTECTED_SET_ENV),
+    )?;
+    let protected_set = checked.check_protected_set(&source)?;
     let (recipe, target) = (checked.recipe(), checked.target());
     let input = checked.read_input(&args.input, "hash preconditions on")?;
-    let hashes = precondition_hashes(recipe, target, &input)
+    // The engine runs every check again, the protected set included.
+    let checks = RecipeChecks {
+        protected_set: protected_set.as_ref(),
+    };
+    let hashes = precondition_hashes(recipe, target, &input, checks)
         .map_err(|error| checked.refusal(&args.input, "hash preconditions on", error))?;
 
     println!("recipe_id: {}", recipe.recipe_id);
@@ -83,7 +95,7 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
             window.start, window.end
         );
     }
-    println!("{}", protected_set_line(protected_set.as_ref()));
+    println!("{}", protected_set_line(&source, protected_set.as_ref()));
     println!(
         "checked: recipe, release pins, bounds, protected ranges, committed recipes' windows and \
          leak checks; each hash covers whatever is at its declared offset, so check the offsets \

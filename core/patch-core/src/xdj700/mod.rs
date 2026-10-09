@@ -17,6 +17,7 @@ mod precondition;
 mod protected_set;
 mod rebuild;
 mod recipe;
+mod recipe_checks;
 mod release;
 mod stock;
 
@@ -33,6 +34,7 @@ pub use recipe::{
     RECIPE_TARGETS, RecipeError, RecipeTarget, apply_recipe_v2, apply_recipe_v2_to,
     check_recipe_v2, recipe_target, unknown_release,
 };
+pub use recipe_checks::RecipeChecks;
 pub use release::{
     MAX_MAIN_GROWTH, OFFICIAL_V115, OFFICIAL_V115_VERSION_BLOCK, StockRelease, VersionBlock,
 };
