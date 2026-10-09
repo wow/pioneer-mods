@@ -83,3 +83,20 @@ pub const STAGE5_MAIN_SHA256: &str =
 pub const STAGE5_UPD_LEN: usize = 17_368_527;
 pub const STAGE5_UPD_SHA256: &str =
     "144f4b557127a7eec2d5d2f5fadee0e6585f05a83af321097876a0edca345e12";
+
+/// Stage 7: the beat-loop experiment with the button relabelled 32, built with `patch` from the
+/// committed recipe below. Its application reports `0.12` and differs from stock in the version
+/// string, the stage-5 table entry and the label box of each of the button's six images (80x53
+/// RGB565, one after another from [`STAGE7_FIRST_IMAGE_OFFSET`]); labelled `Ver1.16`.
+pub const STAGE7_RECIPE: &str = "xdj700-v1.15/beat-loop-32-labelled.json";
+pub const STAGE7_REPORTED_VERSION: &str = "0.12";
+/// The decoded offset of the button's first image.
+pub const STAGE7_FIRST_IMAGE_OFFSET: usize = 0x34_f940;
+pub const STAGE7_APPLICATION_SHA256: &str =
+    "c942d11f81b03bfbe7855e3f77c03f0cd63ab5ea989671ce2f1fe4b91c3bb837";
+pub const STAGE7_MAIN_LEN: usize = 7_250_910;
+pub const STAGE7_MAIN_SHA256: &str =
+    "f1de23e893f428c1dab20c1244ffdd61684d2853d725e1f337cd08a2eb71f28d";
+pub const STAGE7_UPD_LEN: usize = 17_368_913;
+pub const STAGE7_UPD_SHA256: &str =
+    "891aa96397c6dc1f07dbf39d9ba828096e6f5f7dd6b396012968c8758ccef0c7";

@@ -7,6 +7,19 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `recipes/xdj700-v1.15/beat-loop-32-labelled.json`, **experimental; rehearsed in emulation, not
+  yet flashed** (stage 7 of `docs/xdj700-flashing.md`): the stage-5 table change, repeated
+  exactly, and the BEAT LOOP 16 button relabelled 32 in its six images, reporting `0.12`. The
+  glyph is the project's own 17x14 mask, drawn in the colour of a stroke pixel of the old label;
+  the recipe holds no stock pixel and no image hash, and pins its output. The decoded application
+  differs from stock in stage 5's three bytes and otherwise only inside each image's label box
+  (owner-input test). In emulation, neither the table byte nor the images were read at start-up,
+  in update mode or during either rehearsal direction (both passed); the PERFORM screen showed 32
+  and the button set a 32-beat loop. Its replacement window and images lie outside the protected
+  set.
+- `check_windows_across` accepts a replacement repeated exactly in another recipe (offset, bytes,
+  window and hash; the purpose may differ): it publishes nothing new, so a recipe can build on
+  another's change. Any other overlap is still refused.
 - Image edits in schema-v2 recipes (`image_edits`, `patch_schema::ImageEdit`): changes to a 16-bit
   RGB565 image stored in the decoded application that publish no stock pixel and no hash of one
   (anyone could check a guess at the pixels against it). An edit names the image (offset, width,

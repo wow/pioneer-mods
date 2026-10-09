@@ -48,15 +48,15 @@ What this means:
   v1.15 unit:** it is skipped (equal version). To write the official application, flash the
   stock no-op rebuild labelled `Ver1.16` (section 3, step 5). That is tested over the official
   application only.
-- **A modified application reports a version lower than 1.15**: `patch-cli rebuild
-  --report-version` (for example `0.10`) or a schema-v2 recipe's `reported_version` with `patch`
-  (stage 5: `0.11`). Both refuse 1.15 or higher. The unit then reports that version, so **the
-  official v1.15 file is written over it and restores the stock application with the vendor's
-  own file**. *(Observed on an owner's unit: stages 3 and 4, 2026-10-08, `Ver0.10 -> Ver1.15`
-  progressed for about 3 minutes and UTILITY returned to `1.15`; stages 5 and 6, 2026-10-09, the
-  unit went from `0.11` back to `1.15`.)* This was observed for an application changed in its
-  version string, and in its version string and one table entry (stage 5). An application whose
-  code is changed also needs its own update mode to keep working (section 5).
+- **A modified application reports a version lower than 1.15**: `patch-cli rebuild --report-version`
+  (for example `0.10`) or a schema-v2 recipe's `reported_version` with `patch` (stage 5: `0.11`,
+  stage 7: `0.12`). Both refuse 1.15 or higher. The unit then reports that version, so **the
+  official v1.15 file is written over it and restores the stock application with the vendor's own
+  file**. *(Observed on an owner's unit: stages 3 and 4, 2026-10-08, `Ver0.10 -> Ver1.15` progressed
+  for about 3 minutes and UTILITY returned to `1.15`; stages 5 and 6, 2026-10-09, the unit went from
+  `0.11` back to `1.15`.)* This was observed for an application changed in its version string, and
+  in its version string and one table entry (stage 5). An application whose code is changed also
+  needs its own update mode to keep working (section 5).
 - Official files older than v1.15 are no longer downloadable.
 
 ## 2. Stages
@@ -73,13 +73,17 @@ table says otherwise. Photograph the **MAIN line** of every update (section 4).
 | 3 | **Stock application reporting `0.10`, labelled `Ver1.16`** (built **with** `--report-version 0.10`; the recovery stick is built without it): only the application's 4-byte version string differs from stock. This is the first flashed application that differs from stock. A static scan finds one pointer to the string, in a small table with the model string, and no code literal that points to it directly (computed addresses are not ruled out); the reference implementation changed the same string and its build booted on hardware | *(Passed on an owner's unit, 2026-10-08: about 3 minutes; UTILITY showed `0.10`; the owner's checks of the unit were all good. Whether Pro DJ Link or rekordbox was exercised was not stated.)* **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes. Afterwards the boot screen and UTILITY show **`0.10`**; the unit otherwise behaves as stock (cold boots, browsing, playback, cue, loop, and Pro DJ Link or rekordbox if you use them: the version may be announced there). **Skipped**, or UTILITY still shows `1.15`: stop and report it (the unit then runs an application equivalent to stock; the `Ver1.16` stick restores it exactly). **An error:** section 6 | Stage 4 |
 | 4 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-08: `MAIN Ver0.10 -> Ver1.15` progressed for about 3 minutes and UTILITY returned to `1.15`.)* **Real flash:** `MAIN Ver0.10 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again: the vendor file restores stock. **If it is skipped** (`MAIN Ver0.10 -> Ver1.15` at 100% at once, UTILITY still `0.10`): use the `Ver1.16` stock no-op stick, which is higher than `0.10`, and report it | Done: the unit runs the official application. Stage 5 is an optional experiment |
 | 5 | **Beat-loop experiment, reporting `0.11`, labelled `Ver1.16`** (`patch` with `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`). **The first file that changes behaviour.** Besides the version string, one table entry differs from stock: the BEAT LOOP button labelled 16 selects the player's existing 32-beat length instead of 16. By static analysis only the PERFORM screen's BEAT LOOP touch handler reads that table, so the change acts when the button is touched, not during start-up | *(Passed on an owner's unit, 2026-10-09: the owner reported that all steps were tested and worked as expected, and that BEAT LOOP 16 looped 32 beats. Which storage options were tried, and how long the update ran, were not stated.)* **Real flash:** `MAIN Ver1.15 -> Ver1.16` progressing for about 3 minutes; UTILITY shows **`0.11`**; three cold boots reach the normal screen. **Skipped**, or UTILITY still shows `1.15`: stop and report it. The experiment was not installed, so the checks below would say nothing about it. Then, with an analysed track (beat grid) loaded, touch BEAT LOOP **16**: the loop should span **32 beats** (8 bars: count bars on the waveform or the beat display). Touch 1/2, 1, 2, 4 and 8: each unchanged. Exit and reloop, and loop with QUANTIZE on and off: unchanged. Also try the cases most likely to differ from stock: a **slow track** (about 70 BPM: 32 beats last about 27 seconds, twice the longest loop this button gave before); **storing the 32-beat loop** wherever the unit can (REC to a hot cue, a memory) and recalling it; **loading another track** while the loop plays; and **three more cold boots after** these checks, in case loop state is saved. **16 still gives 16 beats** (after a real flash): the player limits this path; report it. **Anything odd** (a freeze, a wrong length, a display glitch): note it and go to stage 6. **An error:** section 6 | Stage 6 |
-| 6 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-09: with the official v1.15 file, `MAIN Ver0.11 -> Ver1.15` progressed and the unit went from `0.11` back to `1.15`.)* **Real flash:** `MAIN Ver0.11 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again. **If it is skipped:** use the `Ver1.16` stock no-op stick, which is higher than `0.11`, and report it | Done |
+| 6 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-09: with the official v1.15 file, `MAIN Ver0.11 -> Ver1.15` progressed and the unit went from `0.11` back to `1.15`.)* **Real flash:** `MAIN Ver0.11 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again. **If it is skipped:** use the `Ver1.16` stock no-op stick, which is higher than `0.11`, and report it | Done: the unit runs the official application. Stage 7 is an optional experiment |
+| 7 | **Labelled beat-loop experiment, reporting `0.12`, labelled `Ver1.16`** (`patch` with `recipes/xdj700-v1.15/beat-loop-32-labelled.json`). Stage 5's table change, repeated exactly, and the button's label redrawn as **32** in all six of its images (normal, pressed, greyed out, lit, lit-pressed, lit-greyed out). **The first file that changes the application's pictures.** The label is drawn at patch time from your own file: the recipe holds only coordinates and the project's own glyph. In emulation the images are read only when the PERFORM screen draws the button | *(Rehearsed in emulation, 2026-10-09: installed over official v1.15 and restored by it, section 5; the PERFORM screen showed 32 on the button, and touching it set a 32-beat loop. Not yet flashed.)* **Real flash:** `MAIN Ver1.15 -> Ver1.16` progressing for about 3 minutes; UTILITY shows **`0.12`**; three cold boots reach the normal screen. **Skipped**, or UTILITY still shows `1.15`: stop and report it. Then open the PERFORM screen. The BEAT LOOP button that read 16 should read **32** in every state you see (without a track, with a track loaded, touched, and while its loop plays), with no stray pixels around the label; the other buttons are unchanged. With an analysed track, touch it: the loop spans **32 beats**, as at stage 5. **A garbled or misplaced label, or anything odd:** photograph it, note it and go to stage 8. **An error:** section 6 | Stage 8 |
+| 8 | The **official** v1.15 update | *(Rehearsed in emulation, 2026-10-09: written over stage 7, and the flash then held the official file's records.)* **Real flash:** `MAIN Ver0.12 -> Ver1.15` progressing for about 3 minutes; UTILITY shows `1.15` again, and the button reads 16. **If it is skipped:** use the `Ver1.16` stock no-op stick, which is higher than `0.12`, and report it | Done |
 
 A no-op rebuild's application is the official one, re-compressed, so nothing should change
 functionally in it. Stage 3 changes only the text of the application's version string. Stage 5
-also changes one table entry, the first change to behaviour. From 2026-10-09 every new stage
-file is rehearsed in emulation before it is offered. Stages 1b, 3 and 5 were rehearsed after
-they had been flashed, and the rehearsals agree with the hardware results (section 5).
+also changes one table entry, the first change to behaviour. Stage 7 repeats that change and
+redraws one button's label in its six images, the first change to the application's pictures.
+From 2026-10-09 every new stage file is rehearsed in emulation before it is offered. Stages 1b,
+3 and 5 were rehearsed after they had been flashed, and the rehearsals agree with the hardware
+results; stage 7 was rehearsed before it is offered (section 5).
 
 The stage files built from the official v1.15 file (`XDJ700.UPD`, 17,371,335 bytes, SHA-256
 `73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c`) are always the same. All are
@@ -109,6 +113,12 @@ application has SHA-256 `dd5adad4ae531db95c9dae10d9fa534afc4e31d2ffd54daadc22da6
 differs from stock in exactly three bytes (two in the version string, one table entry), as the
 owner-input tests check.
 
+The stage-7 file (`patch` with `recipes/xdj700-v1.15/beat-loop-32-labelled.json`) is 17,368,913
+bytes with SHA-256 `891aa96397c6dc1f07dbf39d9ba828096e6f5f7dd6b396012968c8758ccef0c7`; its
+application has SHA-256 `c942d11f81b03bfbe7855e3f77c03f0cd63ab5ea989671ce2f1fe4b91c3bb837`. It
+differs from stock in stage 5's three bytes (the version string now reads `0.12`) and otherwise
+only inside the label box of each of the button's six images, as the owner-input tests check.
+
 ## 3. Before every flash
 
 1. **Power:** mains power. Never power off or pull the USB stick during an update.
@@ -135,6 +145,12 @@ owner-input tests check.
    cargo run --release -p patch-cli -- patch --input /path/to/XDJ700.UPD \
      --recipe recipes/xdj700-v1.15/beat-loop-16-plays-32.json \
      --output ~/xdj700-stage5/XDJ700.UPD --no-protected-set
+
+   # Stage 7: the beat-loop experiment with the button relabelled 32 (reports 0.12)
+   mkdir -p ~/xdj700-stage7
+   cargo run --release -p patch-cli -- patch --input /path/to/XDJ700.UPD \
+     --recipe recipes/xdj700-v1.15/beat-loop-32-labelled.json \
+     --output ~/xdj700-stage7/XDJ700.UPD --no-protected-set
    ```
 
    Each command checks the result against the official file, writes atomically, reads the file
@@ -151,9 +167,9 @@ owner-input tests check.
    - eject the stick and plug it back in;
    - run `shasum -a 256 /Volumes/<stick>/XDJ700.UPD`;
    - it must equal the identity **for the stage you are flashing** in section 2 (stage 1b:
-     `9e1ac10e…`; stage 5: `144f4b55…`). **On any mismatch, stop.** The read-back done by
-     `patch-cli` can be served from the operating system's cache, so it does not prove what is on
-     the stick.
+     `9e1ac10e…`; stage 5: `144f4b55…`; stage 7: `891aa963…`). **On any mismatch, stop.** The
+     read-back done by `patch-cli` can be served from the operating system's cache, so it does
+     not prove what is on the stick.
 5. **Recovery sticks ready**, each checked the same way (re-insert, then `shasum`):
    - **Stock no-op rebuild labelled `Ver1.16`**, built **without** `--report-version` (the
      stage-1b file, `9e1ac10e…`): the official application, re-compressed. On a unit that
@@ -161,9 +177,9 @@ owner-input tests check.
      application). It is higher than any version a modified application reports (lower than
      1.15), so it is the backup restore stick for those too (untested over a modified
      application: stages 4 and 6 did not need it). **Check that its SHA-256 is `9e1ac10e…`:**
-     the stage-3 file (`84cbd263…`) and the stage-5 file (`144f4b55…`) have the same name and
-     label, and the stage-5 file, flashed by mistake, progresses like a restore but reinstalls
-     the experiment.
+     the stage-3, stage-5 and stage-7 files (`84cbd263…`, `144f4b55…`, `891aa963…`) have the
+     same name and label, and the stage-5 or stage-7 file, flashed by mistake, progresses like a
+     restore but reinstalls an experiment.
    - **Official v1.15 file: the first restore stick for a modified application.** On a unit that
      reports a lower version (for example `0.10` after stage 3) it is written and restores stock
      (observed, stage 4). On a unit that reports 1.15 it is skipped in normal update mode, so
@@ -187,20 +203,21 @@ owner-input tests check.
   `MAIN Ver1.15 -> Ver1.16`), and its progress bar runs for about 3 minutes.
 - **Skip:** the MAIN line jumps straight to 100%.
 
-Stages 0, 1b, 3, 4, 5 and 6 only pass if MAIN really progressed. For stage 2, a skip is the expected
+Stages 0, 1b and 3 to 8 only pass if MAIN really progressed. For stage 2, a skip is the expected
 outcome (section 2). **Photograph the MAIN line**: its left-hand version is what the unit reports.
-While the unit runs the stock application it should be `Ver1.15` (section 1): at stages 1b, 2, 3
-and 5 (at stage 5, after stage 4 restored stock: `MAIN Ver1.15 -> Ver1.16`). At stage 4, after
-stage 3, it should be `Ver0.10`, and at stage 6, after stage 5, `Ver0.11`. Report anything else.
+While the unit runs the stock application it should be `Ver1.15` (section 1): at stages 1b, 2, 3,
+5 and 7 (at stages 5 and 7, after stages 4 and 6 restored stock: `MAIN Ver1.15 -> Ver1.16`). At
+stage 4, after stage 3, it should be `Ver0.10`, at stage 6, after stage 5, `Ver0.11`, and at stage
+8, after stage 7, `Ver0.12`. Report anything else.
 
 Then check each of these:
 - the update completed with no error message;
 - the UTILITY screen (hold MENU/UTILITY for over a second) shows a version; write it down. After a
-  no-op rebuild or stages 4 and 6 it shows `1.15` (section 1), after stage 3 `0.10`, after stage 5
-  `0.11`. All are expected;
+  no-op rebuild or stages 4, 6 and 8 it shows `1.15` (section 1), after stage 3 `0.10`, after
+  stage 5 `0.11`, after stage 7 `0.12`. All are expected;
 - three cold boots reach the normal screen;
-- browsing, playback, cue and loop behave as before (after stage 5, except the BEAT LOOP 16
-  button, which should give 32 beats).
+- browsing, playback, cue and loop behave as before (after stages 5 and 7, except the BEAT LOOP
+  16 button, which should give 32 beats; after stage 7 it also reads 32).
 
 ## 5. Recovery: what protects the unit, and what does not
 
@@ -261,9 +278,9 @@ compressed, so a flash offset does not map to a run-time address.
     before the branch at `0x08D50D78`, those an update-mode boot runs, and those the complete
     updates of the rehearsals below run (reading the file from the stick, the version check,
     erasing and writing flash). That is 1,692 ranges of run-time addresses, about 460 KiB of
-    the application; the seven rehearsals below added no new function to it. It is a lower bound:
+    the application; the rehearsals below added no new function to it. It is a lower bound:
     the unit runs code the model does not (the real panel and storage, the DSP's replies).
-    Every recipe window must lie outside it; both committed recipes do. The set is kept outside
+    Every recipe window must lie outside it; all committed recipes do. The set is kept outside
     this repository. `patch` and `precondition` refuse a recipe whose span or window overlaps it,
     or a set for another release or one that covers the version string, before reading the
     firmware; without a set they refuse to run unless `--no-protected-set` skips the check on
@@ -278,7 +295,11 @@ compressed, so a flash offset does not map to a run-time address.
     never read in a normal boot to the main screen, in an update-mode boot, or while stage 5 was
     installed over stock or official v1.15 over stage 5. Touching BEAT LOOP 16 on the PERFORM screen
     then read it (one instruction, 40 reads), which shows that the watch sees such reads, and the
-    emulated loop spanned 32 beats, as on the owner's unit;
+    emulated loop spanned 32 beats, as on the owner's unit. For stage 7, neither that byte nor any
+    of the six images was read in a normal boot, in an update-mode boot, or while stage 7 was
+    installed over stock or official v1.15 over stage 7; the images were only written, by the
+    loader while unpacking the application. The PERFORM screen then drew the button reading 32,
+    and touching it set a 32-beat loop;
   - **rehearse every new stage file in emulation before it is offered.** The rehearsal builds
     a flash from the file the unit runs, installs the new file through the application's own
     update mode, and checks that the flash then holds the new file's MAIN records exactly,
@@ -309,10 +330,13 @@ reboot reached the running system, and a reboot holding IN + RELOOP/EXIT reached
 | stage 3 | official v1.15 | written | flash holds the file's records | passed |
 | official v1.15 | stage 5, reports `0.11` | written | records; the replaced byte was not read | passed |
 | stage 5 | official v1.15 | written | records; the replaced byte was not read | passed |
+| official v1.15 | stage 7, reports `0.12` | written | records; neither the table byte nor the images were read | passed |
+| stage 7 | official v1.15 | written | records; neither the table byte nor the images were read | passed |
 | official v1.15 | official v1.15 | skipped, equal version | application region unchanged | passed |
 
 Stages 1b, 3 and 5 were flashed on an owner's unit before these rehearsals existed; the
-rehearsals came afterwards and agree with the hardware results. Stage 1 (`Ver0.90`) was not
+rehearsals came afterwards and agree with the hardware results. Stage 7 was rehearsed before it
+is offered and has not been flashed yet. Stage 1 (`Ver0.90`) was not
 rehearsed: it is skipped on any v1.15 unit and is not offered any more.
 
 ## 6. If something goes wrong

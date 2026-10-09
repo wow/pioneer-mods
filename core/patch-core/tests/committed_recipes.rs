@@ -1,7 +1,7 @@
 //! Every committed recipe (`recipes/**/*.json`) must be a valid schema-v2 recipe for a known
 //! release, pass every check that needs no firmware, and pin its output identities; across the
-//! committed recipes of a release, precondition windows must be disjoint. Applying them needs the
-//! official file; see the owner-input tests.
+//! committed recipes of a release, precondition windows must be disjoint (or belong to identical
+//! replacements). Applying them needs the official file; see the owner-input tests.
 
 #[path = "common/recipe_files.rs"]
 mod recipe_files;
@@ -83,7 +83,11 @@ fn committed_recipes_avoid_the_protected_set() {
     }
 
     // A renamed or moved recipe directory must not turn this into a check of nothing.
-    for known in ["version-marker-0.10", "beat-loop-16-plays-32"] {
+    for known in [
+        "version-marker-0.10",
+        "beat-loop-16-plays-32",
+        "beat-loop-32-labelled",
+    ] {
         assert!(
             checked.iter().any(|id| id.ends_with(known)),
             "{known} was not checked; checked: {checked:?}"

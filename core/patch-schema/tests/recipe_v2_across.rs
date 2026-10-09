@@ -1,4 +1,5 @@
-//! Precondition windows across recipes: per release, disjoint.
+//! Precondition windows across recipes: per release, disjoint unless the replacements are
+//! identical.
 
 use patch_schema::{RecipeV2, WindowOverlap, check_windows_across};
 use serde_json::json;
@@ -62,20 +63,37 @@ fn touching_windows_and_windows_of_other_releases_are_accepted() {
     );
 }
 
-/// Identical windows have equal hashes, but each recipe's span would sit among the other's
+/// The same window with another change: each recipe's span would sit among the other's
 /// "unpublished" window bytes, and their kept stock bytes would add up.
 #[test]
-fn identical_windows_across_recipes_are_refused() {
+fn identical_windows_of_different_replacements_are_refused() {
     let a = recipe("a", "r", &[(0x900, 32, 0)]);
-    let identical = recipe("identical", "r", &[(0x900, 32, 0)]);
+    // The same window 0x8e0..0x901 around another span.
+    let moved_span = recipe("moved", "r", &[(0x8f0, 16, 16)]);
+    let mut other_bytes = recipe("bytes", "r", &[(0x900, 32, 0)]);
+    other_bytes.replacements[0].bytes_hex = "01".to_owned();
 
-    assert_eq!(
-        check_windows_across([&a, &identical]),
-        Err(WindowOverlap {
-            first: "a replacements[0]".to_owned(),
-            first_window: 0x8e0..0x901,
-            second: "identical replacements[0]".to_owned(),
-            second_window: 0x8e0..0x901,
-        })
-    );
+    for other in [&moved_span, &other_bytes] {
+        let error = check_windows_across([&a, other]).expect_err("overlap");
+        assert_eq!(error.first_window, 0x8e0..0x901);
+        assert_eq!(error.second_window, 0x8e0..0x901);
+    }
+}
+
+/// A replacement repeated exactly publishes nothing new, so a recipe may build on another's change;
+/// only the purpose may differ, and hex is compared without regard to case.
+#[test]
+fn identical_replacements_across_recipes_are_accepted() {
+    let a = recipe("a", "r", &[(0x900, 32, 0)]);
+    let mut repeated = recipe("repeated", "r", &[(0x900, 32, 0), (0x1000, 0, 32)]);
+    repeated.replacements[0].purpose = "the same change, described again".to_owned();
+    repeated.replacements[0].precondition.sha256 = "AB".repeat(32);
+
+    assert_eq!(check_windows_across([&a, &repeated]), Ok(()));
+
+    // A third recipe whose window overlaps the shared one is still refused.
+    let shifted = recipe("shifted", "r", &[(0x901, 32, 0)]);
+    let error = check_windows_across([&a, &repeated, &shifted]).expect_err("overlap");
+    assert_eq!(error.second, "shifted replacements[0]");
+    assert_eq!(error.second_window, 0x8e1..0x902);
 }

@@ -110,7 +110,7 @@ fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
     let mut recipe = committed_recipe();
     recipe["recipe_id"] = json!("draft");
 
-    // Shifted by one byte, and identical: both refused.
+    // Shifted by one byte, and the same window with other bytes: both refused.
     recipe["replacements"] = json!([draft_replacement(0x901, 32, 0)]);
     assert_refused_with(
         &recipe,
@@ -119,7 +119,9 @@ fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
         "published replacements[0] and draft replacements[0]: windows 0x8e0..0x902 and \
          0x8e1..0x903 overlap; windows of recipes for the same release must be disjoint",
     );
-    recipe["replacements"] = json!([draft_replacement(0x900, 32, 0)]);
+    let mut other_bytes = draft_replacement(0x900, 32, 0);
+    other_bytes["bytes_hex"] = json!("0103");
+    recipe["replacements"] = json!([other_bytes]);
     assert_refused_with(
         &recipe,
         None,
@@ -128,14 +130,18 @@ fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
          0x8e0..0x902 overlap",
     );
 
-    // Disjoint: the command goes on to the (missing) input.
-    recipe["replacements"] = json!([draft_replacement(0x902, 0, 32)]);
-    assert_refused_with(
-        &recipe,
-        None,
-        committed.path(),
-        "failed to read input update",
-    );
+    // Disjoint, or the published replacement repeated exactly (hash included): the command goes
+    // on to the (missing) input.
+    let repeated = draft_replacement(0x900, 32, 0);
+    for replacements in [json!([draft_replacement(0x902, 0, 32)]), json!([repeated])] {
+        recipe["replacements"] = replacements;
+        assert_refused_with(
+            &recipe,
+            None,
+            committed.path(),
+            "failed to read input update",
+        );
+    }
 }
 
 #[test]

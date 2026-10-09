@@ -1,0 +1,180 @@
+{
+  "schema_version": 2,
+  "recipe_id": "xdj700-v1.15-beat-loop-32-labelled",
+  "description": "Experimental: the BEAT LOOP button labelled 16 sets a 32-beat loop and is relabelled 32 in all six of its images (normal, pressed, greyed out, lit, lit-pressed, lit-greyed out). The table change is the one in beat-loop-16-plays-32.json, which passed on an owner's unit; the label is drawn at patch time from the owner's own file (the recipe carries only coordinates and its own glyph mask). The application reports version 0.12, so the official v1.15 update restores stock. Rehearsed in emulation, not yet flashed. For staged hardware testing (docs/xdj700-flashing.md, stage 7).",
+  "target": {
+    "release": "xdj700-v1.15",
+    "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
+    "application_sha256": "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939"
+  },
+  "label": "Ver1.16",
+  "reported_version": "0.12",
+  "replacements": [
+    {
+      "offset": 877108,
+      "bytes_hex": "0d",
+      "precondition": {
+        "before": 0,
+        "after": 1216,
+        "sha256": "1ef2fab950010865b384af1cd2c995d526644ce877dc8f0b01a581c9e743f117"
+      },
+      "purpose": "The last entry of the six-entry table that maps the PERFORM screen's BEAT LOOP buttons to the player's list of loop lengths. It selects the list's 16-beat entry; the replacement selects the next entry, 32 beats, which the list already holds. By static analysis only the BEAT LOOP touch handler, a PERFORM-screen callback, reads the table, so the change acts only when the button is touched, not during start-up. This recipe also redraws the button's label as 32 (its image edits). The same replacement as in beat-loop-16-plays-32.json, repeated exactly. The precondition window lies over table data, not code: a window before the entry would lie over zero bytes and text, so it covers the entry and the 1,216 bytes after it, sized to pass the value check with margin (docs/recipes.md, Known exceptions)."
+    }
+  ],
+  "image_edits": [
+    {
+      "offset": 3471680,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 18,
+        "width": 20,
+        "height": 16
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 34,
+          "y": 25
+        }
+      },
+      "purpose": "Relabel the BEAT LOOP 16 button's normal image as 32 (it sets a 32-beat loop)."
+    },
+    {
+      "offset": 3480160,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 18,
+        "width": 20,
+        "height": 16
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 34,
+          "y": 25
+        }
+      },
+      "purpose": "Relabel the BEAT LOOP 16 button's pressed image as 32 (it sets a 32-beat loop)."
+    },
+    {
+      "offset": 3488640,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 18,
+        "width": 20,
+        "height": 16
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 34,
+          "y": 25
+        }
+      },
+      "purpose": "Relabel the BEAT LOOP 16 button's greyed out image as 32 (it sets a 32-beat loop)."
+    },
+    {
+      "offset": 3497120,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 18,
+        "width": 20,
+        "height": 16
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 34,
+          "y": 25
+        }
+      },
+      "purpose": "Relabel the BEAT LOOP 16 button's lit image as 32 (it sets a 32-beat loop)."
+    },
+    {
+      "offset": 3505600,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 18,
+        "width": 20,
+        "height": 16
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 34,
+          "y": 25
+        }
+      },
+      "purpose": "Relabel the BEAT LOOP 16 button's lit-pressed image as 32 (it sets a 32-beat loop)."
+    },
+    {
+      "offset": 3514080,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 18,
+        "width": 20,
+        "height": 16
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 34,
+          "y": 25
+        }
+      },
+      "purpose": "Relabel the BEAT LOOP 16 button's lit-greyed out image as 32 (it sets a 32-beat loop)."
+    }
+  ],
+  "expected": {
+    "application_sha256": "c942d11f81b03bfbe7855e3f77c03f0cd63ab5ea989671ce2f1fe4b91c3bb837",
+    "upd_sha256": "891aa96397c6dc1f07dbf39d9ba828096e6f5f7dd6b396012968c8758ccef0c7"
+  }
+}
