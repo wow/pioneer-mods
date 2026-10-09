@@ -47,7 +47,7 @@ updater installs. Read [xdj700-flashing.md](./xdj700-flashing.md) before you fla
 | `precondition` | The stock bytes around the span, `before` it and `after` it (`before + after` at least 32, the window at most 4096 bytes), identified by their SHA-256. The window moves with `offset`, so a mistyped offset fails the check. See [Precondition windows](#precondition-windows). |
 | `bytes_hex` | The project's own replacement bytes. Their length is the span length. The first and last must differ from stock, and at most half may equal it, fewer than 32 in a row: split the span around unchanged bytes. |
 | `purpose` | Required. A reviewer must be able to tell what each span changes. |
-| `expected` | Optional, but every committed recipe pins both identities. |
+| `expected` | The output's identities: `application_sha256` (the decoded application) and `upd_sha256` (the update). Optional for a recipe without image edits; a recipe with [image edits](#image-edits) must pin `application_sha256` (a draft uses a placeholder and copies the value `precondition` prints). Every committed recipe pins both. |
 
 ## Precondition windows
 
@@ -125,17 +125,19 @@ paste stock bytes into an issue or a commit, only their hash.
    Before it computes any hash, the command runs the recipe's own checks (release pins, version
    order, bounds, protected ranges), checks that its windows are disjoint from those of the other
    committed recipes (the draft's own file is skipped, and the directory must hold another recipe
-   for the release), and runs each window's leak checks. So it never prints the hash of a window
-   those rules refuse, and it writes nothing. For each replacement it prints the window and its
-   SHA-256, for each [image edit](#image-edits) the image (with no hash), and for a recipe with
-   image edits the output identities (`expected.application_sha256` and `expected.upd_sha256`),
-   and says whether the recipe already declares each. Copy them into the recipe.
+   for the release), and then rebuilds the draft, running each window's leak checks before it
+   hashes the window. So it never prints the hash of a window those rules refuse, prints nothing
+   unless the whole rebuild succeeds, and writes nothing. For each replacement it prints the
+   window and its SHA-256, for each [image edit](#image-edits) the image (with no hash), and the
+   output identities (`expected.application_sha256` and `expected.upd_sha256`), and says whether
+   the recipe already declares each. Copy them into the recipe.
    (The first recipe for a newly added release therefore needs a committed recipe for that
    release first, such as its version marker.)
-3. Run `patch` to build the update. It checks every hash, adds the rebuild's own checks (bounded
-   diff, version rule, image size), and prints the output identities; copy them into `expected`
-   (a recipe with image edits already has them from step 2).
-   `precondition --check` then exits with an error unless every hash is `as declared`.
+3. Run `precondition --check`: it exits with an error unless every hash and identity the recipe
+   declares is `as declared`, and says which kind differs (precondition hashes from the official
+   update, or output identities from the rebuilt output). Then run `patch` to build the update.
+   It checks every hash and the rebuild's own rules (bounded diff, version rule, image size), and
+   prints the output identities, which match those `precondition` printed.
 
 Settle your windows before you push: hashes of windows that later move stay in the history, and
 two overlapping windows reveal the bytes between them. CI checks the committed recipes again.
@@ -190,8 +192,9 @@ The rules:
   and any change in the pixel arithmetic. It covers the whole application, so it reveals nothing
   about one image. When it does not match, the refusal cannot say which image differs.
 - Images may not overlap each other or any replacement's window (whose hash would cover the
-  image's pixels), and across the committed recipes of a release they count like replacement
-  windows: they must be disjoint.
+  image's pixels), and an image may not overlap another committed recipe's window either. Images
+  of different recipes may overlap: each recipe is applied on its own, and none publishes a hash
+  of the image.
 - The glyph mask must be the author's own drawing, never traced from vendor pixels.
 - Images are subject to the protected ranges and the [protected set](#the-protected-set), like
   replacements.

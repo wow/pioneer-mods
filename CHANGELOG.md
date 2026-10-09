@@ -16,10 +16,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   `blend`). A recipe with image edits must pin its output (`expected.application_sha256`,
   `RecipeV2Error::UnpinnedImageEdits`): with the input pinned, that catches a changed offset or
   arithmetic. Images are refused if they leave the application or overlap each other, a
-  replacement's window, a protected range or the protected set; across committed recipes their
-  windows count like replacement windows. The output may differ from stock only in the edited
-  rows. `patch-cli precondition` prints each image without a hash and a draft's output identities
-  (`xdj700::PreconditionHashes::output`, `xdj700::OutputIdentities`), and `patch` reports
+  replacement's window (also another committed recipe's), a protected range or the protected set;
+  images of different recipes may overlap. The output may differ from stock only in the edited
+  rows. `patch-cli precondition` now rebuilds every draft once: it prints each image without a
+  hash and the output identities (`xdj700::PreconditionHashes::output`,
+  `xdj700::OutputIdentities`), compared through one list with `patch` (`OutputIdentities::pins`);
+  `--check` counts precondition hashes and output identities separately. `patch` reports
   `image_edits`.
   `RecipeError` moved to its own module, with the image refusals. Format in `docs/recipes.md`,
   "Image edits".

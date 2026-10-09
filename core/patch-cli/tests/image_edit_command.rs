@@ -148,6 +148,30 @@ fn refuses_image_edits_without_an_output_pin_before_reading_the_input() {
     assert!(!output.exists());
 }
 
+/// `precondition` on a draft: without a pin it is refused before the input is read, with a hint
+/// that a placeholder works; with a placeholder it goes on to the (missing) input.
+#[test]
+fn precondition_takes_a_draft_with_a_placeholder_pin() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let missing = dir.path().join("missing.UPD");
+
+    let unpinned = write_recipe(dir.path(), &image_recipe(None, "fffffffff"));
+    let result = precondition(&missing, &unpinned, &["--no-protected-set"]);
+    assert!(!result.status.success());
+    let stderr = text(&result.stderr);
+    assert!(
+        stderr.contains("must pin expected.application_sha256")
+            && stderr.contains("in a draft, use any 64 hex digits"),
+        "{stderr}"
+    );
+
+    let placeholder = write_recipe(dir.path(), &image_recipe(placeholder_pin(), "fffffffff"));
+    let result = precondition(&missing, &placeholder, &["--no-protected-set"]);
+    assert!(!result.status.success());
+    let stderr = text(&result.stderr);
+    assert!(stderr.contains("failed to read input update"), "{stderr}");
+}
+
 #[test]
 fn refuses_an_image_in_the_protected_set_before_reading_the_input() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -215,6 +239,24 @@ fn precondition_pins_the_output_that_patch_then_writes() {
     let (upd, line) = identity("upd_sha256");
     assert!(line.ends_with("(not declared)"), "{line}");
 
+    // `--check` fails on the draft's placeholder pin and on a stale `upd_sha256`, naming the
+    // output identities rather than the official update.
+    let failed_check = |recipe: &Path, message: &str| {
+        let result = precondition(&input, recipe, &["--no-protected-set", "--check"]);
+        let stderr = text(&result.stderr);
+        assert!(!result.status.success());
+        assert!(stderr.contains(message), "{stderr}");
+        assert!(!stderr.contains("precondition hashes differ"), "{stderr}");
+        text(&result.stdout) + &stderr
+    };
+    let draft_failure = failed_check(
+        &draft,
+        "1 of 1 declared output identities differ from the rebuilt output",
+    );
+    let stale = json!({"application_sha256": application, "upd_sha256": "00".repeat(32)});
+    let stale = write_recipe(dir.path(), &image_recipe(Some(stale), "fffffffff"));
+    let stale_failure = failed_check(&stale, "1 of 2 declared output identities differ");
+
     let pins = json!({"application_sha256": application, "upd_sha256": upd});
     let complete_recipe = image_recipe(Some(pins), "fffffffff");
     let complete = write_recipe(dir.path(), &complete_recipe);
@@ -240,7 +282,14 @@ fn precondition_pins_the_output_that_patch_then_writes() {
     // The stock image's hash appears nowhere (no code path computes it).
     let image_hash = sha256_hex(&stock[PAD as usize..(PAD + PAD_LEN) as usize]);
     let recipe_text = serde_json::to_string(&complete_recipe).expect("JSON");
-    let printed = [stdout, checked_stdout, text(&patched.stdout), recipe_text];
+    let printed = [
+        stdout,
+        checked_stdout,
+        draft_failure,
+        stale_failure,
+        text(&patched.stdout),
+        recipe_text,
+    ];
     assert!(printed.iter().all(|text| !text.contains(&image_hash)));
     let rows = |y: u64| PAD + y * 160..PAD + (y + 1) * 160;
     let changed: Vec<u64> = (0..53)

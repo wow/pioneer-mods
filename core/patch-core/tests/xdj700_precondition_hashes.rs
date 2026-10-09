@@ -1,12 +1,14 @@
-//! `xdj700::precondition_hashes` on a synthetic release: the hashes an author needs to complete a
-//! draft, computed only after every check.
+//! `xdj700::precondition_hashes` on a synthetic release: the hashes and output identities an author
+//! needs to complete a draft, computed only after every check.
 
 mod common;
 
 use common::recipe::{Fixture, PADDING, replacement, stock_application, windowed};
 use patch_core::RebuildError;
-use patch_core::xdj700::{PreconditionHashes, RecipeChecks, RecipeError, precondition_hashes};
-use patch_schema::Replacement;
+use patch_core::xdj700::{
+    OutputIdentities, RecipeChecks, RecipeError, apply_recipe_v2_to, precondition_hashes,
+};
+use patch_schema::{ExpectedV2, Replacement};
 
 const PLACEHOLDER: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -35,31 +37,46 @@ fn hashes_every_window_of_a_draft_and_the_completed_recipe_applies() {
         .map(|replacement| replacement.precondition.sha256.as_str())
         .collect();
     assert_eq!(hashes.replacements, expected);
-    assert_eq!(hashes.output, None);
     for (replacement, sha256) in recipe.replacements.iter_mut().zip(hashes.replacements) {
         replacement.precondition.sha256 = sha256;
     }
-    assert!(fixture.apply(&recipe).is_ok());
-}
-
-#[test]
-fn hashes_nothing_for_a_recipe_without_replacements() {
-    let fixture = Fixture::new();
-
-    let hashes = precondition_hashes(
-        &fixture.recipe(vec![]),
+    // The draft's output identities are those of the completed recipe, and pin it.
+    recipe.expected = Some(ExpectedV2 {
+        application_sha256: Some(hashes.output.application_sha256.clone()),
+        upd_sha256: Some(hashes.output.upd_sha256.clone()),
+    });
+    let rebuilt = apply_recipe_v2_to(
+        &recipe,
         &fixture.target(),
         &fixture.update,
         RecipeChecks::NONE,
-    );
+    )
+    .expect("apply");
+    assert_eq!(OutputIdentities::of(&rebuilt), hashes.output);
+}
 
-    assert_eq!(
-        hashes,
-        Ok(PreconditionHashes {
-            replacements: vec![],
-            output: None
-        })
-    );
+#[test]
+fn hashes_no_window_for_a_recipe_without_replacements_but_its_output() {
+    let fixture = Fixture::new();
+    let recipe = fixture.recipe(vec![]);
+
+    let hashes = precondition_hashes(
+        &recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    )
+    .expect("hash");
+
+    assert!(hashes.replacements.is_empty());
+    let rebuilt = apply_recipe_v2_to(
+        &recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    )
+    .expect("apply");
+    assert_eq!(hashes.output, OutputIdentities::of(&rebuilt));
 }
 
 #[test]

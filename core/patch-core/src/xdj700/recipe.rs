@@ -16,12 +16,14 @@
 use super::app_version::VERSION_TEXT_LEN;
 use super::image_edit::{apply_image_edit, image_range};
 use super::is_label_higher;
+use super::output::OutputIdentities;
 use super::precondition::{DeclaredHash, checked_window};
 use super::rebuild::{RebuiltUpdate, rebuild_with_edited_stock_application};
 use super::recipe_checks::{RecipeChecks, check_ranges};
 pub use super::recipe_error::RecipeError;
 use super::release::{OFFICIAL_V115, StockRelease};
 use crate::error::RebuildError;
+use crate::identity::sha256_hex;
 use patch_schema::{RecipeV2, WindowOwner};
 use std::ops::Range;
 
@@ -214,48 +216,43 @@ pub fn apply_recipe_v2_to(
 ) -> Result<RebuiltUpdate, RecipeError> {
     check_recipe_v2(recipe, target)?;
     checks.run(recipe, target)?;
-    let rebuilt = rebuild_recipe(recipe, target, input, DeclaredHash::Compare)?;
-    if let Some(expected) = &recipe.expected {
-        let pairs = [
-            (
-                "application_sha256",
-                &expected.application_sha256,
-                rebuilt.application_sha256(),
-            ),
-            ("upd_sha256", &expected.upd_sha256, rebuilt.sha256()),
-        ];
-        for (field, expected, actual) in pairs {
-            if let Some(expected) = expected
-                && !expected.eq_ignore_ascii_case(actual)
-            {
-                return Err(RecipeError::UnexpectedOutput {
-                    field,
-                    expected: expected.clone(),
-                    actual: actual.to_owned(),
-                });
-            }
-        }
+    let (rebuilt, _) = rebuild_recipe(recipe, target, input, DeclaredHash::Compare)?;
+    let output = OutputIdentities::of(&rebuilt);
+    let pins = output.pins(recipe.expected.as_ref());
+    if let Some(pin) = pins.iter().find(|pin| pin.differs()) {
+        return Err(RecipeError::UnexpectedOutput {
+            field: pin.field,
+            expected: pin
+                .declared
+                .expect("a differing pin is declared")
+                .to_owned(),
+            actual: pin.actual.to_owned(),
+        });
     }
     Ok(rebuilt)
 }
 
 /// Rebuilds `input` with the changes of `recipe`, which has passed [`check_recipe_v2`] and the
-/// caller's checks. `declared` says whether each replacement window is compared with its declared
-/// hash ([`DeclaredHash::Ignore`] for a draft, whose output identities
+/// caller's checks, and returns the update with the SHA-256 of each replacement's window on the
+/// stock application, in recipe order. `declared` says whether each window is compared with its
+/// declared hash ([`DeclaredHash::Ignore`] for a draft, whose hashes and output identities
 /// [`super::precondition_hashes`] computes). The declared output identities are not compared here.
 pub(super) fn rebuild_recipe(
     recipe: &RecipeV2,
     target: &RecipeTarget<'_>,
     input: &[u8],
     declared: DeclaredHash,
-) -> Result<RebuiltUpdate, RecipeError> {
+) -> Result<(RebuiltUpdate, Vec<String>), RecipeError> {
     let release = &target.release;
     let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
+    let mut window_hashes = Vec::with_capacity(recipe.replacements.len());
     let rebuilt =
         rebuild_with_edited_stock_application(input, release, &recipe.label, |decoded| {
-            // Every window is checked on the stock application before anything changes.
+            // Every window is checked (and hashed) on the stock application before anything
+            // changes.
             for (index, replacement) in recipe.replacements.iter().enumerate() {
-                checked_window(index, replacement, decoded, declared)?;
+                let window = checked_window(index, replacement, decoded, declared)?;
+                window_hashes.push(sha256_hex(&decoded[window]));
             }
             let mut images = Vec::with_capacity(recipe.image_edits.len());
             for (index, edit) in recipe.image_edits.iter().enumerate() {
@@ -280,5 +277,5 @@ pub(super) fn rebuild_recipe(
             block.set_reported_version(decoded, &recipe.reported_version)?;
             Ok::<_, RecipeError>(changed)
         })?;
-    Ok(rebuilt)
+    Ok((rebuilt, window_hashes))
 }

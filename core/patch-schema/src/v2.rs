@@ -180,7 +180,8 @@ pub enum RecipeV2Error {
     EmptyExpected,
     #[error(
         "a recipe with image_edits must pin expected.application_sha256 (no hash of an edited \
-         image is published, so the output pin is what checks the edits)"
+         image is published, so the output pin is what checks the edits); in a draft, use any 64 \
+         hex digits and copy the value `precondition` prints"
     )]
     UnpinnedImageEdits,
     #[error(transparent)]

@@ -93,7 +93,6 @@ fn draft_output(fixture: &Fixture, recipe: &RecipeV2) -> OutputIdentities {
     )
     .expect("draft")
     .output
-    .expect("a recipe with image edits")
 }
 
 /// `recipe` with both output identities pinned, as its author completes it.
@@ -189,14 +188,21 @@ fn the_output_pin_catches_a_moved_image() {
     );
 }
 
-/// Without a published hash there is nothing to invert, so a flat image (zero padding) is edited
-/// like any other.
+/// Without a published hash there is nothing to invert, so a mostly flat image is edited like any
+/// other: four rows of zero padding over one row of the pattern, whose first pixel gives the glyph
+/// colour.
 #[test]
 fn edits_a_flat_image() {
     let fixture = Fixture::new();
-    let mut flat = edit(PADDING.start);
+    let stock = stock_application();
+    let base = PADDING.start;
+    let at = |bytes: &[u8], x: usize, y: usize| {
+        let i = base + (y * 8 + x) * 2;
+        u16::from_le_bytes([bytes[i], bytes[i + 1]])
+    };
+    let mut flat = edit(base);
     flat.width = 8;
-    flat.height = 4;
+    flat.height = 5;
     flat.erase = Some(PixelBox {
         x: 1,
         y: 1,
@@ -210,13 +216,26 @@ fn edits_a_flat_image() {
         height: 1,
     };
     flat.glyph.alpha_hex = "ff".to_owned();
-    flat.glyph.colour_from = Pixel { x: 0, y: 0 };
+    flat.glyph.colour_from = Pixel { x: 0, y: 4 };
     let recipe = pinned(&fixture, with_edits(&fixture, vec![flat]));
 
     let output = fixture.apply(&recipe).expect("apply");
 
-    // Zero painted over zero: the padding stays as it was.
-    assert_eq!(output[PADDING], stock_application()[PADDING]);
+    let colour = at(&stock, 0, 4);
+    assert_ne!(colour, 0);
+    for x in [1, 2] {
+        assert_eq!(at(&stock, x, 1), 0);
+        assert_eq!(at(&output, x, 1), colour, "glyph pixel ({x}, 1)");
+    }
+    // The erase interpolates between zeros, so only the glyph's 4 bytes and the version string
+    // change.
+    let glyph = base + 18..base + 22;
+    let version = VERSION_STRING_OFFSET..VERSION_STRING_OFFSET + 4;
+    for (i, (a, b)) in stock.iter().zip(&output).enumerate() {
+        if !glyph.contains(&i) && !version.contains(&i) {
+            assert_eq!(a, b, "byte {i:#x}");
+        }
+    }
 }
 
 #[test]
@@ -286,7 +305,7 @@ fn draft_output_identities_complete_the_recipe() {
     )
     .expect("hashes");
 
-    let output = hashes.output.expect("a recipe with image edits");
+    let output = hashes.output;
     recipe.replacements[0].precondition.sha256 = hashes.replacements[0].clone();
     recipe.expected = Some(ExpectedV2 {
         application_sha256: Some(output.application_sha256.clone()),

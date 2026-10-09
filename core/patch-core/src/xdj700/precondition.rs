@@ -12,13 +12,13 @@
 //! over strings or tables, and review is the backstop. They hold for one recipe; the windows of
 //! all committed recipes are checked to be disjoint by the `committed_recipes` test.
 //!
-//! [`precondition_hashes`] helps an author complete a draft recipe: it hashes each window only
-//! after these checks, so it never shows the hash of a window the engine would refuse. For a
-//! recipe with image edits, which must pin its output, it also computes the output identities.
+//! [`precondition_hashes`] helps an author complete a draft recipe: it rebuilds the draft, hashing
+//! each window only after these checks, so it never shows the hash of a window the engine would
+//! refuse, and it computes the output identities that `expected` pins.
 
+use super::output::OutputIdentities;
 use super::recipe::{RecipeError, RecipeTarget, check_recipe_v2, rebuild_recipe};
 use super::recipe_checks::{RecipeChecks, bounded, out_of_bounds};
-use super::stock::StockMain;
 use crate::identity::sha256_hex;
 use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2, Replacement, WindowOwner};
 use std::ops::Range;
@@ -28,10 +28,11 @@ use std::ops::Range;
 const TOP_VALUES: usize = 4;
 
 /// The SHA-256 of every precondition window of `recipe`, computed on `input`, the official update
-/// of `target`, for an author completing a draft, and, when the recipe edits images, the identities
-/// of its output. The recipe first passes [`check_recipe_v2`] and the checks in `checks`, and each
-/// window its bounds and leak checks, before its hash is computed. The hashes the recipe declares
-/// are not compared (a draft holds placeholders); applying the recipe compares them.
+/// of `target`, for an author completing a draft, and the identities of its output. The recipe
+/// first passes [`check_recipe_v2`] and the checks in `checks`; it is then rebuilt, each window
+/// passing its bounds and leak checks before its hash is computed. Nothing is returned unless the
+/// whole rebuild succeeds. The hashes and identities the recipe declares are not compared (a draft
+/// holds placeholders); applying the recipe compares them.
 ///
 /// A hash covers whatever is at the declared offset, so it cannot show that the offset is the
 /// intended one: check offsets against your own analysis first. It then catches later changes.
@@ -39,9 +40,11 @@ const TOP_VALUES: usize = 4;
 ///
 /// # Errors
 ///
-/// As [`check_recipe_v2`] and the checks in `checks`; [`RecipeError::Rebuild`] for an input that is
-/// not the release's official update; [`RecipeError::OutOfBounds`] or a leak check's error for a
-/// window; [`RecipeError::ImageOutOfBounds`] for an image.
+/// As [`check_recipe_v2`] and the checks in `checks`; [`RecipeError::OutOfBounds`] or a leak
+/// check's error for a window; [`RecipeError::ImageOutOfBounds`] for an image;
+/// [`RecipeError::Rebuild`] for an input that is not the release's official update, or for an
+/// edited application the rebuild refuses (a change outside the declared spans and image rows, an
+/// application that no longer fits, or a failed verification, including the version rule).
 pub fn precondition_hashes(
     recipe: &RecipeV2,
     target: &RecipeTarget<'_>,
@@ -50,47 +53,19 @@ pub fn precondition_hashes(
 ) -> Result<PreconditionHashes, RecipeError> {
     check_recipe_v2(recipe, target)?;
     checks.run(recipe, target)?;
-    let stock = StockMain::load(input, &target.release)?.application()?;
-    let stock = stock.decoded();
-    let replacements = recipe
-        .replacements
-        .iter()
-        .enumerate()
-        .map(|(index, replacement)| {
-            let range = checked_window(index, replacement, stock, DeclaredHash::Ignore)?;
-            Ok(sha256_hex(&stock[range]))
-        })
-        .collect::<Result<_, RecipeError>>()?;
-    let output = if recipe.image_edits.is_empty() {
-        None
-    } else {
-        let rebuilt = rebuild_recipe(recipe, target, input, DeclaredHash::Ignore)?;
-        Some(OutputIdentities {
-            application_sha256: rebuilt.application_sha256().to_owned(),
-            upd_sha256: rebuilt.sha256().to_owned(),
-        })
-    };
+    let (rebuilt, replacements) = rebuild_recipe(recipe, target, input, DeclaredHash::Ignore)?;
     Ok(PreconditionHashes {
         replacements,
-        output,
+        output: OutputIdentities::of(&rebuilt),
     })
 }
 
 /// What [`precondition_hashes`] computes: one hash per replacement window, in recipe order, and
-/// the output identities of a recipe with image edits.
+/// the output identities.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreconditionHashes {
     pub replacements: Vec<String>,
-    pub output: Option<OutputIdentities>,
-}
-
-/// The identities of a recipe's output, as `expected` declares them.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OutputIdentities {
-    /// SHA-256 of the decoded output application.
-    pub application_sha256: String,
-    /// SHA-256 of the complete output `.UPD`.
-    pub upd_sha256: String,
+    pub output: OutputIdentities,
 }
 
 /// Whether [`checked_window`] compares the window with the hash the recipe declares.
