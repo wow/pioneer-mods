@@ -32,8 +32,8 @@ pub struct PreconditionArgs {
 
     /// A protected set: run-time address ranges of the code that runs at start-up or in the update
     /// path, measured in emulation and kept outside the repository (format in docs/recipes.md).
-    /// A recipe whose span or precondition window overlaps it is refused before any hash is
-    /// computed. Without it, `XDJ700_PROTECTED_SET` names the file.
+    /// A recipe whose span, precondition window or edited image overlaps it is refused before any
+    /// hash is computed. Without it, `XDJ700_PROTECTED_SET` names the file.
     #[arg(long, conflicts_with = "no_protected_set")]
     pub protected_set: Option<PathBuf>,
 

@@ -17,7 +17,8 @@ use thiserror::Error;
      overlap; windows of recipes for the same release must be disjoint"
 )]
 pub struct WindowOverlap {
-    /// `recipe_id replacements[index]` of the window that starts first.
+    /// `recipe_id replacements[index]` or `recipe_id image_edits[index]` of the window that starts
+    /// first.
     pub first: String,
     pub first_window: Range<u64>,
     pub second: String,
@@ -36,18 +37,10 @@ pub fn check_windows_across<'a>(
 ) -> Result<(), WindowOverlap> {
     let mut windows: Vec<(&str, Range<u64>, String)> = Vec::new();
     for recipe in recipes {
-        for (index, replacement) in recipe.replacements.iter().enumerate() {
-            if let Some(window) = replacement.precondition_window() {
-                let name = format!("{} replacements[{index}]", recipe.recipe_id);
-                windows.push((&recipe.target.release, window, name));
-            }
-        }
         // An image edit's precondition window is its whole image.
-        for (index, edit) in recipe.image_edits.iter().enumerate() {
-            if let Some(window) = edit.window() {
-                let name = format!("{} image_edits[{index}]", recipe.recipe_id);
-                windows.push((&recipe.target.release, window, name));
-            }
+        for labelled in recipe.windows() {
+            let name = format!("{} {}", recipe.recipe_id, labelled.owner);
+            windows.push((&recipe.target.release, labelled.window, name));
         }
     }
     windows.sort_by(|a, b| (a.0, a.1.start, a.1.end).cmp(&(b.0, b.1.start, b.1.end)));

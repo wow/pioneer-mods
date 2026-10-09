@@ -146,9 +146,13 @@ fn refuses_a_stock_image_that_does_not_match_its_hash() {
             expected: "00".repeat(32)
         })
     );
-    // The actual hash is not reported.
+    // The actual hash is not reported: it is the whole image's, which the edit's own `sha256`
+    // holds, so build the message's absence from the same range.
+    let image = IMAGE..IMAGE + (WIDTH * HEIGHT * 2) as usize;
+    let actual = sha256_hex(&stock_application()[image]);
+    assert_eq!(actual, edit(IMAGE).sha256);
     let message = result.unwrap_err().to_string();
-    assert!(!message.contains(&sha256_hex(&stock_application()[IMAGE..IMAGE + 256])));
+    assert!(!message.contains(&actual));
 }
 
 #[test]

@@ -17,10 +17,10 @@
 
 use super::image_edit::checked_image;
 use super::recipe::{RecipeError, RecipeTarget, check_recipe_v2};
-use super::recipe_checks::RecipeChecks;
+use super::recipe_checks::{RecipeChecks, bounded, out_of_bounds};
 use super::stock::StockMain;
 use crate::identity::sha256_hex;
-use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2, Replacement};
+use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2, Replacement, WindowOwner};
 use std::ops::Range;
 
 /// How many of the most common byte values may together fill at most half of the bytes around a
@@ -38,8 +38,9 @@ const TOP_VALUES: usize = 4;
 ///
 /// # Errors
 ///
-/// As [`check_recipe_v2`]; [`RecipeError::Rebuild`] for an input that is not the release's
-/// official update; [`RecipeError::OutOfBounds`] or a leak check's error for a window.
+/// As [`check_recipe_v2`] and the checks in `checks`; [`RecipeError::Rebuild`] for an input that is
+/// not the release's official update; [`RecipeError::OutOfBounds`] or a leak check's error for a
+/// window; [`RecipeError::ImageOutOfBounds`] or [`RecipeError::PredictableImage`] for an image.
 pub fn precondition_hashes(
     recipe: &RecipeV2,
     target: &RecipeTarget<'_>,
@@ -123,21 +124,11 @@ pub(super) fn window(
     replacement: &Replacement,
     application_len: usize,
 ) -> Result<Range<usize>, RecipeError> {
-    // `validate` has checked that the window neither starts before 0 nor overflows.
-    let Range { start, end } = replacement
-        .precondition_window()
-        .unwrap_or(u64::MAX..u64::MAX);
-    let out_of_bounds = || RecipeError::OutOfBounds {
-        index,
-        end,
-        len: application_len,
-    };
-    let start = usize::try_from(start).map_err(|_| out_of_bounds())?;
-    let end_usize = usize::try_from(end).map_err(|_| out_of_bounds())?;
-    if end_usize > application_len {
-        return Err(out_of_bounds());
-    }
-    Ok(start..end_usize)
+    bounded(
+        replacement.precondition_window(),
+        application_len,
+        out_of_bounds(WindowOwner::Replacement(index), application_len),
+    )
 }
 
 /// On the stock application: the span's first and last bytes change, at most half of its bytes

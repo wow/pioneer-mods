@@ -130,14 +130,15 @@ impl PixelBox {
             && u64::from(self.y) + u64::from(self.height) <= u64::from(height)
     }
 
-    /// The columns of the box.
+    /// The columns of the box (saturating at `u32::MAX` for a box past the 32-bit range, which
+    /// validation refuses).
     pub fn columns(&self) -> Range<u32> {
-        self.x..self.x + self.width
+        self.x..self.x.saturating_add(self.width)
     }
 
-    /// The rows of the box.
+    /// The rows of the box (saturating like [`PixelBox::columns`]).
     pub fn rows(&self) -> Range<u32> {
-        self.y..self.y + self.height
+        self.y..self.y.saturating_add(self.height)
     }
 }
 
@@ -175,13 +176,13 @@ impl ImageEdit {
     pub fn changed_rows(&self) -> Vec<(u32, Range<u32>)> {
         let boxes: Vec<PixelBox> = self.erase.iter().copied().chain([self.glyph.at]).collect();
         let (first, last) = boxes.iter().fold((u32::MAX, 0), |(first, last), b| {
-            (first.min(b.y), last.max(b.y + b.height))
+            (first.min(b.y), last.max(b.rows().end))
         });
         (first..last)
             .filter_map(|row| {
                 let covering = boxes.iter().filter(|b| b.rows().contains(&row));
                 let (start, end) = covering.fold((u32::MAX, 0), |(start, end), b| {
-                    (start.min(b.x), end.max(b.x + b.width))
+                    (start.min(b.x), end.max(b.columns().end))
                 });
                 (start < end).then_some((row, start..end))
             })
@@ -189,13 +190,17 @@ impl ImageEdit {
     }
 
     /// The erased row: `width` pixels interpolated linearly between `left` and `right`, the stock
-    /// pixels just outside the box, excluding both.
+    /// pixels just outside the box, excluding both. `width` is an erase box's width: the result
+    /// holds that many pixels (64-bit arithmetic, so any width is computed without overflow).
     pub fn erase_row(left: u16, right: u16, width: u32) -> Vec<u16> {
         // The stock pixels sit at positions 0 and width + 1, the box's at 1..=width.
+        let width = u64::from(width);
         let span = width + 1;
         (0..width)
             .map(|i| {
-                let mix = |l: u32, r: u32| (l * (width - i) + r * (i + 1) + span / 2) / span;
+                let mix = |l: u32, r: u32| {
+                    ((u64::from(l) * (width - i) + u64::from(r) * (i + 1) + span / 2) / span) as u32
+                };
                 pack(channels(left).zip(channels(right), mix))
             })
             .collect()
@@ -242,11 +247,12 @@ impl ImageEdit {
             return Err(outside("glyph.colour_from", ""));
         }
         let expected = u64::from(self.glyph.at.width) * u64::from(self.glyph.at.height);
-        if self.glyph.alpha_hex.len() as u64 != expected {
+        let found = self.glyph.alpha_hex.chars().count();
+        if found as u64 != expected {
             return Err(ImageEditError::AlphaLength {
                 index,
                 expected,
-                found: self.glyph.alpha_hex.len(),
+                found,
             });
         }
         let alpha = self.alpha().ok_or(ImageEditError::AlphaNotHex { index })?;
@@ -307,11 +313,16 @@ impl Predictability {
 
 /// Both measures of an RGB565 image (`pixels`, rows `width` apart).
 pub fn predictability(pixels: &[u16], width: usize) -> Predictability {
-    let mut values = pixels.to_vec();
-    values.sort_unstable();
-    values.dedup();
+    // One bit per possible pixel value: 8 KiB, no copy of the image and no sort.
+    let mut seen = vec![0u64; 1 << 10];
+    let mut distinct = 0;
+    for &pixel in pixels {
+        let (word, bit) = (usize::from(pixel >> 6), 1u64 << (pixel & 63));
+        distinct += usize::from(seen[word] & bit == 0);
+        seen[word] |= bit;
+    }
     Predictability {
-        distinct: values.len(),
+        distinct,
         unpredicted: unpredicted_pixels(pixels, width),
     }
 }

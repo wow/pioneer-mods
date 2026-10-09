@@ -2,8 +2,7 @@
 //! may change, and the static checks.
 
 use patch_schema::{
-    ImageEdit, ImageEditError, MIN_IMAGE_DISTINCT_PIXELS, MIN_IMAGE_UNPREDICTED_PIXELS, RecipeV2,
-    RecipeV2Error, blend, check_windows_across, predictability, unpredicted_pixels,
+    ImageEdit, ImageEditError, RecipeV2, RecipeV2Error, blend, check_windows_across,
 };
 use serde_json::{Value, json};
 
@@ -310,74 +309,33 @@ fn image_windows_count_across_recipes() {
 }
 
 #[test]
-fn fills_and_gradients_are_predicted_and_detail_is_not() {
-    let rgb = |r: u16, g: u16, b: u16| (r << 11) | (g << 5) | b;
-    let (w, h) = (20u16, 10u16);
-    let image = |f: &dyn Fn(u16, u16) -> u16| -> Vec<u16> {
-        (0..h)
-            .flat_map(|y| (0..w).map(move |x| (x, y)))
-            .map(|(x, y)| f(x, y))
-            .collect()
+fn counts_mask_characters_not_bytes() {
+    // Three characters, five bytes: refused for its length, reported in characters.
+    let euro = with_image(|image| image["glyph"]["alpha_hex"] = json!("ff€"));
+
+    assert_eq!(
+        image_error(&euro),
+        Some(ImageEditError::AlphaLength {
+            index: 0,
+            expected: 6,
+            found: 3
+        })
+    );
+}
+
+#[test]
+fn box_ranges_saturate_instead_of_overflowing() {
+    let far = patch_schema::PixelBox {
+        x: u32::MAX - 1,
+        y: u32::MAX,
+        width: 5,
+        height: 5,
     };
 
-    assert_eq!(unpredicted_pixels(&image(&|_, _| rgb(31, 40, 0)), 20), 0);
-    assert_eq!(
-        unpredicted_pixels(&image(&|x, _| rgb(x, 2 * x, 31 - x)), 20),
-        0
-    );
-    assert_eq!(unpredicted_pixels(&image(&|_, y| rgb(3 * y, y, 0)), 20), 0);
-    assert_eq!(
-        unpredicted_pixels(&image(&|x, y| rgb(x + y, x + y, 0)), 20),
-        0
-    );
-    // A checkerboard of black and white: every counted pixel is missed.
-    let checker = image(&|x, y| if (x + y) % 2 == 0 { 0 } else { 0xffff });
-    assert_eq!(unpredicted_pixels(&checker, 20), 19 * 9);
-    // One white dot on black is missed where it is, to its right and below it.
-    let mut dot = image(&|_, _| 0);
-    dot[5 * 20 + 7] = 0xffff;
-    assert_eq!(unpredicted_pixels(&dot, 20), 3);
-    assert_eq!(unpredicted_pixels(&[], 0), 0);
-}
-
-/// A 30x30 black image with `interior` isolated dots (each missed three times: itself, to its right
-/// and below it) and, if `corner`, one in the bottom-right corner (missed once), coloured from a
-/// palette of `colours` values.
-fn dots(interior: usize, corner: bool, colours: u16) -> Vec<u16> {
-    let width = 30;
-    let mut image = vec![0u16; width * width];
-    let colour = |i: usize| 0x8000 | ((i as u16 % colours) * 0x0841);
-    let positions = (0..3).flat_map(|row| (0..7).map(move |col| (2 + 3 * col, 2 + 3 * row)));
-    for (i, (x, y)) in positions.take(interior).enumerate() {
-        image[y * width + x] = colour(i);
-    }
-    if corner {
-        image[width * width - 1] = colour(interior);
-    }
-    image
-}
-
-#[test]
-fn the_unpredicted_threshold_is_inclusive() {
-    let at = predictability(&dots(21, true, 64), 30);
-    let below = predictability(&dots(21, false, 64), 30);
-
-    assert_eq!(at.unpredicted, MIN_IMAGE_UNPREDICTED_PIXELS);
-    assert!(at.distinct >= MIN_IMAGE_DISTINCT_PIXELS);
-    assert!(at.passes());
-    assert_eq!(below.unpredicted, MIN_IMAGE_UNPREDICTED_PIXELS - 1);
-    assert!(!below.passes());
-}
-
-#[test]
-fn the_distinct_threshold_is_inclusive() {
-    // Black plus 15 dot colours, then black plus 14.
-    let at = predictability(&dots(21, true, 15), 30);
-    let below = predictability(&dots(21, true, 14), 30);
-
-    assert_eq!(at.distinct, MIN_IMAGE_DISTINCT_PIXELS);
-    assert_eq!(at.unpredicted, MIN_IMAGE_UNPREDICTED_PIXELS);
-    assert!(at.passes());
-    assert_eq!(below.distinct, MIN_IMAGE_DISTINCT_PIXELS - 1);
-    assert!(!below.passes());
+    assert_eq!(far.columns(), u32::MAX - 1..u32::MAX);
+    assert_eq!(far.rows(), u32::MAX..u32::MAX);
+    // erase_row's arithmetic is 64-bit: the widest rows a validated edit can have stay exact.
+    let row = ImageEdit::erase_row(0x0000, 0xffff, 1024);
+    assert_eq!(row.len(), 1024);
+    assert_eq!(row[1023] >> 11, (31 * 1024 + 512) / 1025);
 }

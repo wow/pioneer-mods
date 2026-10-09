@@ -31,8 +31,8 @@ pub struct PatchArgs {
 
     /// A protected set: run-time address ranges of the code that runs at start-up or in the update
     /// path, measured in emulation and kept outside the repository (format in docs/recipes.md).
-    /// A schema-v2 recipe whose span or precondition window overlaps it is refused before the
-    /// input is read. Without it, `XDJ700_PROTECTED_SET` names the file.
+    /// A schema-v2 recipe whose span, precondition window or edited image overlaps it is refused
+    /// before the input is read. Without it, `XDJ700_PROTECTED_SET` names the file.
     #[arg(long, conflicts_with = "no_protected_set")]
     pub protected_set: Option<PathBuf>,
 

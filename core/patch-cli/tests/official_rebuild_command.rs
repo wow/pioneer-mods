@@ -277,7 +277,7 @@ fn patch_with_the_beat_loop_recipe_writes_the_stage5_file() {
 
     assert_wrote(&result, &with_set, STAGE5_UPD_LEN, STAGE5_UPD_SHA256);
     assert!(
-        text(&result.stdout).contains("protected_set: 1 range; no span or precondition window"),
+        text(&result.stdout).contains("protected_set: 1 range; no span, precondition window or"),
         "{}",
         text(&result.stdout)
     );

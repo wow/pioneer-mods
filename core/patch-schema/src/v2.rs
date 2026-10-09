@@ -20,6 +20,7 @@
 //! preconditions) are enforced by the engine in `patch-core`.
 
 use crate::image::{ImageEdit, ImageEditError};
+use crate::windows::WindowOwner;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -262,11 +263,10 @@ impl RecipeV2 {
         }
         Ok(())
     }
-}
 
-impl RecipeV2 {
-    /// Each image edit's own checks, then their order and their distance from the replacements'
-    /// precondition windows: an image's hash is a window over the whole image.
+    /// Each image edit's own checks and their order, then their distance from the replacements'
+    /// windows. Within each kind the windows are disjoint, so in the list of all windows sorted
+    /// by start, an image that overlaps a replacement's window overlaps its neighbour.
     fn validate_image_edits(&self) -> Result<(), RecipeV2Error> {
         let mut previous_end: Option<(usize, u64)> = None;
         for (index, edit) in self.image_edits.iter().enumerate() {
@@ -279,12 +279,18 @@ impl RecipeV2 {
                 return Err(ImageEditError::UnorderedOrOverlapping { index, previous }.into());
             }
             previous_end = Some((index, window.end));
-            let overlapping = self.replacements.iter().position(|replacement| {
-                replacement
-                    .precondition_window()
-                    .is_some_and(|other| other.start < window.end && window.start < other.end)
-            });
-            if let Some(replacement) = overlapping {
+        }
+        let mut windows = self.windows();
+        windows.sort_by_key(|labelled| (labelled.window.start, labelled.window.end));
+        for pair in windows.windows(2) {
+            let (first, next) = (&pair[0], &pair[1]);
+            if next.window.start >= first.window.end {
+                continue;
+            }
+            if let (WindowOwner::ImageEdit(index), WindowOwner::Replacement(replacement))
+            | (WindowOwner::Replacement(replacement), WindowOwner::ImageEdit(index)) =
+                (first.owner, next.owner)
+            {
                 return Err(ImageEditError::OverlapsReplacement { index, replacement }.into());
             }
         }

@@ -10,9 +10,10 @@
 //! coordinates and the author's own glyph mask.
 
 use super::precondition::DeclaredHash;
+use super::recipe_checks::{bounded, out_of_bounds};
 use super::recipe_error::RecipeError;
 use crate::identity::sha256_hex;
-use patch_schema::{ImageEdit, blend, predictability};
+use patch_schema::{ImageEdit, WindowOwner, blend, predictability};
 use std::ops::Range;
 
 /// The edit's image, if it lies inside an application of `application_len`.
@@ -21,19 +22,11 @@ pub(super) fn image_range(
     edit: &ImageEdit,
     application_len: usize,
 ) -> Result<Range<usize>, RecipeError> {
-    // `validate` has checked that the window fits the 64-bit range.
-    let Range { start, end } = edit.window().unwrap_or(u64::MAX..u64::MAX);
-    let out_of_bounds = || RecipeError::ImageOutOfBounds {
-        index,
-        end,
-        len: application_len,
-    };
-    let start = usize::try_from(start).map_err(|_| out_of_bounds())?;
-    let end_usize = usize::try_from(end).map_err(|_| out_of_bounds())?;
-    if end_usize > application_len {
-        return Err(out_of_bounds());
-    }
-    Ok(start..end_usize)
+    bounded(
+        edit.window(),
+        application_len,
+        out_of_bounds(WindowOwner::ImageEdit(index), application_len),
+    )
 }
 
 /// The edit's image on the stock application, after every per-image rule: inside the application,

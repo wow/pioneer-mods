@@ -259,7 +259,7 @@ section 5), is a list of address ranges kept outside this repository. With it, `
 `precondition` refuse a schema-v2 recipe, before the firmware is read, if:
 - the set was measured on another release;
 - the set covers the version string, which every rebuild writes (the set must then be checked);
-- a replacement's span or precondition window overlaps it.
+- a replacement's span or precondition window, or an edited image, overlaps it.
 
 Skipping the check is a decision, never an omission. Each command takes the set from
 `--protected-set <file>`, else from the `XDJ700_PROTECTED_SET` environment variable, and
