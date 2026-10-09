@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
-use patch_cli::recipe::{CheckedRecipe, read_recipe_versioned};
+use patch_cli::recipe::{CheckedRecipe, print_protected_set, read_recipe_versioned};
 use patch_core::xdj700::apply_recipe_v2_to;
 use patch_core::{apply_recipe, firmware_file_name, read_regular_file};
 use patch_schema::{RecipeManifest, SCHEMA_VERSION_V2};
@@ -26,12 +26,25 @@ pub struct PatchArgs {
     /// overwritten).
     #[arg(long, default_value_t = false)]
     pub force: bool,
+
+    /// A protected set: run-time address ranges of the code that runs at start-up or in the update
+    /// path, measured in emulation and kept outside the repository (format in docs/recipes.md).
+    /// A schema-v2 recipe whose span or precondition window overlaps it is refused before the
+    /// input is read.
+    #[arg(long)]
+    pub protected_set: Option<PathBuf>,
 }
 
 pub fn patch(args: PatchArgs) -> Result<()> {
     let (raw, schema_version) = read_recipe_versioned(&args.recipe)?;
     if schema_version == SCHEMA_VERSION_V2 {
         patch_v2(&args, &raw)
+    } else if args.protected_set.is_some() {
+        bail!(
+            "--protected-set applies only to schema-v2 recipes; '{}' is schema_version \
+             {schema_version}",
+            args.recipe.display()
+        )
     } else {
         patch_v1(&args, &raw)
     }
@@ -47,6 +60,10 @@ fn patch_v2(args: &PatchArgs, raw: &[u8]) -> Result<()> {
     );
     // Every check that needs no firmware (it validates the recipe first), before the input is read.
     let checked = CheckedRecipe::load(&args.recipe, raw, refusing)?;
+    let protected_set = match &args.protected_set {
+        Some(path) => Some(checked.check_against_protected_set(path)?),
+        None => None,
+    };
     let (recipe, target) = (checked.recipe(), checked.target());
     if args.force {
         bail!(
@@ -77,6 +94,7 @@ fn patch_v2(args: &PatchArgs, raw: &[u8]) -> Result<()> {
     println!("output_file: {}", args.output.display());
     println!("output_len: {}", rebuilt.bytes().len());
     println!("output_sha256_hex: {}", rebuilt.sha256());
+    print_protected_set(protected_set.as_ref());
     println!(
         "verified: preconditions, protected ranges and bounded diff checked; rebuild re-parsed \
          and checked against the input; file read back through the file system before it was \

@@ -60,6 +60,7 @@ impl Fixture {
                 ..release(self.update.len(), &self.upd_sha256)
             },
             application_len: 0x1000,
+            load_address: 0x0800_0000,
             protected: PROTECTED,
         }
     }

@@ -149,6 +149,8 @@ Before the input is read (`check_recipe_v2`):
 5. No replacement or precondition window overlaps a protected range. For v1.15 that is
    `[0, 0x800)`: the application header and its version block. The version changes only through
    `reported_version`.
+6. With `--protected-set` (on `patch` and `precondition`): no replacement or precondition window
+   overlaps the [protected set](#the-protected-set).
 
 Then, on the official file:
 1. The input is pinned by length (checked before reading) and by SHA-256.
@@ -175,11 +177,44 @@ into place.
   authoritative statement: windows outside the protected set measured in emulation, replaced
   bytes not read during start-up or an update, and an emulator rehearsal before a file is
   offered. Its addresses are run-time addresses, `0x08000000` plus a recipe's `offset`. The
-  engine enforces only the header (`[0, 0x800)`); the maintainer checks the rest by hand until
-  a `patch-cli` check lands.
+  engine always enforces the header (`[0, 0x800)`), and the protected set when it is given
+  ([below](#the-protected-set)); the data rule and the rehearsal remain the maintainer's.
 - **Same length only.** Growing the application (for example appending code) is not supported
   until the memory after the application is understood.
 - **Test on hardware in stages**, as the flashing guide describes, and record the result.
+
+## The protected set
+
+The code that runs at start-up and in the update path, measured in emulation (flashing guide,
+section 5), is a list of address ranges kept outside this repository. Given it, `patch` and
+`precondition` refuse a recipe whose span or precondition window overlaps it, before the
+firmware is read, and print how many ranges they checked; without it they print
+`protected_set: not given`. The set covers code only: whether a recipe's replaced bytes are read
+during start-up or an update is still shown in emulation, not by the tool.
+
+```bash
+cargo run --release -p patch-cli -- precondition \
+  --input /path/to/XDJ700.UPD \
+  --recipe /path/to/draft.json \
+  --committed-recipes recipes \
+  --protected-set /path/to/protected-set.tsv
+```
+
+The file is UTF-8 text, one range per line, `start end [bytes]`:
+- `start` and `end` are hexadecimal **run-time** addresses (`0x08000000` plus a decoded offset;
+  the `0x` prefix is optional), and `end` is the last address of the range, **inclusive**;
+- the optional `bytes` column must equal `end - start + 1`, which catches exclusive ends;
+- blank lines and lines starting with `#` are ignored, and the first other line may be a header
+  starting with `start`;
+- every range must lie inside the application; ranges may overlap and need not be sorted. A
+  file without ranges, or larger than 8 MiB, is refused.
+
+The maintainer checks the committed recipes against it with an ignored test:
+
+```bash
+XDJ700_PROTECTED_SET=/path/to/protected-set.tsv \
+  cargo test -p patch-core --test committed_recipes -- --ignored
+```
 
 ## The committed recipes
 

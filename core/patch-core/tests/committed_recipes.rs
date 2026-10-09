@@ -6,7 +6,9 @@
 #[path = "common/recipe_files.rs"]
 mod recipe_files;
 
-use patch_core::xdj700::{check_recipe_v2, recipe_target};
+use patch_core::xdj700::{
+    ProtectedSet, check_recipe_against_protected_set, check_recipe_v2, recipe_target,
+};
 use patch_schema::check_windows_across;
 use recipe_files::committed_recipes;
 
@@ -42,4 +44,33 @@ fn committed_precondition_windows_are_disjoint_across_recipes() {
     let result = check_windows_across(recipes.iter().map(|(_, recipe)| recipe));
 
     assert_eq!(result, Ok(()));
+}
+
+/// The maintainer's check against the protected set measured in emulation, which is kept outside
+/// the repository (`docs/xdj700-flashing.md`, section 5):
+///
+/// ```text
+/// XDJ700_PROTECTED_SET=/path/to/set.tsv \
+///   cargo test -p patch-core --test committed_recipes -- --ignored
+/// ```
+#[test]
+#[ignore = "needs the protected set kept outside the repository; see the doc comment"]
+fn committed_recipes_avoid_the_protected_set() {
+    let path = std::env::var_os("XDJ700_PROTECTED_SET")
+        .expect("set XDJ700_PROTECTED_SET to the protected-set file");
+    let text = std::fs::read_to_string(&path).expect("read the protected set");
+    let target = recipe_target("xdj700-v1.15").expect("known release");
+    let set = ProtectedSet::parse(&text, target).expect("a valid protected set");
+
+    for (path, recipe) in committed_recipes() {
+        if recipe.target.release != target.id {
+            continue;
+        }
+        assert_eq!(
+            check_recipe_against_protected_set(&recipe, target, &set),
+            Ok(()),
+            "{}",
+            path.display()
+        );
+    }
 }

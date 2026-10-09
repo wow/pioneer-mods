@@ -36,6 +36,10 @@ pub struct RecipeTarget<'a> {
     /// Length of the stock decoded application (fixed by its pinned SHA-256), so that every
     /// window is bounds-checked before the input is read.
     pub application_len: usize,
+    /// The run-time address the decoded application is linked at: a decoded offset `o` runs at
+    /// `load_address + o`. A protected set ([`ProtectedSet`](super::ProtectedSet)) uses run-time
+    /// addresses.
+    pub load_address: u64,
     /// Ranges of the decoded application that replacements and their precondition windows may
     /// not overlap (they hold known strings, which would make a window's hash invertible).
     pub protected: &'a [Range<usize>],
@@ -46,12 +50,17 @@ pub struct RecipeTarget<'a> {
 /// v1.15 protects `[0, 0x800)`: the application header and its version block (the version changes
 /// only through `reported_version`). The entry point is at `0x800`, but code below it also runs at
 /// start-up (the set measured in emulation starts at `0x600`), so this range must not be narrowed
-/// to the version block. Keeping recipes out of the code and data that start-up and the update
-/// path use is not enforced by this list: the rules are in `docs/xdj700-flashing.md`, section 5.
+/// to the version block. Keeping recipes out of the code that start-up and the update path run is
+/// checked against a protected set kept outside the repository, when one is given
+/// ([`check_recipe_against_protected_set`](super::check_recipe_against_protected_set)); keeping
+/// them out of the data that code reads is not checked by the tool. The rules are in
+/// `docs/xdj700-flashing.md`, section 5. The application is linked at `0x0800_0000` (its entry
+/// point runs at `0x0800_0800`).
 pub const RECIPE_TARGETS: &[RecipeTarget<'static>] = &[RecipeTarget {
     id: "xdj700-v1.15",
     release: OFFICIAL_V115,
     application_len: 18_601_864,
+    load_address: 0x0800_0000,
     protected: &[Range {
         start: 0,
         end: 0x800,
@@ -114,6 +123,21 @@ pub enum RecipeError {
         end: u64,
         protected_start: usize,
         protected_end: usize,
+    },
+
+    /// Run-time addresses, inclusive, as in the set's file.
+    #[error(
+        "replacements[{index}] {what} at run-time {start:#x}..={last:#x} overlaps the protected \
+         set's range {set_start:#x}..={set_last:#x}: code that runs at start-up or in the update \
+         path (docs/xdj700-flashing.md, section 5)"
+    )]
+    ProtectedSet {
+        index: usize,
+        what: &'static str,
+        start: u64,
+        last: u64,
+        set_start: u64,
+        set_last: u64,
     },
 
     #[error(
@@ -251,6 +275,36 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
         });
     }
     block.validate_reported_version(&recipe.reported_version)?;
+    check_ranges(recipe, target, target.protected, |found| {
+        RecipeError::Protected {
+            index: found.index,
+            what: found.what,
+            start: found.start,
+            end: found.end,
+            protected_start: found.protected.start,
+            protected_end: found.protected.end,
+        }
+    })
+}
+
+/// A replacement's span or precondition window that overlaps a protected range (half-open
+/// decoded offsets).
+pub(super) struct Overlap<'r> {
+    pub index: usize,
+    pub what: &'static str,
+    pub start: u64,
+    pub end: u64,
+    pub protected: &'r Range<usize>,
+}
+
+/// Checks every replacement's span and precondition window against `protected`, returning
+/// `refuse` of the first overlap. Windows are bounds-checked first.
+pub(super) fn check_ranges(
+    recipe: &RecipeV2,
+    target: &RecipeTarget<'_>,
+    protected: &[Range<usize>],
+    refuse: impl Fn(Overlap<'_>) -> RecipeError,
+) -> Result<(), RecipeError> {
     for (index, replacement) in recipe.replacements.iter().enumerate() {
         let window = window(index, replacement, target.application_len)?;
         // `validate` has checked that this cannot overflow.
@@ -260,15 +314,14 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
             let overlap = |protected: &&Range<usize>| {
                 range.start < protected.end as u64 && (protected.start as u64) < range.end
             };
-            if let Some(protected) = target.protected.iter().find(overlap) {
-                return Err(RecipeError::Protected {
+            if let Some(protected) = protected.iter().find(overlap) {
+                return Err(refuse(Overlap {
                     index,
                     what,
                     start: range.start,
                     end: range.end,
-                    protected_start: protected.start,
-                    protected_end: protected.end,
-                });
+                    protected,
+                }));
             }
         }
     }

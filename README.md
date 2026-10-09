@@ -40,9 +40,11 @@ This repository currently includes:
   hash preconditions over at least 32 stock bytes around each span (recipes hold hashes, and
   stock bytes only in short unchanged gaps inside a span), a protected header and version block,
   and a bounded diff, written as a complete, verified update by `patch`.
-  "Verified" means checked against the input and the recipe, not safe to flash: the start-up
-  code is not mapped, so staying out of it is enforced by review and staged hardware tests, not
-  by the tool. See [docs/recipes.md](./docs/recipes.md) and the flashing guide.
+  "Verified" means checked against the input and the recipe, not safe to flash. The start-up
+  and update-path code is mapped only in emulation, as a protected set kept outside this
+  repository: given it with `--protected-set`, `patch` and `precondition` refuse a recipe that
+  overlaps it, and emulator rehearsals and staged hardware tests do the rest. See
+  [docs/recipes.md](./docs/recipes.md) and the flashing guide.
 - `precondition` command: prints a draft recipe's precondition hashes, computed on the official
   file only after the recipe, committed-recipe and leak checks, so authors never compute a hash
   themselves and never see one for a window those rules refuse

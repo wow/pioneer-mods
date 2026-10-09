@@ -4,7 +4,8 @@
 use crate::input::read_pinned_input;
 use anyhow::{Context, Result, bail};
 use patch_core::xdj700::{
-    RecipeError, RecipeTarget, check_recipe_v2, recipe_target, unknown_release,
+    ProtectedSet, RecipeError, RecipeTarget, check_recipe_against_protected_set, check_recipe_v2,
+    recipe_target, unknown_release,
 };
 use patch_core::{RebuildError, open_regular_file, recipe_files};
 use patch_schema::{RecipeV2, SCHEMA_VERSION_V2, SchemaVersionProbe, check_windows_across};
@@ -39,6 +40,47 @@ pub fn read_recipe(path: &Path) -> Result<Vec<u8>> {
         );
     }
     Ok(raw)
+}
+
+/// Largest protected-set file read: the measured set is about 30 KB.
+pub const MAX_PROTECTED_SET_LEN: u64 = 8 * 1024 * 1024;
+
+/// Reads a protected-set file only if it is a regular file of at most [`MAX_PROTECTED_SET_LEN`]
+/// bytes of UTF-8 text.
+pub fn read_protected_set(path: &Path) -> Result<String> {
+    let read_failed = || format!("failed to read protected set '{}'", path.display());
+    let file = open_regular_file(path).with_context(read_failed)?;
+    let mut raw = Vec::new();
+    // One byte more than the cap, so a larger file is refused without reading all of it.
+    file.take(MAX_PROTECTED_SET_LEN + 1)
+        .read_to_end(&mut raw)
+        .with_context(read_failed)?;
+    if raw.len() as u64 > MAX_PROTECTED_SET_LEN {
+        bail!(
+            "refusing protected set '{}': larger than {MAX_PROTECTED_SET_LEN} bytes",
+            path.display()
+        );
+    }
+    String::from_utf8(raw).with_context(|| {
+        format!(
+            "refusing protected set '{}': not UTF-8 text",
+            path.display()
+        )
+    })
+}
+
+/// Prints the outcome of the protected-set check, or that none was given, so a run without the set
+/// does not read like a checked one.
+pub fn print_protected_set(set: Option<&ProtectedSet>) {
+    match set {
+        Some(set) => println!(
+            "protected_set: {} ranges; no span or precondition window overlaps them",
+            set.len()
+        ),
+        None => println!(
+            "protected_set: not given (--protected-set); start-up and update-path code not checked"
+        ),
+    }
 }
 
 /// [`read_recipe`], then its `schema_version`, refusing any version other than 1 and 2 with the
@@ -124,6 +166,23 @@ impl CheckedRecipe {
         }
         check_windows_across(std::iter::once(&self.recipe).chain(&committed))
             .map_err(|error| anyhow::Error::new(error).context(self.refusing.clone()))
+    }
+
+    /// Reads the protected set at `path` (measured in emulation, kept outside the repository) and
+    /// refuses the recipe if a replacement's span or precondition window overlaps it. Needs no
+    /// firmware. Returns the set, for reporting.
+    pub fn check_against_protected_set(&self, path: &Path) -> Result<ProtectedSet> {
+        let text = read_protected_set(path)?;
+        let set = ProtectedSet::parse(&text, self.target).with_context(|| {
+            format!(
+                "refusing protected set '{}' for release {}",
+                path.display(),
+                self.target.id
+            )
+        })?;
+        check_recipe_against_protected_set(&self.recipe, self.target, &set)
+            .map_err(|error| anyhow::Error::new(error).context(self.refusing.clone()))?;
+        Ok(set)
     }
 
     /// Reads the official update of the recipe's release from `input`, refusing a file of the

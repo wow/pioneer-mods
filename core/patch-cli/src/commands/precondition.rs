@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use patch_cli::recipe::{CheckedRecipe, read_recipe_versioned};
+use patch_cli::recipe::{CheckedRecipe, print_protected_set, read_recipe_versioned};
 use patch_core::firmware_file_name;
 use patch_core::xdj700::precondition_hashes;
 use patch_schema::SCHEMA_VERSION_V2;
@@ -27,6 +27,13 @@ pub struct PreconditionArgs {
     /// recipe.
     #[arg(long, default_value_t = false)]
     pub check: bool,
+
+    /// A protected set: run-time address ranges of the code that runs at start-up or in the update
+    /// path, measured in emulation and kept outside the repository (format in docs/recipes.md).
+    /// A recipe whose span or precondition window overlaps it is refused before any hash is
+    /// computed.
+    #[arg(long)]
+    pub protected_set: Option<PathBuf>,
 }
 
 /// Prints the SHA-256 of every precondition window of a schema-v2 recipe. Each is computed on the
@@ -48,6 +55,10 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
     // Every check that needs no firmware, before the input is read.
     let checked = CheckedRecipe::load(&args.recipe, &raw, refusing)?;
     checked.check_against_committed(&args.recipe, &args.committed_recipes)?;
+    let protected_set = match &args.protected_set {
+        Some(path) => Some(checked.check_against_protected_set(path)?),
+        None => None,
+    };
     let (recipe, target) = (checked.recipe(), checked.target());
     let input = checked.read_input(&args.input, "hash preconditions on")?;
     let hashes = precondition_hashes(recipe, target, &input)
@@ -72,6 +83,7 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
             window.start, window.end
         );
     }
+    print_protected_set(protected_set.as_ref());
     println!(
         "checked: recipe, release pins, bounds, protected ranges, committed recipes' windows and \
          leak checks; each hash covers whatever is at its declared offset, so check the offsets \

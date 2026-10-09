@@ -7,6 +7,18 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `--protected-set <file>` on `patch-cli patch` and `precondition`
+  (`xdj700::ProtectedSet`, `xdj700::check_recipe_against_protected_set`): the code that runs at
+  start-up and in the update path, measured in emulation and kept outside the repository, as
+  run-time address ranges with inclusive ends (format in `docs/recipes.md`, "The protected set").
+  A schema-v2 recipe whose span or precondition window overlaps it is refused before the
+  firmware is read, with the overlap in run-time addresses; a malformed set is refused with its
+  line number (decoded offsets in place of run-time addresses, a byte count that does not match
+  inclusive ends, ranges outside the application, an empty set). Both commands print how many
+  ranges they checked, or `protected_set: not given`. `RecipeTarget` gains `load_address`
+  (`0x0800_0000` for v1.15). An ignored test checks the committed recipes against the set
+  (`XDJ700_PROTECTED_SET=<file>`); both pass against the measured set (1,692 ranges), and the
+  stage-5 output is unchanged.
 - `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`, **experimental; passed on an owner's unit
   (2026-10-09)**, where BEAT LOOP 16 looped 32 beats and the official update restored stock:
   the BEAT LOOP button labelled 16 sets a 32-beat loop (the label still reads 16), reporting

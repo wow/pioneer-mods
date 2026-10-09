@@ -261,9 +261,10 @@ compressed, so a flash offset does not map to a run-time address.
     erasing and writing flash). That is 1,692 ranges of run-time addresses, about 460 KiB of
     the application; the seven rehearsals below added no new function to it. It is a lower bound:
     the unit runs code the model does not (the real panel and storage, the DSP's replies).
-    Every recipe window must lie outside it; both committed recipes do. A check in `patch-cli`
-    is planned; until then the maintainer checks it by hand before a recipe is committed,
-    since the set is kept outside this repository;
+    Every recipe window must lie outside it; both committed recipes do. The set is kept outside
+    this repository; given it with `--protected-set`, `patch` and `precondition` refuse a recipe
+    whose span or window overlaps it before reading the firmware, and the maintainer checks the
+    committed recipes against it (`docs/recipes.md`, "The protected set");
   - **the set covers code, not the data that code reads.** Every recipe must also show, *in
     emulation*, that the bytes its replacements change are not read during a normal boot, an
     update-mode boot, or a complete update in either rehearsal direction (code bytes included:
