@@ -21,10 +21,11 @@ pub const MAX_IMAGE_BYTES: u64 = 1024 * 1024;
 /// pattern), its published hash could be inverted by trying the few images it could be.
 pub const MIN_IMAGE_DISTINCT_PIXELS: usize = 16;
 
-/// Fewest pixels of the stock image that [`unpredicted_pixels`] counts: a fill or a smooth gradient
-/// has none, so its published hash could be inverted by trying its few parameters, while
-/// anti-aliased text or dither has hundreds. A heuristic against accidental leaks, like the
-/// replacement windows' rules; review is the backstop.
+/// Fewest pixels of the stock image that [`unpredicted_pixels`] counts. A fill or a shallow
+/// gradient has none, so its published hash could be inverted by trying its few parameters, while
+/// anti-aliased text, the intended case, has hundreds. A heuristic against accidental leaks, like
+/// the replacement windows' rules: a steep ramp or a regular pattern (a dither, a periodic
+/// pattern) can pass although it has few parameters, so review is the backstop.
 pub const MIN_IMAGE_UNPREDICTED_PIXELS: usize = 64;
 
 /// An edit to one RGB565 image (16-bit little-endian pixels, rows `width` pixels apart).
@@ -317,8 +318,9 @@ pub fn predictability(pixels: &[u16], width: usize) -> Predictability {
 
 /// How many pixels of an RGB565 image (`pixels`, rows `width` apart) its neighbours do not
 /// predict: per channel, the median edge predictor (from the left, upper and upper-left pixels)
-/// misses by more than 1. The first row and column are not counted. Fills and linear gradients
-/// score 0; edges, anti-aliased text and dither score high.
+/// misses by more than 1. The first row and column are not counted. Fills, shallow gradients and
+/// straight horizontal or vertical edges score 0; anti-aliased text and diagonal edges score high,
+/// and so do steep ramps and regular patterns, which have few parameters all the same.
 pub fn unpredicted_pixels(pixels: &[u16], width: usize) -> usize {
     let median = |left: u32, up: u32, corner: u32| {
         if corner >= left.max(up) {

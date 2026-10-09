@@ -4,8 +4,9 @@
 //! An image's precondition is the SHA-256 of the whole stock image, which the recipe publishes. So
 //! the image must hold at least [`patch_schema::MIN_IMAGE_DISTINCT_PIXELS`] distinct pixel values
 //! and [`patch_schema::MIN_IMAGE_UNPREDICTED_PIXELS`] pixels its neighbours do not predict: a fill,
-//! a two-colour pattern or a smooth gradient could be recovered from its hash by trying its few
-//! parameters. The edit reads every pixel it uses from the owner's file; the recipe carries only
+//! a two-colour pattern or a shallow gradient could be recovered from its hash by trying its few
+//! parameters. It is a heuristic (steep ramps and regular patterns can pass), so review is the
+//! backstop. The edit reads every pixel it uses from the owner's file; the recipe carries only
 //! coordinates and the author's own glyph mask.
 
 use super::precondition::DeclaredHash;

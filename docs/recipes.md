@@ -182,10 +182,13 @@ The rules:
   replacement windows: they must be disjoint.
 - The stock image must hold at least 16 distinct pixel values and at least 64 pixels that its
   neighbours do not predict (per channel, the median edge predictor from the left, upper and
-  upper-left pixels misses by more than 1). A fill, a two-colour pattern or a smooth gradient
-  fails, since its published hash could be inverted by trying its few parameters; anti-aliased
-  text and dither pass easily (the BEAT LOOP pad images have 89 to 272 such pixels). Like the
-  window rules, this is a heuristic against accidental leaks, and review is the backstop.
+  upper-left pixels misses by more than 1). Fills and shallow gradients fail, and so do
+  two-colour patterns (through the 16-value count): the published hash of such an image could
+  be inverted by trying its few parameters. The intended case is anti-aliased text, such as a
+  pad's label (the BEAT LOOP pad images have 89 to 272 such pixels). Like the window rules, this
+  is a heuristic against accidental leaks, not a proof: a steep ramp, or a regular pattern such
+  as a checkerboard mixing gradients, a dither or a periodic pattern, can pass although it has
+  few parameters, so review the image before its hash is committed.
 - The glyph mask must be the author's own drawing, never traced from vendor pixels.
 - Images are subject to the protected ranges and the [protected set](#the-protected-set), like
   replacements.

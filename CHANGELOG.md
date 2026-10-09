@@ -16,7 +16,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   they leave the application, overlap each other, a replacement's window, a protected range or
   the protected set, or are predictable: fewer than 16 distinct pixel values, or fewer than 64
   pixels the median edge predictor misses (`unpredicted_pixels`), since the published hash of a
-  fill or smooth gradient could be inverted; across committed recipes their windows count like
+  fill or shallow gradient could be inverted (a heuristic: steep ramps and regular patterns can
+  pass, so review remains the backstop); across committed recipes their windows count like
   replacement windows. The output
   may differ from stock only in the edited rows. `patch-cli precondition` prints each image's
   hash for a draft (`xdj700::PreconditionHashes`), and `patch` reports `image_edits`.
