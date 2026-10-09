@@ -169,10 +169,14 @@ into place.
 - **Report a version lower than 1.15** (the engine enforces this). The official v1.15 update then
   restores stock. This was observed on an owner's unit for a version-only change (the
   flashing guide's stages 3 and 4).
-- **Stay out of the code that runs early during start-up.** An application that crashes before
-  its own update mode starts cannot be recovered by software (flashing guide, section 5). The
-  engine protects only the header; **the start-up path is not yet mapped**, so this rule is
-  enforced by review and staged hardware testing, not by the tool.
+- **Stay out of the code that runs before the update-mode decision.** An application that
+  crashes before its own update mode starts cannot be recovered by software (flashing guide,
+  section 5). In emulation that decision is one branch (`0x08D50D78`); the code a normal boot
+  runs before it, plus the code an update-mode boot runs, is recorded as a set of address ranges
+  (a lower bound: the unit runs code the model does not). A recipe's windows must lie outside
+  it. The engine protects only the header, so this rule is
+  enforced by review against that set, by an emulator rehearsal of the update, and by staged
+  hardware testing, not yet by the tool (a `patch-cli` check is planned).
 - **Same length only.** Growing the application (for example appending code) is not supported
   until the memory after the application is understood.
 - **Test on hardware in stages**, as the flashing guide describes, and record the result.

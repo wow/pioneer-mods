@@ -218,6 +218,14 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
+- `docs/xdj700-flashing.md` section 5 and the recipe rules in `docs/recipes.md` carry the
+  findings of a local emulation of the board (not part of this repository; not hardware): in
+  four traced updates the application's updater never wrote the loader region `0x000000`–
+  `0x03FFFF`; the IN + RELOOP/EXIT decision is one branch (`0x08D50D78`) taken after the kernel,
+  tasks and panel link run; the code before it, plus the update path, is a measured lower-bound
+  set that recipe windows must avoid (both committed recipes do); and every stage file is now
+  rehearsed in emulation before it is offered. An interruption while the loader region is
+  written is still treated as uncovered.
 - `patch-cli` output-file safety (input-path check, no-clobber atomic write) moved to a
   library module, `patch_cli::output`, used by `patch` and `rebuild` and tested directly.
   `patch` output is now also read back before it is renamed into place. The overwrite refusal
