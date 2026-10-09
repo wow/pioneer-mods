@@ -97,6 +97,7 @@ fn patch_v2(args: &PatchArgs, raw: &[u8]) -> Result<()> {
     println!("input_file: {}", firmware_file_name(&args.input));
     println!("input_sha256_hex: {}", target.release.upd_sha256);
     println!("replacements: {}", recipe.replacements.len());
+    println!("image_edits: {}", recipe.image_edits.len());
     println!(
         "application_reported_version: {}",
         rebuilt.application_reported_version().unwrap_or("none")

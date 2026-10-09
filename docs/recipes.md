@@ -126,7 +126,8 @@ paste stock bytes into an issue or a commit, only their hash.
    committed recipes (the draft's own file is skipped, and the directory must hold another recipe
    for the release), and runs each window's leak checks. So it never prints the hash of a window
    those rules refuse, and it writes nothing. For each replacement it prints the window and its
-   SHA-256, and says whether the recipe already declares it. Copy the hashes into the recipe.
+   SHA-256, and for each [image edit](#image-edits) the image and its SHA-256, and says whether
+   the recipe already declares it. Copy the hashes into the recipe.
    (The first recipe for a newly added release therefore needs a committed recipe for that
    release first, such as its version marker.)
 3. Run `patch` to build the update. It checks every hash, adds the rebuild's own checks (bounded
@@ -141,6 +142,53 @@ you meant. Check offsets against your own analysis before step 2. After that, th
 later change to an offset, unless the same bytes also occur at the new offset (code and tables
 can repeat), so prefer windows long enough to be unique.
 
+## Image edits
+
+Some changes are pictures, not code: a button's label, for example, is drawn into an RGB565 image
+stored in the application. Copying finished pixels into a recipe would publish vendor pixels, so
+an image edit carries only coordinates and the author's own glyph, and the engine computes every
+pixel from the owner's file at patch time:
+
+```json
+"image_edits": [
+  {
+    "offset": 3471680,
+    "width": 80,
+    "height": 53,
+    "sha256": "<SHA-256 of the whole stock image>",
+    "erase": {"x": 30, "y": 19, "width": 19, "height": 14},
+    "glyph": {
+      "at": {"x": 31, "y": 19, "width": 17, "height": 14},
+      "alpha_hex": "00f8…",
+      "colour_from": {"x": 33, "y": 25}
+    },
+    "purpose": "Why the image changes."
+  }
+]
+```
+
+| Field | Meaning |
+| --- | --- |
+| `offset`, `width`, `height` | The image: `width * height` 16-bit little-endian RGB565 pixels, rows `width` pixels apart, at a decoded-application offset. At most 1 MiB. |
+| `sha256` | The precondition: the SHA-256 of the whole stock image. `precondition` prints it for a draft. |
+| `erase` | Optional. Each row of the box is refilled by interpolating between the stock pixels just left and right of it, which removes a label from a smooth background. The box needs a column of the image on each side. |
+| `glyph.at`, `glyph.alpha_hex` | The author's own coverage mask, one hex digit per pixel, row by row: `0` leaves the pixel, `f` paints it fully, and the digits between blend linearly (per channel, in fifteenths, rounded). |
+| `glyph.colour_from` | The stock pixel whose colour the glyph is drawn in, read before anything changes: for a relabelled button, a pixel inside a stroke of the old label. |
+| `purpose` | Why the image changes. |
+
+The rules:
+- An image's precondition window is the **whole image**. Images may not overlap each other or any
+  replacement's window, and across the committed recipes of a release image windows count like
+  replacement windows: they must be disjoint.
+- The stock image must hold at least 16 distinct pixel values, so that its published hash could
+  not be inverted by trying the few images a near-flat one could be.
+- Images are subject to the protected ranges and the [protected set](#the-protected-set), like
+  replacements.
+- The output may differ from stock only in the edited rows: per row, the union of the erase box
+  and the glyph box.
+- Whether the image is read during start-up or an update is shown in emulation, as for any
+  replaced bytes (flashing guide, section 5). Images are normally read only when they are drawn.
+
 ## What the engine checks
 
 Before the input is read (`check_recipe_v2`):
@@ -150,9 +198,12 @@ Before the input is read (`check_recipe_v2`):
 2. The release is known, and the recipe repeats its id and pins exactly.
 3. The label is higher, and the reported version lower, than the release's own version.
 4. Every precondition window ends inside the application (its length is pinned).
-5. No replacement or precondition window overlaps a protected range. For v1.15 that is
-   `[0, 0x800)`: the application header and its version block. The version changes only through
-   `reported_version`.
+5. No replacement, precondition window or edited image overlaps a protected range. For v1.15
+   that is `[0, 0x800)`: the application header and its version block. The version changes only
+   through `reported_version`.
+6. Every [image edit](#image-edits) is well formed: its boxes and colour pixel lie inside the
+   image, its mask has one digit per pixel and paints something, and its image lies inside the
+   application, clear of the other images and of the replacements' windows.
 
 Then, unless it is skipped with `--no-protected-set`, `patch` and `precondition` check the recipe
 against the [protected set](#the-protected-set) (`check_recipe_against_protected_set`, called by
@@ -164,11 +215,13 @@ Then, on the official file:
 2. On the stock application, before anything is replaced, each precondition window matches its
    SHA-256 and passes the [window rules](#precondition-windows), and each span changes its first
    and last bytes and keeps at most half of its stock bytes, fewer than 32 in a row.
-3. The modified application differs from stock **only** in the declared spans and the version
-   string (a byte-by-byte check that the rebuild entry point runs for every edit).
-4. The rebuild runs its full verification, including the release rule: a modified application
+3. Each edited image matches its SHA-256 and holds at least 16 distinct pixel values.
+4. The modified application differs from stock **only** in the declared spans, the edited image
+   rows and the version string (a byte-by-byte check that the rebuild entry point runs for every
+   edit).
+5. The rebuild runs its full verification, including the release rule: a modified application
    must report a lower version.
-5. The output matches `expected`, when declared.
+6. The output matches `expected`, when declared.
 
 The output is written atomically, is never overwritten, and is read back before it is renamed
 into place.

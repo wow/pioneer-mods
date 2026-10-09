@@ -1,6 +1,7 @@
 //! Checks the recipe entry points add to the built-in ones, and the overlap walk the protected
 //! ranges and the protected set share.
 
+use super::image_edit::image_range;
 use super::precondition::window;
 use super::protected_set::{ProtectedSet, check_recipe_against_protected_set};
 use super::recipe::{RecipeError, RecipeTarget};
@@ -73,6 +74,24 @@ pub(super) fn check_ranges(
                     protected,
                 }));
             }
+        }
+    }
+    Ok(())
+}
+
+/// Checks every image edit's image against `protected`, returning `refuse(index, image, range)`
+/// for the first overlap (half-open decoded offsets). Images are bounds-checked first.
+pub(super) fn check_image_ranges(
+    recipe: &RecipeV2,
+    target: &RecipeTarget<'_>,
+    protected: &[Range<usize>],
+    refuse: impl Fn(usize, Range<usize>, &Range<usize>) -> RecipeError,
+) -> Result<(), RecipeError> {
+    for (index, edit) in recipe.image_edits.iter().enumerate() {
+        let image = image_range(index, edit, target.application_len)?;
+        let overlap = |range: &&Range<usize>| image.start < range.end && range.start < image.end;
+        if let Some(range) = protected.iter().find(overlap) {
+            return Err(refuse(index, image.clone(), range));
         }
     }
     Ok(())

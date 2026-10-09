@@ -255,7 +255,8 @@ fn parse_hex(line: usize, field: &'static str, value: &str) -> Result<u64, Prote
 }
 
 /// Refuses `recipe` if `set` was measured on another release, if the version string every rebuild
-/// writes lies in `set`, or if a replacement's span or precondition window overlaps it. Run it
+/// writes lies in `set`, or if a replacement's span or precondition window, or an edited image,
+/// overlaps it. Run it
 /// after [`check_recipe_v2`](super::check_recipe_v2), which bounds every window; like it, it needs
 /// no firmware. The recipe entry points run it when their [`RecipeChecks`](super::RecipeChecks)
 /// carry a set.
@@ -263,8 +264,8 @@ fn parse_hex(line: usize, field: &'static str, value: &str) -> Result<u64, Prote
 /// # Errors
 ///
 /// [`RecipeError::ProtectedSetRelease`], [`RecipeError::ProtectedSetVersion`],
-/// [`RecipeError::ProtectedSet`] for the first overlap, or a window error from a recipe that has
-/// not passed `check_recipe_v2`.
+/// [`RecipeError::ProtectedSet`] or [`RecipeError::ImageProtectedSet`] for the first overlap, or a
+/// window error from a recipe that has not passed `check_recipe_v2`.
 pub fn check_recipe_against_protected_set(
     recipe: &RecipeV2,
     target: &RecipeTarget<'_>,
@@ -297,6 +298,15 @@ pub fn check_recipe_against_protected_set(
             last: runtime(found.end - 1),
             set_start: runtime(found.protected.start as u64),
             set_last: runtime(found.protected.end as u64 - 1),
+        }
+    })?;
+    super::recipe_checks::check_image_ranges(recipe, target, set.ranges(), |index, image, range| {
+        RecipeError::ImageProtectedSet {
+            index,
+            start: runtime(image.start as u64),
+            last: runtime(image.end as u64 - 1),
+            set_start: runtime(range.start as u64),
+            set_last: runtime(range.end as u64 - 1),
         }
     })
 }

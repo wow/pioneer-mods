@@ -1,4 +1,5 @@
-//! Precondition windows across schema-v2 recipes. Within one recipe, windows are disjoint
+//! Precondition windows across schema-v2 recipes, the replacements' and the image edits' (an
+//! image edit's window is its whole image). Within one recipe, windows are disjoint
 //! ([`RecipeV2::validate`]); across recipes for the same release they must be disjoint too.
 //! Windows shifted from recipe to recipe would share all but a few bytes, and each hash would
 //! reveal the difference. Even identical windows are refused: each recipe's rules assume that the
@@ -38,6 +39,13 @@ pub fn check_windows_across<'a>(
         for (index, replacement) in recipe.replacements.iter().enumerate() {
             if let Some(window) = replacement.precondition_window() {
                 let name = format!("{} replacements[{index}]", recipe.recipe_id);
+                windows.push((&recipe.target.release, window, name));
+            }
+        }
+        // An image edit's precondition window is its whole image.
+        for (index, edit) in recipe.image_edits.iter().enumerate() {
+            if let Some(window) = edit.window() {
+                let name = format!("{} image_edits[{index}]", recipe.recipe_id);
                 windows.push((&recipe.target.release, window, name));
             }
         }

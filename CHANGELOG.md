@@ -7,6 +7,19 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- Image edits in schema-v2 recipes (`image_edits`, `patch_schema::ImageEdit`): changes to a 16-bit
+  RGB565 image stored in the decoded application that publish no stock pixel. An edit names the
+  image (offset, width, height) and pins it by the SHA-256 of the whole stock image; it erases a
+  box by interpolating each row between the stock pixels just outside it, then draws the author's
+  own coverage mask (one hex digit per pixel) in the colour of a stock pixel it names. The pixel
+  arithmetic is fixed in `patch_schema` (`ImageEdit::erase_row`, `blend`). Images are refused if
+  they leave the application, overlap each other, a replacement's window, a protected range or
+  the protected set, or hold fewer than 16 distinct pixel values (a flat image's hash could be
+  inverted); across committed recipes their windows count like replacement windows. The output
+  may differ from stock only in the edited rows. `patch-cli precondition` prints each image's
+  hash for a draft (`xdj700::PreconditionHashes`), and `patch` reports `image_edits`.
+  `RecipeError` moved to its own module, with the image refusals. Format in `docs/recipes.md`,
+  "Image edits".
 - The protected set on `patch-cli patch` and `precondition` (`xdj700::ProtectedSet`,
   `xdj700::check_recipe_against_protected_set`, `xdj700::RecipeChecks`): the code that runs at
   start-up and in the update path, measured in emulation and kept outside the repository, as

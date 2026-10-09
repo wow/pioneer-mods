@@ -15,6 +15,7 @@
 //! [`precondition_hashes`] helps an author complete a draft recipe: it hashes each window only
 //! after these checks, so it never shows the hash of a window the engine would refuse.
 
+use super::image_edit::checked_image;
 use super::recipe::{RecipeError, RecipeTarget, check_recipe_v2};
 use super::recipe_checks::RecipeChecks;
 use super::stock::StockMain;
@@ -26,11 +27,11 @@ use std::ops::Range;
 /// span.
 const TOP_VALUES: usize = 4;
 
-/// The SHA-256 of every precondition window of `recipe`, computed on `input`, the official update
-/// of `target`, for an author completing a draft. The recipe first passes [`check_recipe_v2`] and
-/// the checks in `checks`, and each window the bounds and leak checks, before its hash is
-/// computed. The hashes the recipe declares are not compared (a draft holds placeholders);
-/// applying the recipe compares them.
+/// The SHA-256 of every precondition window of `recipe`, and of every image it edits, computed on
+/// `input`, the official update of `target`, for an author completing a draft. The recipe first
+/// passes [`check_recipe_v2`] and the checks in `checks`, and each window or image its bounds and
+/// leak checks, before its hash is computed. The hashes the recipe declares are not compared (a
+/// draft holds placeholders); applying the recipe compares them.
 ///
 /// A hash covers whatever is at the declared offset, so it cannot show that the offset is the
 /// intended one: check offsets against your own analysis first. It then catches later changes.
@@ -44,16 +45,41 @@ pub fn precondition_hashes(
     target: &RecipeTarget<'_>,
     input: &[u8],
     checks: RecipeChecks<'_>,
-) -> Result<Vec<String>, RecipeError> {
+) -> Result<PreconditionHashes, RecipeError> {
     check_recipe_v2(recipe, target)?;
     checks.run(recipe, target)?;
     let stock = StockMain::load(input, &target.release)?.application()?;
     let stock = stock.decoded();
-    let hash = |(index, replacement)| {
+    let window_hash = |(index, replacement)| {
         let range = checked_window(index, replacement, stock, DeclaredHash::Ignore)?;
         Ok(sha256_hex(&stock[range]))
     };
-    recipe.replacements.iter().enumerate().map(hash).collect()
+    let image_hash = |(index, edit)| {
+        let range = checked_image(index, edit, stock, DeclaredHash::Ignore)?;
+        Ok(sha256_hex(&stock[range]))
+    };
+    Ok(PreconditionHashes {
+        replacements: recipe
+            .replacements
+            .iter()
+            .enumerate()
+            .map(window_hash)
+            .collect::<Result<_, RecipeError>>()?,
+        image_edits: recipe
+            .image_edits
+            .iter()
+            .enumerate()
+            .map(image_hash)
+            .collect::<Result<_, RecipeError>>()?,
+    })
+}
+
+/// The hashes [`precondition_hashes`] computes, in recipe order: one per replacement window and
+/// one per edited image.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreconditionHashes {
+    pub replacements: Vec<String>,
+    pub image_edits: Vec<String>,
 }
 
 /// Whether [`checked_window`] compares the window with the hash the recipe declares.

@@ -39,7 +39,9 @@ This repository currently includes:
 - Recipe schema v2: same-length changes to the decoded application of a pinned release, with
   hash preconditions over at least 32 stock bytes around each span (recipes hold hashes, and
   stock bytes only in short unchanged gaps inside a span), a protected header and version block,
-  and a bounded diff, written as a complete, verified update by `patch`.
+  and a bounded diff, written as a complete, verified update by `patch`. Image edits relabel
+  buttons and other RGB565 images without publishing vendor pixels: the recipe carries only
+  coordinates and its own glyph mask.
   "Verified" means checked against the input and the recipe, not safe to flash. The start-up
   and update-path code is mapped only in emulation, as a protected set kept outside this
   repository: given it, `patch` and `precondition` refuse a recipe that overlaps it, and without

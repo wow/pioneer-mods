@@ -80,19 +80,41 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
     println!("release: {}", target.id);
     println!("input_file: {}", firmware_file_name(&args.input));
     println!("input_sha256_hex: {}", target.release.upd_sha256);
-    println!("replacements: {}", hashes.len());
+    println!("replacements: {}", hashes.replacements.len());
+    println!("image_edits: {}", hashes.image_edits.len());
     let mut differing = 0;
-    for (index, (replacement, sha256)) in recipe.replacements.iter().zip(&hashes).enumerate() {
-        let window = replacement.precondition_window().expect("a checked recipe");
-        let status = if replacement.precondition.sha256.eq_ignore_ascii_case(sha256) {
+    let mut status = |declared: &str, sha256: &str| {
+        if declared.eq_ignore_ascii_case(sha256) {
             "as declared"
         } else {
             differing += 1;
             "the recipe declares another hash"
-        };
+        }
+    };
+    for (index, (replacement, sha256)) in recipe
+        .replacements
+        .iter()
+        .zip(&hashes.replacements)
+        .enumerate()
+    {
+        let window = replacement.precondition_window().expect("a checked recipe");
+        let status = status(&replacement.precondition.sha256, sha256);
         println!(
             "replacements[{index}].precondition: {:#x}..{:#x} sha256 {sha256} ({status})",
             window.start, window.end
+        );
+    }
+    for (index, (edit, sha256)) in recipe
+        .image_edits
+        .iter()
+        .zip(&hashes.image_edits)
+        .enumerate()
+    {
+        let window = edit.window().expect("a checked recipe");
+        let status = status(&edit.sha256, sha256);
+        println!(
+            "image_edits[{index}].sha256: {:#x}..{:#x} ({}x{}) sha256 {sha256} ({status})",
+            window.start, window.end, edit.width, edit.height
         );
     }
     println!("{}", protected_set_line(&source, protected_set.as_ref()));
@@ -101,10 +123,10 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
          leak checks; each hash covers whatever is at its declared offset, so check the offsets \
          against your own analysis"
     );
+    let total = hashes.replacements.len() + hashes.image_edits.len();
     if args.check && differing > 0 {
         bail!(
-            "{differing} of {} declared precondition hashes differ from the official update",
-            hashes.len()
+            "{differing} of {total} declared precondition hashes differ from the official update"
         );
     }
     Ok(())
