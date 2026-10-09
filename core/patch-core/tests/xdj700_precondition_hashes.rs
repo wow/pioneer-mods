@@ -35,7 +35,7 @@ fn hashes_every_window_of_a_draft_and_the_completed_recipe_applies() {
         .map(|replacement| replacement.precondition.sha256.as_str())
         .collect();
     assert_eq!(hashes.replacements, expected);
-    assert!(hashes.image_edits.is_empty());
+    assert_eq!(hashes.output, None);
     for (replacement, sha256) in recipe.replacements.iter_mut().zip(hashes.replacements) {
         replacement.precondition.sha256 = sha256;
     }
@@ -57,7 +57,7 @@ fn hashes_nothing_for_a_recipe_without_replacements() {
         hashes,
         Ok(PreconditionHashes {
             replacements: vec![],
-            image_edits: vec![]
+            output: None
         })
     );
 }

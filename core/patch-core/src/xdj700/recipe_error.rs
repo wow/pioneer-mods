@@ -1,9 +1,7 @@
 //! Why a schema-v2 recipe was not applied: every refusal of the recipe entry points.
 
 use crate::error::RebuildError;
-use patch_schema::{
-    MIN_IMAGE_DISTINCT_PIXELS, MIN_IMAGE_UNPREDICTED_PIXELS, MIN_PRECONDITION_LEN, RecipeV2Error,
-};
+use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2Error};
 use thiserror::Error;
 
 /// Why a recipe was not applied.
@@ -154,25 +152,6 @@ pub enum RecipeError {
         last: u64,
         set_start: u64,
         set_last: u64,
-    },
-
-    /// The image's actual hash is not reported, as for replacement windows.
-    #[error(
-        "image_edits[{index}]: the stock image does not have SHA-256 {expected}; the recipe does \
-         not match this application"
-    )]
-    ImagePrecondition { index: usize, expected: String },
-
-    #[error(
-        "image_edits[{index}]: the stock image holds {distinct} distinct pixel values (at least \
-         {MIN_IMAGE_DISTINCT_PIXELS} needed) and {unpredicted} pixels its neighbours do not \
-         predict (at least {MIN_IMAGE_UNPREDICTED_PIXELS} needed); the hash of an image that \
-         predictable could be inverted, so choose an image with detail such as text"
-    )]
-    PredictableImage {
-        index: usize,
-        distinct: usize,
-        unpredicted: usize,
     },
 
     #[error(transparent)]

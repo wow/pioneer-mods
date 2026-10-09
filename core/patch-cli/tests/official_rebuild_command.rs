@@ -346,7 +346,7 @@ fn precondition_completes_a_draft_that_patch_then_applies() {
     let draft_checked = run_precondition(&input, &recipe_path, &["--check"]);
     assert!(!draft_checked.status.success());
     assert!(
-        text(&draft_checked.stderr).contains("1 of 1 declared precondition hashes differ"),
+        text(&draft_checked.stderr).contains("1 of 1 declared hashes differ"),
         "{}",
         text(&draft_checked.stderr)
     );

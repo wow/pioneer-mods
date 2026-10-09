@@ -5,8 +5,11 @@
 //! pixels just left and right of it, which removes a label from a smooth background. It then draws
 //! a glyph: an alpha mask the recipe's author drew (one hex digit of coverage per pixel), in the
 //! colour of one stock pixel the recipe names by its position. Everything the edit takes from the
-//! image is read from the owner's own file at patch time. The whole stock image is identified by
-//! its SHA-256, the edit's precondition.
+//! image is read from the owner's own file at patch time. No hash of the image is published:
+//! anyone could check a guess at the stock pixels against it, and a rendered label can be easy to
+//! guess. The input and the stock application are pinned by SHA-256, so the image at `offset` is
+//! fixed, and a recipe with image edits must pin its output (`expected.application_sha256`), which
+//! catches a changed offset or a change in the arithmetic below.
 //!
 //! The pixel arithmetic is fixed here so that every front end produces the same bytes:
 //! [`ImageEdit::erase_row`] and [`blend`].
@@ -16,17 +19,6 @@ use std::ops::Range;
 
 /// Largest image an edit may name, in bytes (an 800x480 screen is 768,000).
 pub const MAX_IMAGE_BYTES: u64 = 1024 * 1024;
-
-/// Fewest distinct pixel values the stock image must hold: with fewer (a fill, a two-colour
-/// pattern), its published hash could be inverted by trying the few images it could be.
-pub const MIN_IMAGE_DISTINCT_PIXELS: usize = 16;
-
-/// Fewest pixels of the stock image that [`unpredicted_pixels`] counts. A fill or a shallow
-/// gradient has none, so its published hash could be inverted by trying its few parameters, while
-/// anti-aliased text, the intended case, has hundreds. A heuristic against accidental leaks, like
-/// the replacement windows' rules: a steep ramp or a regular pattern (a dither, a periodic
-/// pattern) can pass although it has few parameters, so review is the backstop.
-pub const MIN_IMAGE_UNPREDICTED_PIXELS: usize = 64;
 
 /// An edit to one RGB565 image (16-bit little-endian pixels, rows `width` pixels apart).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,8 +30,6 @@ pub struct ImageEdit {
     pub width: u32,
     /// Image height in pixels.
     pub height: u32,
-    /// SHA-256 of the whole stock image (`width * height * 2` bytes from `offset`).
-    pub sha256: String,
     /// The box to erase before the glyph is drawn, if any.
     #[serde(default)]
     pub erase: Option<PixelBox>,
@@ -117,7 +107,7 @@ pub enum ImageEditError {
     UnorderedOrOverlapping { index: usize, previous: usize },
     #[error(
         "image_edits[{index}] overlaps the precondition window of replacements[{replacement}]; \
-         overlapping windows would reveal stock bytes one hash at a time"
+         the window's hash would cover pixels of the edited image"
     )]
     OverlapsReplacement { index: usize, replacement: usize },
 }
@@ -155,8 +145,8 @@ impl ImageEdit {
         self.len() == Some(0)
     }
 
-    /// The image's bytes in the decoded application, its precondition window, or `None` if it does
-    /// not fit the 64-bit range.
+    /// The image's bytes in the decoded application, or `None` if they do not fit the 64-bit
+    /// range.
     pub fn window(&self) -> Option<Range<u64>> {
         Some(self.offset..self.offset.checked_add(self.len()?)?)
     }
@@ -290,70 +280,4 @@ impl Channels {
 
 fn pack(Channels([red, green, blue]): Channels) -> u16 {
     ((red << 11) | (green << 5) | blue) as u16
-}
-
-/// How predictable a stock image is: the two measures behind the rule an image must pass before
-/// its hash may be published.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Predictability {
-    /// Distinct pixel values.
-    pub distinct: usize,
-    /// Pixels its neighbours do not predict ([`unpredicted_pixels`]).
-    pub unpredicted: usize,
-}
-
-impl Predictability {
-    /// Whether the image passes: at least [`MIN_IMAGE_DISTINCT_PIXELS`] distinct values and
-    /// [`MIN_IMAGE_UNPREDICTED_PIXELS`] unpredicted pixels.
-    pub fn passes(&self) -> bool {
-        self.distinct >= MIN_IMAGE_DISTINCT_PIXELS
-            && self.unpredicted >= MIN_IMAGE_UNPREDICTED_PIXELS
-    }
-}
-
-/// Both measures of an RGB565 image (`pixels`, rows `width` apart).
-pub fn predictability(pixels: &[u16], width: usize) -> Predictability {
-    // One bit per possible pixel value: 8 KiB, no copy of the image and no sort.
-    let mut seen = vec![0u64; 1 << 10];
-    let mut distinct = 0;
-    for &pixel in pixels {
-        let (word, bit) = (usize::from(pixel >> 6), 1u64 << (pixel & 63));
-        distinct += usize::from(seen[word] & bit == 0);
-        seen[word] |= bit;
-    }
-    Predictability {
-        distinct,
-        unpredicted: unpredicted_pixels(pixels, width),
-    }
-}
-
-/// How many pixels of an RGB565 image (`pixels`, rows `width` apart) its neighbours do not
-/// predict: per channel, the median edge predictor (from the left, upper and upper-left pixels)
-/// misses by more than 1. The first row and column are not counted. Fills, shallow gradients and
-/// straight horizontal or vertical edges score 0; anti-aliased text and diagonal edges score high,
-/// and so do steep ramps and regular patterns, which have few parameters all the same.
-pub fn unpredicted_pixels(pixels: &[u16], width: usize) -> usize {
-    let median = |left: u32, up: u32, corner: u32| {
-        if corner >= left.max(up) {
-            left.min(up)
-        } else if corner <= left.min(up) {
-            left.max(up)
-        } else {
-            left + up - corner
-        }
-    };
-    if width == 0 {
-        return 0;
-    }
-    let rows = pixels.len() / width;
-    let mut count = 0;
-    for y in 1..rows {
-        for x in 1..width {
-            let at = |dx: usize, dy: usize| channels(pixels[(y - dy) * width + x - dx]).0;
-            let (left, up, corner, value) = (at(1, 0), at(0, 1), at(1, 1), at(0, 0));
-            let missed = (0..3).any(|c| median(left[c], up[c], corner[c]).abs_diff(value[c]) > 1);
-            count += usize::from(missed);
-        }
-    }
-    count
 }

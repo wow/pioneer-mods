@@ -7,7 +7,8 @@ use patch_schema::{
 use serde_json::{Value, json};
 
 /// A valid recipe with one replacement (window 0x900..0x940) and one image edit: a 16x8 image at
-/// 0xd00, erasing x 4..10, y 2..5 and drawing a 3x2 glyph at (5, 3).
+/// 0xd00, erasing x 4..10, y 2..5 and drawing a 3x2 glyph at (5, 3). It pins its output, as a
+/// recipe with image edits must.
 fn recipe_json() -> Value {
     json!({
         "schema_version": 2,
@@ -26,7 +27,8 @@ fn recipe_json() -> Value {
             "precondition": {"before": 16, "after": 46, "sha256": "ab".repeat(32)},
             "purpose": "test"
         }],
-        "image_edits": [image_json(0xd00)]
+        "image_edits": [image_json(0xd00)],
+        "expected": {"application_sha256": "ee".repeat(32)}
     })
 }
 
@@ -35,7 +37,6 @@ fn image_json(offset: u64) -> Value {
         "offset": offset,
         "width": 16,
         "height": 8,
-        "sha256": "cd".repeat(32),
         "erase": {"x": 4, "y": 2, "width": 6, "height": 3},
         "glyph": {
             "at": {"x": 5, "y": 3, "width": 3, "height": 2},
@@ -91,6 +92,51 @@ fn unknown_fields_in_an_edit_are_refused() {
     json["image_edits"][0]["colour"] = json!("ffff");
 
     assert!(serde_json::from_value::<RecipeV2>(json).is_err());
+}
+
+#[test]
+fn an_image_hash_is_refused_as_an_unknown_field() {
+    // No hash of a stock image is published; a draft that still declares one fails to parse.
+    let mut json = recipe_json();
+    json["image_edits"][0]["sha256"] = json!("cd".repeat(32));
+
+    let error = serde_json::from_value::<RecipeV2>(json).expect_err("unknown field");
+
+    assert!(
+        error.to_string().contains("unknown field `sha256`"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_recipe_with_image_edits_must_pin_its_output_application() {
+    let without = |expected: Option<Value>| {
+        let mut json = recipe_json();
+        match expected {
+            Some(expected) => json["expected"] = expected,
+            None => {
+                json.as_object_mut().expect("object").remove("expected");
+            }
+        }
+        serde_json::from_value::<RecipeV2>(json)
+            .expect("valid JSON")
+            .validate()
+    };
+
+    assert_eq!(without(None), Err(RecipeV2Error::UnpinnedImageEdits));
+    let upd_only = json!({"upd_sha256": "ee".repeat(32)});
+    assert_eq!(
+        without(Some(upd_only)),
+        Err(RecipeV2Error::UnpinnedImageEdits)
+    );
+    let both = json!({"application_sha256": "ee".repeat(32), "upd_sha256": "ff".repeat(32)});
+    assert_eq!(without(Some(both)), Ok(()));
+    // Without image edits, the output pin stays optional.
+    let mut json = recipe_json();
+    json.as_object_mut().expect("object").remove("expected");
+    json["image_edits"] = json!([]);
+    let recipe: RecipeV2 = serde_json::from_value(json).expect("valid JSON");
+    assert_eq!(recipe.validate(), Ok(()));
 }
 
 #[test]
@@ -233,18 +279,11 @@ fn refuses_a_mask_of_the_wrong_length_non_hex_or_painting_nothing() {
 }
 
 #[test]
-fn refuses_an_empty_purpose_and_a_malformed_hash() {
+fn refuses_an_empty_purpose() {
     let purpose = with_image(|image| image["purpose"] = json!("  "));
     assert_eq!(
         image_error(&purpose),
         Some(ImageEditError::EmptyPurpose { index: 0 })
-    );
-    let hash = with_image(|image| image["sha256"] = json!("cd"));
-    assert_eq!(
-        hash.validate(),
-        Err(RecipeV2Error::InvalidSha256 {
-            field: "image_edits[0].sha256".to_owned()
-        })
     );
 }
 

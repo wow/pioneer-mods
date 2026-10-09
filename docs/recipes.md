@@ -107,7 +107,8 @@ paste stock bytes into an issue or a commit, only their hash.
    does not extract it; `patch-core` decodes it (`xdj700::decode_application` on the parsed
    official update), and it stays on your machine. Write the recipe with every field filled in,
    and use any 64 hex digits (for example all zeros) as the placeholder for each
-   `precondition.sha256`. Leave `expected` out for now.
+   `precondition.sha256`. Leave `expected` out for now, unless the recipe has
+   [image edits](#image-edits): then use a placeholder for `expected.application_sha256` too.
 2. Compute the hashes:
 
    ```bash
@@ -126,12 +127,14 @@ paste stock bytes into an issue or a commit, only their hash.
    committed recipes (the draft's own file is skipped, and the directory must hold another recipe
    for the release), and runs each window's leak checks. So it never prints the hash of a window
    those rules refuse, and it writes nothing. For each replacement it prints the window and its
-   SHA-256, and for each [image edit](#image-edits) the image and its SHA-256, and says whether
-   the recipe already declares it. Copy the hashes into the recipe.
+   SHA-256, for each [image edit](#image-edits) the image (with no hash), and for a recipe with
+   image edits the output identities (`expected.application_sha256` and `expected.upd_sha256`),
+   and says whether the recipe already declares each. Copy them into the recipe.
    (The first recipe for a newly added release therefore needs a committed recipe for that
    release first, such as its version marker.)
 3. Run `patch` to build the update. It checks every hash, adds the rebuild's own checks (bounded
-   diff, version rule, image size), and prints the output identities; copy them into `expected`.
+   diff, version rule, image size), and prints the output identities; copy them into `expected`
+   (a recipe with image edits already has them from step 2).
    `precondition --check` then exits with an error unless every hash is `as declared`.
 
 Settle your windows before you push: hashes of windows that later move stay in the history, and
@@ -147,7 +150,9 @@ can repeat), so prefer windows long enough to be unique.
 Some changes are pictures, not code: a button's label, for example, is drawn into an RGB565 image
 stored in the application. Copying finished pixels into a recipe would publish vendor pixels, so
 an image edit carries only coordinates and the author's own glyph, and the engine computes every
-pixel from the owner's file at patch time:
+pixel from the owner's file at patch time. It carries no hash of the image either: anyone could
+check a guess at the stock pixels against one, and a rendered label can be easy to guess. A recipe
+with image edits pins its output instead:
 
 ```json
 "image_edits": [
@@ -155,7 +160,6 @@ pixel from the owner's file at patch time:
     "offset": 3471680,
     "width": 80,
     "height": 53,
-    "sha256": "<SHA-256 of the whole stock image>",
     "erase": {"x": 30, "y": 19, "width": 19, "height": 14},
     "glyph": {
       "at": {"x": 31, "y": 19, "width": 17, "height": 14},
@@ -164,31 +168,30 @@ pixel from the owner's file at patch time:
     },
     "purpose": "Why the image changes."
   }
-]
+],
+"expected": {
+  "application_sha256": "<SHA-256 of the output application, from precondition>",
+  "upd_sha256": "<SHA-256 of the output update, from precondition>"
+}
 ```
 
 | Field | Meaning |
 | --- | --- |
 | `offset`, `width`, `height` | The image: `width * height` 16-bit little-endian RGB565 pixels, rows `width` pixels apart, at a decoded-application offset. At most 1 MiB. |
-| `sha256` | The precondition: the SHA-256 of the whole stock image. `precondition` prints it for a draft. |
 | `erase` | Optional. Each row of the box is refilled by interpolating between the stock pixels just left and right of it, which removes a label from a smooth background. The box needs a column of the image on each side. |
 | `glyph.at`, `glyph.alpha_hex` | The author's own coverage mask, one hex digit per pixel, row by row: `0` leaves the pixel, `f` paints it fully, and the digits between blend linearly (per channel, in fifteenths, rounded). |
 | `glyph.colour_from` | The stock pixel whose colour the glyph is drawn in, read before anything changes: for a relabelled button, a pixel inside a stroke of the old label. |
 | `purpose` | Why the image changes. |
 
 The rules:
-- An image's precondition window is the **whole image**. Images may not overlap each other or any
-  replacement's window, and across the committed recipes of a release image windows count like
-  replacement windows: they must be disjoint.
-- The stock image must hold at least 16 distinct pixel values and at least 64 pixels that its
-  neighbours do not predict (per channel, the median edge predictor from the left, upper and
-  upper-left pixels misses by more than 1). Fills and shallow gradients fail, and so do
-  two-colour patterns (through the 16-value count): the published hash of such an image could
-  be inverted by trying its few parameters. The intended case is anti-aliased text, such as a
-  pad's label (the BEAT LOOP pad images have 89 to 272 such pixels). Like the window rules, this
-  is a heuristic against accidental leaks, not a proof: a steep ramp, or a regular pattern such
-  as a checkerboard mixing gradients, a dither or a periodic pattern, can pass although it has
-  few parameters, so review the image before its hash is committed.
+- A recipe with image edits must pin `expected.application_sha256` (`expected.upd_sha256` is
+  recommended too). The input and the stock application are pinned by SHA-256, so the image at
+  `offset` is fixed; the output pin then catches an offset changed after the recipe was completed
+  and any change in the pixel arithmetic. It covers the whole application, so it reveals nothing
+  about one image. When it does not match, the refusal cannot say which image differs.
+- Images may not overlap each other or any replacement's window (whose hash would cover the
+  image's pixels), and across the committed recipes of a release they count like replacement
+  windows: they must be disjoint.
 - The glyph mask must be the author's own drawing, never traced from vendor pixels.
 - Images are subject to the protected ranges and the [protected set](#the-protected-set), like
   replacements.
@@ -202,7 +205,7 @@ The rules:
 Before the input is read (`check_recipe_v2`):
 1. The recipe's static checks: fields, hex, order, no overlapping spans, precondition windows of
    at most 4096 bytes, with at least 32 outside the span, that start inside the application and
-   do not overlap each other.
+   do not overlap each other, and an `expected.application_sha256` for a recipe with image edits.
 2. The release is known, and the recipe repeats its id and pins exactly.
 3. The label is higher, and the reported version lower, than the release's own version.
 4. Every precondition window ends inside the application (its length is pinned).
@@ -223,14 +226,12 @@ Then, on the official file:
 2. On the stock application, before anything is replaced, each precondition window matches its
    SHA-256 and passes the [window rules](#precondition-windows), and each span changes its first
    and last bytes and keeps at most half of its stock bytes, fewer than 32 in a row.
-3. Each edited image matches its SHA-256, holds at least 16 distinct pixel values, and has at
-   least 64 pixels its neighbours do not predict.
-4. The modified application differs from stock **only** in the declared spans, the edited image
+3. The modified application differs from stock **only** in the declared spans, the edited image
    rows and the version string (a byte-by-byte check that the rebuild entry point runs for every
    edit).
-5. The rebuild runs its full verification, including the release rule: a modified application
+4. The rebuild runs its full verification, including the release rule: a modified application
    must report a lower version.
-6. The output matches `expected`, when declared.
+5. The output matches `expected`, when declared (always, for a recipe with image edits).
 
 The output is written atomically, is never overwritten, and is read back before it is renamed
 into place.

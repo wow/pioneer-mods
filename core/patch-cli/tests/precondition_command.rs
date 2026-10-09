@@ -116,16 +116,16 @@ fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
         &recipe,
         None,
         committed.path(),
-        "published replacements[0] and draft replacements[0]: precondition windows 0x8e0..0x902 \
-         and 0x8e1..0x903 overlap; windows of recipes for the same release must be disjoint",
+        "published replacements[0] and draft replacements[0]: windows 0x8e0..0x902 and \
+         0x8e1..0x903 overlap; windows of recipes for the same release must be disjoint",
     );
     recipe["replacements"] = json!([draft_replacement(0x900, 32, 0)]);
     assert_refused_with(
         &recipe,
         None,
         committed.path(),
-        "draft replacements[0] and published replacements[0]: precondition windows 0x8e0..0x902 \
-         and 0x8e0..0x902 overlap",
+        "draft replacements[0] and published replacements[0]: windows 0x8e0..0x902 and \
+         0x8e0..0x902 overlap",
     );
 
     // Disjoint: the command goes on to the (missing) input.

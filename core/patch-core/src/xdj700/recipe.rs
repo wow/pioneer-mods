@@ -7,14 +7,14 @@
 //! the application and out of the release's protected ranges. On the stock application, before
 //! anything changes, each precondition window (defined relative to its offset, so a wrong offset
 //! moves the window) must match its declared SHA-256, and the recipe must not reveal the stock
-//! bytes in it (the `precondition` module); each edited image must match its SHA-256 and be
-//! unpredictable enough for its hash to be published (the `image_edit` module). The output
-//! application may differ from stock only in the declared replacements, the edited image rows and
-//! the version string (checked by the rebuild entry point), the rebuild then runs its own
+//! bytes in it (the `precondition` module). An edited image has no hash of its own (the
+//! `image_edit` module): a recipe with image edits must pin its output application instead. The
+//! output application may differ from stock only in the declared replacements, the edited image
+//! rows and the version string (checked by the rebuild entry point), the rebuild then runs its own
 //! verification (including the version rule), and any declared output identities must match.
 
 use super::app_version::VERSION_TEXT_LEN;
-use super::image_edit::{apply_image_edit, checked_image};
+use super::image_edit::{apply_image_edit, image_range};
 use super::is_label_higher;
 use super::precondition::{DeclaredHash, checked_window};
 use super::rebuild::{RebuiltUpdate, rebuild_with_edited_stock_application};
@@ -122,10 +122,10 @@ pub fn recipe_target(id: &str) -> Option<&'static RecipeTarget<'static>> {
     RECIPE_TARGETS.iter().find(|target| target.id == id)
 }
 
-/// Every check that needs no firmware: the static recipe checks (image edits included), the release
-/// id and pins, the label and reported-version order, and the bounds and protected ranges of every
-/// replacement, precondition window and edited image. [`apply_recipe_v2_to`] runs it first; front
-/// ends can run it before reading the input.
+/// Every check that needs no firmware: the static recipe checks (image edits and their output pin
+/// included), the release id and pins, the label and reported-version order, and the bounds and
+/// protected ranges of every replacement, precondition window and edited image.
+/// [`apply_recipe_v2_to`] runs it first; front ends can run it before reading the input.
 ///
 /// # Errors
 ///
@@ -214,38 +214,7 @@ pub fn apply_recipe_v2_to(
 ) -> Result<RebuiltUpdate, RecipeError> {
     check_recipe_v2(recipe, target)?;
     checks.run(recipe, target)?;
-    let release = &target.release;
-    let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
-    let rebuilt =
-        rebuild_with_edited_stock_application(input, release, &recipe.label, |decoded| {
-            // Every precondition is checked on the stock application before anything changes.
-            for (index, replacement) in recipe.replacements.iter().enumerate() {
-                checked_window(index, replacement, decoded, DeclaredHash::Compare)?;
-            }
-            let mut images = Vec::with_capacity(recipe.image_edits.len());
-            for (index, edit) in recipe.image_edits.iter().enumerate() {
-                images.push(checked_image(index, edit, decoded, DeclaredHash::Compare)?);
-            }
-            // The version string, then every replaced span, then every edited image row.
-            let mut declared = Vec::with_capacity(recipe.replacements.len() + 1);
-            declared.push(block.text_range());
-            for replacement in &recipe.replacements {
-                // Inside its precondition window, which is inside the application.
-                let start = usize::try_from(replacement.offset).expect("inside the window");
-                let bytes = replacement.bytes().expect("validated hex");
-                let span = start..start + bytes.len();
-                decoded[span.clone()].copy_from_slice(&bytes);
-                declared.push(span);
-            }
-            // Images are clear of the replacements' windows and of each other (`validate`), so
-            // each still holds its stock pixels here.
-            for (edit, image) in recipe.image_edits.iter().zip(images) {
-                declared.extend(apply_image_edit(edit, image, decoded));
-            }
-            block.set_reported_version(decoded, &recipe.reported_version)?;
-            Ok::<_, RecipeError>(declared)
-        })?;
-
+    let rebuilt = rebuild_recipe(recipe, target, input, DeclaredHash::Compare)?;
     if let Some(expected) = &recipe.expected {
         let pairs = [
             (
@@ -267,5 +236,49 @@ pub fn apply_recipe_v2_to(
             }
         }
     }
+    Ok(rebuilt)
+}
+
+/// Rebuilds `input` with the changes of `recipe`, which has passed [`check_recipe_v2`] and the
+/// caller's checks. `declared` says whether each replacement window is compared with its declared
+/// hash ([`DeclaredHash::Ignore`] for a draft, whose output identities
+/// [`super::precondition_hashes`] computes). The declared output identities are not compared here.
+pub(super) fn rebuild_recipe(
+    recipe: &RecipeV2,
+    target: &RecipeTarget<'_>,
+    input: &[u8],
+    declared: DeclaredHash,
+) -> Result<RebuiltUpdate, RecipeError> {
+    let release = &target.release;
+    let block = release.version_block.ok_or(RebuildError::NoVersionBlock)?;
+    let rebuilt =
+        rebuild_with_edited_stock_application(input, release, &recipe.label, |decoded| {
+            // Every window is checked on the stock application before anything changes.
+            for (index, replacement) in recipe.replacements.iter().enumerate() {
+                checked_window(index, replacement, decoded, declared)?;
+            }
+            let mut images = Vec::with_capacity(recipe.image_edits.len());
+            for (index, edit) in recipe.image_edits.iter().enumerate() {
+                images.push(image_range(index, edit, decoded.len())?);
+            }
+            // The version string, then every replaced span, then every edited image row.
+            let mut changed = Vec::with_capacity(recipe.replacements.len() + 1);
+            changed.push(block.text_range());
+            for replacement in &recipe.replacements {
+                // Inside its precondition window, which is inside the application.
+                let start = usize::try_from(replacement.offset).expect("inside the window");
+                let bytes = replacement.bytes().expect("validated hex");
+                let span = start..start + bytes.len();
+                decoded[span.clone()].copy_from_slice(&bytes);
+                changed.push(span);
+            }
+            // Images are clear of the replacements' windows and of each other (`validate`), so
+            // each still holds its stock pixels here.
+            for (edit, image) in recipe.image_edits.iter().zip(images) {
+                changed.extend(apply_image_edit(edit, image, decoded));
+            }
+            block.set_reported_version(decoded, &recipe.reported_version)?;
+            Ok::<_, RecipeError>(changed)
+        })?;
     Ok(rebuilt)
 }

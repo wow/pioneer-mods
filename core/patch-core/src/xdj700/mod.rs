@@ -26,7 +26,7 @@ mod stock;
 pub use app_version::{VERSION_STRING_OFFSET, reported_version, reported_version_at};
 pub use grid::RECORD_DATA_LEN;
 pub use label::{OFFICIAL_V115_LABEL, is_label_higher, validate_version_label};
-pub use precondition::{PreconditionHashes, precondition_hashes};
+pub use precondition::{OutputIdentities, PreconditionHashes, precondition_hashes};
 pub use protected_set::{ProtectedSet, ProtectedSetError, check_recipe_against_protected_set};
 pub use rebuild::{
     RebuiltUpdate, rebuild_with_application, rebuild_with_edited_stock_application,
