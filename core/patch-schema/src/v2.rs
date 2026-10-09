@@ -13,7 +13,9 @@
 //! span are predictable, and spans that would copy stock bytes into `bytes_hex`. These checks
 //! guard against accidental leaks; they are heuristics, so windows belong over code, not strings
 //! or tables, and review is the backstop.
-//! Only the project's own replacement bytes are written. Image edits ([`crate::image`]) change
+//! Only the project's own replacement bytes are written; a `--` in `bytes_hex` keeps the stock
+//! byte at that place without publishing it, so changes a few bytes apart (fields of a table) fit
+//! one span. Image edits ([`crate::image`]) change
 //! RGB565 images without publishing any stock pixel or any hash of one; a recipe with image edits
 //! must pin its output instead (`expected.application_sha256`). The static checks here need no
 //! firmware; the release-specific rules (protected ranges, label and reported-version order,
@@ -79,7 +81,9 @@ pub struct TargetV2 {
 pub struct Replacement {
     /// Decoded-application offset of the first replaced byte.
     pub offset: u64,
-    /// The replacement bytes, as lowercase or uppercase hex; its length is the span length.
+    /// The replacement bytes, as lowercase or uppercase hex; its length is the span length. A `--`
+    /// in place of a byte keeps the stock byte there (it is not published); the first and last
+    /// bytes must be written.
     pub bytes_hex: String,
     /// What the stock application must hold around the span before anything is replaced.
     pub precondition: Precondition,
@@ -111,9 +115,11 @@ impl Replacement {
         self.len() == 0
     }
 
-    /// The replacement bytes, or `None` unless `bytes_hex` is valid, non-empty hex.
-    pub fn bytes(&self) -> Option<Vec<u8>> {
-        decode_hex(&self.bytes_hex)
+    /// The span byte by byte: `Some(byte)` to write, `None` where `bytes_hex` holds `--` and the
+    /// stock byte is kept. `None` unless `bytes_hex` is non-empty, has an even length, holds hex
+    /// digit pairs or `--`, and writes its first and last bytes.
+    pub fn pattern(&self) -> Option<Vec<Option<u8>>> {
+        decode_pattern(&self.bytes_hex)
     }
 
     /// The precondition window `offset - before .. offset + len + after`, or `None` if it would
@@ -153,7 +159,10 @@ pub enum RecipeV2Error {
     InvalidLabel(String),
     #[error("reported_version {0:?} is not of the form X.YY")]
     InvalidReportedVersion(String),
-    #[error("replacements[{index}].bytes_hex must be non-empty hex with an even length")]
+    #[error(
+        "replacements[{index}].bytes_hex must be pairs of hex digits, or `--` to keep a stock \
+         byte, and write its first and last bytes"
+    )]
     InvalidReplacementBytes { index: usize },
     #[error("replacements[{index}].purpose must not be empty")]
     EmptyPurpose { index: usize },
@@ -222,7 +231,7 @@ impl RecipeV2 {
                 &format!("replacements[{index}].precondition.sha256"),
                 &precondition.sha256,
             )?;
-            if replacement.bytes().is_none() {
+            if replacement.pattern().is_none() {
                 return Err(RecipeV2Error::InvalidReplacementBytes { index });
             }
             if replacement.purpose.trim().is_empty() {
@@ -347,15 +356,21 @@ fn is_bare_version(value: &str) -> bool {
     bare_version_number(value).is_some()
 }
 
-fn decode_hex(hex: &str) -> Option<Vec<u8>> {
+fn decode_pattern(hex: &str) -> Option<Vec<Option<u8>>> {
     if hex.is_empty() || !hex.len().is_multiple_of(2) {
         return None;
     }
-    hex.as_bytes()
+    let pattern: Vec<Option<u8>> = hex
+        .as_bytes()
         .chunks(2)
         .map(|pair| {
+            if pair == b"--" {
+                return Some(None);
+            }
             let digit = |byte: u8| (byte as char).to_digit(16);
-            Some((digit(pair[0])? * 16 + digit(pair[1])?) as u8)
+            Some(Some((digit(pair[0])? * 16 + digit(pair[1])?) as u8))
         })
-        .collect()
+        .collect::<Option<_>>()?;
+    let written = |byte: Option<&Option<u8>>| byte.is_some_and(Option::is_some);
+    (written(pattern.first()) && written(pattern.last())).then_some(pattern)
 }

@@ -45,7 +45,7 @@ updater installs. Read [xdj700-flashing.md](./xdj700-flashing.md) before you fla
 | `reported_version` | The version the modified application reports, `X.YY`. It must be **lower** than the release's own version, so that the official update restores stock. |
 | `replacements` | Same-length replacements in the decoded application, in ascending order and not overlapping. May be empty. |
 | `precondition` | The stock bytes around the span, `before` it and `after` it (`before + after` at least 32, the window at most 4096 bytes), identified by their SHA-256. The window moves with `offset`, so a mistyped offset fails the check. See [Precondition windows](#precondition-windows). |
-| `bytes_hex` | The project's own replacement bytes. Their length is the span length. The first and last must differ from stock, and at most half may equal it, fewer than 32 in a row: split the span around unchanged bytes. |
+| `bytes_hex` | The project's own replacement bytes. Their length is the span length. `--` in place of a byte keeps the stock byte there without publishing it, for changes a few bytes apart, such as fields of one table. The first and last bytes must be written and differ from stock, and of the written bytes at most half may equal stock, fewer than 32 in a row: keep them with `--` or split the span around them. |
 | `purpose` | Required. A reviewer must be able to tell what each span changes. |
 | `expected` | The output's identities: `application_sha256` (the decoded application) and `upd_sha256` (the update). Optional for a recipe without image edits; a recipe with [image edits](#image-edits) must pin `application_sha256` (a draft uses a placeholder and copies the value `precondition` prints). Every committed recipe pins both. |
 
@@ -65,9 +65,12 @@ unless the bytes are predictable or other hashes overlap them. So:
   bytes do not count: they may follow from the replacement (a flipped bit, a changed condition).
 - Among the bytes outside the span, the four most common values may fill at most half (this
   refuses padding, fill, and two-valued or 16-bit data).
-- A span changes its first and last bytes and keeps at most half of its stock bytes, fewer than
-  32 in a row, because `bytes_hex` publishes them. Split a longer unchanged stretch into two
-  spans, where it can be window bytes instead.
+- A span changes its first and last bytes, and of the bytes it writes at most half may equal
+  stock, fewer than 32 in a row, because `bytes_hex` publishes them. A kept byte (`--`) is not
+  published and does not count. Mark unchanged bytes inside a span with `--`, or split a longer
+  unchanged stretch into two spans, where it can be window bytes instead. Kept bytes are still
+  covered by the window's hash, but like the span's other bytes they do not count towards the
+  32 window bytes outside the span.
 - A precondition mismatch does not print the window's actual hash, which might be one of the
   windows these rules refuse.
 
@@ -228,7 +231,8 @@ Then, on the official file:
 1. The input is pinned by length (checked before reading) and by SHA-256.
 2. On the stock application, before anything is replaced, each precondition window matches its
    SHA-256 and passes the [window rules](#precondition-windows), and each span changes its first
-   and last bytes and keeps at most half of its stock bytes, fewer than 32 in a row.
+   and last bytes and, of the bytes it writes, at most half equal stock, fewer than 32 in a row.
+   Kept bytes (`--`) stay stock.
 3. The modified application differs from stock **only** in the declared spans, the edited image
    rows and the version string (a byte-by-byte check that the rebuild entry point runs for every
    edit).

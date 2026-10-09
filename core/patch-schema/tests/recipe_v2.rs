@@ -54,7 +54,10 @@ fn a_well_formed_recipe_validates() {
     let recipe = recipe();
 
     assert_eq!(recipe.validate(), Ok(()));
-    assert_eq!(recipe.replacements[0].bytes(), Some(vec![0xde, 0xad]));
+    assert_eq!(
+        recipe.replacements[0].pattern(),
+        Some(vec![Some(0xde), Some(0xad)])
+    );
     assert_eq!(recipe.replacements[0].len(), 2);
     let probe: SchemaVersionProbe = serde_json::from_value(recipe_json()).expect("probe");
     assert_eq!(probe.schema_version, 2);
@@ -135,6 +138,25 @@ fn identity_and_version_fields_are_checked() {
         let mut recipe = recipe();
         mutate(&mut recipe);
         assert_eq!(recipe.validate(), Err(error));
+    }
+}
+
+#[test]
+fn kept_bytes_are_parsed_and_edges_must_be_written() {
+    let mut recipe = recipe();
+    recipe.replacements = vec![replacement(0x800, "de--AD")];
+    assert_eq!(recipe.validate(), Ok(()));
+    assert_eq!(
+        recipe.replacements[0].pattern(),
+        Some(vec![Some(0xde), None, Some(0xad)])
+    );
+    for bytes_hex in ["--ad", "de--", "--", "----", "de-d", "d--e", "de-"] {
+        recipe.replacements = vec![replacement(0x800, bytes_hex)];
+        assert_eq!(
+            recipe.validate(),
+            Err(RecipeV2Error::InvalidReplacementBytes { index: 0 }),
+            "{bytes_hex:?}"
+        );
     }
 }
 

@@ -262,12 +262,16 @@ pub(super) fn rebuild_recipe(
             let mut changed = Vec::with_capacity(recipe.replacements.len() + 1);
             changed.push(block.text_range());
             for replacement in &recipe.replacements {
-                // Inside its precondition window, which is inside the application.
+                // Inside its precondition window, which is inside the application. A kept (`--`)
+                // byte stays stock.
                 let start = usize::try_from(replacement.offset).expect("inside the window");
-                let bytes = replacement.bytes().expect("validated hex");
-                let span = start..start + bytes.len();
-                decoded[span.clone()].copy_from_slice(&bytes);
-                changed.push(span);
+                let pattern = replacement.pattern().expect("validated pattern");
+                for (at, byte) in (start..).zip(&pattern) {
+                    if let Some(byte) = byte {
+                        decoded[at] = *byte;
+                    }
+                }
+                changed.push(start..start + pattern.len());
             }
             // Images are clear of the replacements' windows and of each other (`validate`), so
             // each still holds its stock pixels here.

@@ -7,6 +7,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- Kept bytes in schema-v2 replacements: `--` in `bytes_hex` keeps the stock byte at that place
+  and does not publish it (`Replacement::pattern`, which replaces `Replacement::bytes`). A span
+  must still write its first and last bytes; the leak rule now counts only written bytes (at
+  most half equal to stock, fewer than 32 in a row), so changes a few bytes apart, such as the
+  fields of one table, fit one span without publishing the stock bytes between them. Kept bytes
+  stay inside the precondition window and its hash.
 - Image edits in schema-v2 recipes (`image_edits`, `patch_schema::ImageEdit`): changes to a 16-bit
   RGB565 image stored in the decoded application that publish no stock pixel and no hash of one
   (anyone could check a guess at the pixels against it). An edit names the image (offset, width,
