@@ -24,7 +24,7 @@ impl RecipeChecks<'static> {
 }
 
 impl RecipeChecks<'_> {
-    /// Runs the added checks on a recipe that passed [`check_recipe_v2`].
+    /// Runs the added checks on a recipe that passed [`check_recipe_v2`](super::check_recipe_v2).
     pub(super) fn run(
         &self,
         recipe: &RecipeV2,
