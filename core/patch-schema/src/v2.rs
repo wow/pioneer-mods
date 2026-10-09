@@ -13,10 +13,14 @@
 //! span are predictable, and spans that would copy stock bytes into `bytes_hex`. These checks
 //! guard against accidental leaks; they are heuristics, so windows belong over code, not strings
 //! or tables, and review is the backstop.
-//! Only the project's own replacement bytes are written. The static checks here need no
+//! Only the project's own replacement bytes are written. Image edits ([`crate::image`]) change
+//! RGB565 images without publishing any stock pixel: their precondition window is the whole
+//! image. The static checks here need no
 //! firmware; the release-specific rules (protected ranges, label and reported-version order,
 //! preconditions) are enforced by the engine in `patch-core`.
 
+use crate::image::{ImageEdit, ImageEditError};
+use crate::windows::WindowOwner;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -47,6 +51,10 @@ pub struct RecipeV2 {
     /// Same-length replacements in the decoded application, in ascending, non-overlapping order.
     #[serde(default)]
     pub replacements: Vec<Replacement>,
+    /// Edits to RGB565 images in the decoded application, in ascending, non-overlapping order,
+    /// clear of the replacements' windows ([`ImageEdit`]).
+    #[serde(default)]
+    pub image_edits: Vec<ImageEdit>,
     /// Identities the output must have, when declared.
     #[serde(default)]
     pub expected: Option<ExpectedV2>,
@@ -169,6 +177,8 @@ pub enum RecipeV2Error {
     OverlappingPreconditions { index: usize, previous: usize },
     #[error("expected must pin at least one identity when present")]
     EmptyExpected,
+    #[error(transparent)]
+    ImageEdit(#[from] ImageEditError),
 }
 
 impl RecipeV2 {
@@ -239,6 +249,7 @@ impl RecipeV2 {
             }
             previous_window_end = Some((index, window.end));
         }
+        self.validate_image_edits()?;
         if let Some(expected) = &self.expected {
             if expected.application_sha256.is_none() && expected.upd_sha256.is_none() {
                 return Err(RecipeV2Error::EmptyExpected);
@@ -248,6 +259,39 @@ impl RecipeV2 {
             }
             if let Some(sha256) = &expected.upd_sha256 {
                 check_sha256("expected.upd_sha256", sha256)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Each image edit's own checks and their order, then their distance from the replacements'
+    /// windows. Within each kind the windows are disjoint, so in the list of all windows sorted
+    /// by start, an image that overlaps a replacement's window overlaps its neighbour.
+    fn validate_image_edits(&self) -> Result<(), RecipeV2Error> {
+        let mut previous_end: Option<(usize, u64)> = None;
+        for (index, edit) in self.image_edits.iter().enumerate() {
+            check_sha256(&format!("image_edits[{index}].sha256"), &edit.sha256)?;
+            edit.validate(index)?;
+            let window = edit.window().expect("validated");
+            if let Some((previous, end)) = previous_end
+                && window.start < end
+            {
+                return Err(ImageEditError::UnorderedOrOverlapping { index, previous }.into());
+            }
+            previous_end = Some((index, window.end));
+        }
+        let mut windows = self.windows();
+        windows.sort_by_key(|labelled| (labelled.window.start, labelled.window.end));
+        for pair in windows.windows(2) {
+            let (first, next) = (&pair[0], &pair[1]);
+            if next.window.start >= first.window.end {
+                continue;
+            }
+            if let (WindowOwner::ImageEdit(index), WindowOwner::Replacement(replacement))
+            | (WindowOwner::Replacement(replacement), WindowOwner::ImageEdit(index)) =
+                (first.owner, next.owner)
+            {
+                return Err(ImageEditError::OverlapsReplacement { index, replacement }.into());
             }
         }
         Ok(())

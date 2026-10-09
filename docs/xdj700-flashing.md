@@ -270,15 +270,15 @@ compressed, so a flash offset does not map to a run-time address.
     purpose. The maintainer checks the committed recipes against it (`docs/recipes.md`, "The
     protected set");
   - **the set covers code, not the data that code reads.** Every recipe must also show, *in
-    emulation*, that the bytes its replacements change are not read during a normal boot, an
-    update-mode boot, or a complete update in either rehearsal direction (code bytes included:
-    a self-check or a shared constant would read them). The version block is outside this
-    rule: it changes only through `reported_version`, and the updater reads it by design. For
-    stage 5 the replaced byte was written once, by the loader while unpacking the application,
-    and never read in a normal boot to the main screen, in an update-mode boot, or while stage
-    5 was installed over stock or official v1.15 over stage 5. Touching BEAT LOOP 16 on the
-    PERFORM screen then read it (one instruction, 40 reads), which shows that the watch sees
-    such reads, and the emulated loop spanned 32 beats, as on the owner's unit;
+    emulation*, that the bytes it changes (replacement spans and edited images) are not read during
+    a normal boot, an update-mode boot, or a complete update in either rehearsal direction (code
+    bytes included: a self-check or a shared constant would read them). The version block is outside
+    this rule: it changes only through `reported_version`, and the updater reads it by design. For
+    stage 5 the replaced byte was written once, by the loader while unpacking the application, and
+    never read in a normal boot to the main screen, in an update-mode boot, or while stage 5 was
+    installed over stock or official v1.15 over stage 5. Touching BEAT LOOP 16 on the PERFORM screen
+    then read it (one instruction, 40 reads), which shows that the watch sees such reads, and the
+    emulated loop spanned 32 beats, as on the owner's unit;
   - **rehearse every new stage file in emulation before it is offered.** The rehearsal builds
     a flash from the file the unit runs, installs the new file through the application's own
     update mode, and checks that the flash then holds the new file's MAIN records exactly,

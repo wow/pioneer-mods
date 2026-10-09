@@ -1,7 +1,7 @@
 //! The protected set: code that runs at start-up or in the update path, measured in emulation and
-//! kept outside this repository (`docs/xdj700-flashing.md`, section 5). A recipe whose span or
-//! precondition window overlaps it is refused, so the rule is checked by the tool and not only by
-//! hand.
+//! kept outside this repository (`docs/xdj700-flashing.md`, section 5). A recipe whose span,
+//! precondition window or edited image overlaps it is refused, so the rule is checked by the tool
+//! and not only by hand.
 //!
 //! The set is a text file for one release, one range per line:
 //!
@@ -24,7 +24,7 @@
 //! ignored. A set without ranges is refused, so a wrong file cannot pass silently.
 
 use super::recipe::{RecipeError, RecipeTarget};
-use patch_schema::RecipeV2;
+use patch_schema::{RecipeV2, WindowOwner};
 use std::ops::Range;
 use thiserror::Error;
 
@@ -255,7 +255,8 @@ fn parse_hex(line: usize, field: &'static str, value: &str) -> Result<u64, Prote
 }
 
 /// Refuses `recipe` if `set` was measured on another release, if the version string every rebuild
-/// writes lies in `set`, or if a replacement's span or precondition window overlaps it. Run it
+/// writes lies in `set`, or if a replacement's span or precondition window, or an edited image,
+/// overlaps it. Run it
 /// after [`check_recipe_v2`](super::check_recipe_v2), which bounds every window; like it, it needs
 /// no firmware. The recipe entry points run it when their [`RecipeChecks`](super::RecipeChecks)
 /// carry a set.
@@ -263,8 +264,8 @@ fn parse_hex(line: usize, field: &'static str, value: &str) -> Result<u64, Prote
 /// # Errors
 ///
 /// [`RecipeError::ProtectedSetRelease`], [`RecipeError::ProtectedSetVersion`],
-/// [`RecipeError::ProtectedSet`] for the first overlap, or a window error from a recipe that has
-/// not passed `check_recipe_v2`.
+/// [`RecipeError::ProtectedSet`] or [`RecipeError::ImageProtectedSet`] for the first overlap, or a
+/// window error from a recipe that has not passed `check_recipe_v2`.
 pub fn check_recipe_against_protected_set(
     recipe: &RecipeV2,
     target: &RecipeTarget<'_>,
@@ -290,13 +291,25 @@ pub fn check_recipe_against_protected_set(
         }
     }
     super::recipe_checks::check_ranges(recipe, target, set.ranges(), |found| {
-        RecipeError::ProtectedSet {
-            index: found.index,
-            what: found.what,
-            start: runtime(found.start),
-            last: runtime(found.end - 1),
-            set_start: runtime(found.protected.start as u64),
-            set_last: runtime(found.protected.end as u64 - 1),
+        let (start, last) = (runtime(found.start), runtime(found.end - 1));
+        let set_start = runtime(found.protected.start as u64);
+        let set_last = runtime(found.protected.end as u64 - 1);
+        match found.owner {
+            WindowOwner::Replacement(index) => RecipeError::ProtectedSet {
+                index,
+                what: found.what,
+                start,
+                last,
+                set_start,
+                set_last,
+            },
+            WindowOwner::ImageEdit(index) => RecipeError::ImageProtectedSet {
+                index,
+                start,
+                last,
+                set_start,
+                set_last,
+            },
         }
     })
 }

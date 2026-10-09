@@ -3,25 +3,27 @@
 //!
 //! Before the input is read, the recipe must pass its static checks, name a known release whose
 //! pins it repeats exactly, declare a label higher and a reported version lower than the release's
-//! own version, and keep every replacement and its precondition window inside the application and
-//! out of the release's protected ranges. On the stock application, before anything changes, each
-//! precondition window (defined relative to its offset, so a wrong offset moves the window) must
-//! match its declared SHA-256, and the recipe must not reveal the stock bytes in it (the
-//! `precondition` module). The output application may differ from stock only in the declared
-//! replacements and the version string (checked by the rebuild entry point), the rebuild then runs
-//! its own verification (including the version rule), and any declared output identities must
-//! match.
+//! own version, and keep every replacement, its precondition window and every edited image inside
+//! the application and out of the release's protected ranges. On the stock application, before
+//! anything changes, each precondition window (defined relative to its offset, so a wrong offset
+//! moves the window) must match its declared SHA-256, and the recipe must not reveal the stock
+//! bytes in it (the `precondition` module); each edited image must match its SHA-256 and be
+//! unpredictable enough for its hash to be published (the `image_edit` module). The output
+//! application may differ from stock only in the declared replacements, the edited image rows and
+//! the version string (checked by the rebuild entry point), the rebuild then runs its own
+//! verification (including the version rule), and any declared output identities must match.
 
 use super::app_version::VERSION_TEXT_LEN;
+use super::image_edit::{apply_image_edit, checked_image};
 use super::is_label_higher;
 use super::precondition::{DeclaredHash, checked_window};
 use super::rebuild::{RebuiltUpdate, rebuild_with_edited_stock_application};
 use super::recipe_checks::{RecipeChecks, check_ranges};
+pub use super::recipe_error::RecipeError;
 use super::release::{OFFICIAL_V115, StockRelease};
 use crate::error::RebuildError;
-use patch_schema::{MIN_PRECONDITION_LEN, RecipeV2, RecipeV2Error};
+use patch_schema::{RecipeV2, WindowOwner};
 use std::ops::Range;
-use thiserror::Error;
 
 /// A release recipes may target: its identifier, its pins, the length of its stock decoded
 /// application, and the decoded-application ranges no replacement or precondition may touch.
@@ -41,8 +43,9 @@ pub struct RecipeTarget<'a> {
     /// `load_address + o`. A protected set ([`ProtectedSet`](super::ProtectedSet)) uses run-time
     /// addresses.
     pub load_address: u64,
-    /// Ranges of the decoded application that replacements and their precondition windows may
-    /// not overlap (they hold known strings, which would make a window's hash invertible).
+    /// Ranges of the decoded application that replacements, their precondition windows and edited
+    /// images may not overlap (they hold known strings, which would make a window's hash
+    /// invertible).
     pub protected: &'a [Range<usize>],
 }
 
@@ -90,131 +93,6 @@ const _: () = {
     }
 };
 
-/// Why a recipe was not applied.
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum RecipeError {
-    #[error("recipe is invalid: {0}")]
-    Invalid(#[from] RecipeV2Error),
-
-    #[error("unknown release {release:?}; known: {known}")]
-    UnknownRelease { release: String, known: String },
-
-    #[error("{field} is {recipe}, but release {release} pins {pinned}")]
-    TargetMismatch {
-        field: &'static str,
-        release: String,
-        recipe: String,
-        pinned: String,
-    },
-
-    #[error(
-        "label {label} is not higher than the release's own version {stock}; the updater would \
-         skip it"
-    )]
-    LabelNotHigher { label: String, stock: String },
-
-    #[error(
-        "replacements[{index}] {what} at {start:#x}..{end:#x} overlaps protected range \
-         {protected_start:#x}..{protected_end:#x}"
-    )]
-    Protected {
-        index: usize,
-        what: &'static str,
-        start: u64,
-        end: u64,
-        protected_start: usize,
-        protected_end: usize,
-    },
-
-    /// Run-time addresses, inclusive and zero-padded to eight digits, as in the set's file.
-    #[error(
-        "replacements[{index}] {what} at run-time {start:#010x}..={last:#010x} overlaps the \
-         protected set's range {set_start:#010x}..={set_last:#010x}: code that runs at start-up \
-         or in the update path (docs/xdj700-flashing.md, section 5)"
-    )]
-    ProtectedSet {
-        index: usize,
-        what: &'static str,
-        start: u64,
-        last: u64,
-        set_start: u64,
-        set_last: u64,
-    },
-
-    #[error(
-        "the protected set was measured on release {set}, not {target}; code moves between \
-         releases"
-    )]
-    ProtectedSetRelease { set: String, target: String },
-
-    /// Every rebuild writes the version string, so a set that covers it refuses every recipe.
-    #[error(
-        "the version string every rebuild writes, run-time {start:#010x}..={last:#010x}, lies in \
-         the protected set's range {set_start:#010x}..={set_last:#010x}; check the set"
-    )]
-    ProtectedSetVersion {
-        start: u64,
-        last: u64,
-        set_start: u64,
-        set_last: u64,
-    },
-
-    #[error(
-        "replacements[{index}].precondition ends at {end:#x}, past the application's end at \
-         {len:#x}"
-    )]
-    OutOfBounds { index: usize, end: u64, len: usize },
-
-    #[error(
-        "replacements[{index}]: the {top} most common byte values fill {count} of the {len} \
-         precondition window bytes around the span; a window that predictable could be inverted \
-         to recover the rest, so choose a window over code"
-    )]
-    PredictableWindow {
-        index: usize,
-        top: usize,
-        count: usize,
-        len: usize,
-    },
-
-    #[error(
-        "replacements[{index}]: the span's first and last bytes must differ from stock (unchanged \
-         bytes at its edges belong outside the span)"
-    )]
-    UnchangedSpanEdge { index: usize },
-
-    #[error(
-        "replacements[{index}]: {unchanged} of the span's {len} bytes equal stock, {longest_run} \
-         in a row, and bytes_hex would publish them; at most half may, fewer than \
-         {MIN_PRECONDITION_LEN} in a row, so split the span around unchanged bytes"
-    )]
-    UnchangedSpanBytes {
-        index: usize,
-        unchanged: usize,
-        longest_run: usize,
-        len: usize,
-    },
-
-    /// The window's actual hash is not reported: this check cannot see other recipes' windows,
-    /// and an error is easily pasted somewhere public. `patch-cli precondition` computes hashes
-    /// after also checking the committed recipes.
-    #[error(
-        "replacements[{index}]: the precondition window does not have SHA-256 {expected}; the \
-         recipe does not match this application"
-    )]
-    Precondition { index: usize, expected: String },
-
-    #[error("{field} is {actual}, but the recipe expects {expected}")]
-    UnexpectedOutput {
-        field: &'static str,
-        expected: String,
-        actual: String,
-    },
-
-    #[error(transparent)]
-    Rebuild(#[from] RebuildError),
-}
-
 /// Applies `recipe` to `input`, the official update of the release the recipe names.
 ///
 /// # Errors
@@ -244,16 +122,18 @@ pub fn recipe_target(id: &str) -> Option<&'static RecipeTarget<'static>> {
     RECIPE_TARGETS.iter().find(|target| target.id == id)
 }
 
-/// Every check that needs no firmware: the static recipe checks, the release id and pins, the
-/// label and reported-version order, and the bounds and protected ranges of every replacement and
-/// precondition window. [`apply_recipe_v2_to`] runs it first; front ends can run it before reading
-/// the input.
+/// Every check that needs no firmware: the static recipe checks (image edits included), the release
+/// id and pins, the label and reported-version order, and the bounds and protected ranges of every
+/// replacement, precondition window and edited image. [`apply_recipe_v2_to`] runs it first; front
+/// ends can run it before reading the input.
 ///
 /// # Errors
 ///
-/// [`RecipeError::Invalid`], [`RecipeError::TargetMismatch`], [`RecipeError::LabelNotHigher`],
-/// [`RecipeError::OutOfBounds`], [`RecipeError::Protected`], or a [`RecipeError::Rebuild`] for a
-/// release without a version block or a reported version that is not lower.
+/// [`RecipeError::Invalid`] (also for a malformed image edit), [`RecipeError::TargetMismatch`],
+/// [`RecipeError::LabelNotHigher`], [`RecipeError::OutOfBounds`],
+/// [`RecipeError::ImageOutOfBounds`], [`RecipeError::Protected`], [`RecipeError::ImageProtected`],
+/// or a [`RecipeError::Rebuild`] for a release without a version block or a reported version that
+/// is not lower.
 pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(), RecipeError> {
     recipe.validate()?;
     let release = &target.release;
@@ -299,13 +179,22 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
     }
     block.validate_reported_version(&recipe.reported_version)?;
     check_ranges(recipe, target, target.protected, |found| {
-        RecipeError::Protected {
-            index: found.index,
-            what: found.what,
-            start: found.start,
-            end: found.end,
-            protected_start: found.protected.start,
-            protected_end: found.protected.end,
+        match found.owner {
+            WindowOwner::Replacement(index) => RecipeError::Protected {
+                index,
+                what: found.what,
+                start: found.start,
+                end: found.end,
+                protected_start: found.protected.start,
+                protected_end: found.protected.end,
+            },
+            WindowOwner::ImageEdit(index) => RecipeError::ImageProtected {
+                index,
+                start: found.start,
+                end: found.end,
+                protected_start: found.protected.start,
+                protected_end: found.protected.end,
+            },
         }
     })
 }
@@ -333,7 +222,11 @@ pub fn apply_recipe_v2_to(
             for (index, replacement) in recipe.replacements.iter().enumerate() {
                 checked_window(index, replacement, decoded, DeclaredHash::Compare)?;
             }
-            // The version string, then every replaced span.
+            let mut images = Vec::with_capacity(recipe.image_edits.len());
+            for (index, edit) in recipe.image_edits.iter().enumerate() {
+                images.push(checked_image(index, edit, decoded, DeclaredHash::Compare)?);
+            }
+            // The version string, then every replaced span, then every edited image row.
             let mut declared = Vec::with_capacity(recipe.replacements.len() + 1);
             declared.push(block.text_range());
             for replacement in &recipe.replacements {
@@ -343,6 +236,11 @@ pub fn apply_recipe_v2_to(
                 let span = start..start + bytes.len();
                 decoded[span.clone()].copy_from_slice(&bytes);
                 declared.push(span);
+            }
+            // Images are clear of the replacements' windows and of each other (`validate`), so
+            // each still holds its stock pixels here.
+            for (edit, image) in recipe.image_edits.iter().zip(images) {
+                declared.extend(apply_image_edit(edit, image, decoded));
             }
             block.set_reported_version(decoded, &recipe.reported_version)?;
             Ok::<_, RecipeError>(declared)

@@ -189,15 +189,15 @@ fn the_report_line_says_whether_and_where_the_set_was_checked() {
     );
     assert_eq!(
         protected_set_line(&flag, Some(&one)),
-        "protected_set: 1 range; no span or precondition window overlaps it"
+        "protected_set: 1 range; no span, precondition window or edited image overlaps it"
     );
     assert_eq!(
         protected_set_line(&flag, Some(&two)),
-        "protected_set: 2 ranges; no span or precondition window overlaps them"
+        "protected_set: 2 ranges; no span, precondition window or edited image overlaps them"
     );
     assert_eq!(
         protected_set_line(&ProtectedSetSource::Env("set.tsv".into()), Some(&two)),
-        "protected_set: 2 ranges (from XDJ700_PROTECTED_SET); no span or precondition window \
-         overlaps them"
+        "protected_set: 2 ranges (from XDJ700_PROTECTED_SET); no span, precondition window or \
+         edited image overlaps them"
     );
 }

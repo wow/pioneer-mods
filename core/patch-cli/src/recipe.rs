@@ -123,7 +123,7 @@ pub fn protected_set_line(source: &ProtectedSetSource, set: Option<&ProtectedSet
                 .to_owned()
         }
         (source, Some(set)) => format!(
-            "protected_set: {} {}{}; no span or precondition window overlaps {}",
+            "protected_set: {} {}{}; no span, precondition window or edited image overlaps {}",
             set.len(),
             if set.len() == 1 { "range" } else { "ranges" },
             if matches!(source, ProtectedSetSource::Env(_)) {

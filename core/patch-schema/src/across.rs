@@ -1,4 +1,5 @@
-//! Precondition windows across schema-v2 recipes. Within one recipe, windows are disjoint
+//! Precondition windows across schema-v2 recipes, the replacements' and the image edits' (an
+//! image edit's window is its whole image). Within one recipe, windows are disjoint
 //! ([`RecipeV2::validate`]); across recipes for the same release they must be disjoint too.
 //! Windows shifted from recipe to recipe would share all but a few bytes, and each hash would
 //! reveal the difference. Even identical windows are refused: each recipe's rules assume that the
@@ -16,7 +17,8 @@ use thiserror::Error;
      overlap; windows of recipes for the same release must be disjoint"
 )]
 pub struct WindowOverlap {
-    /// `recipe_id replacements[index]` of the window that starts first.
+    /// `recipe_id replacements[index]` or `recipe_id image_edits[index]` of the window that starts
+    /// first.
     pub first: String,
     pub first_window: Range<u64>,
     pub second: String,
@@ -35,11 +37,10 @@ pub fn check_windows_across<'a>(
 ) -> Result<(), WindowOverlap> {
     let mut windows: Vec<(&str, Range<u64>, String)> = Vec::new();
     for recipe in recipes {
-        for (index, replacement) in recipe.replacements.iter().enumerate() {
-            if let Some(window) = replacement.precondition_window() {
-                let name = format!("{} replacements[{index}]", recipe.recipe_id);
-                windows.push((&recipe.target.release, window, name));
-            }
+        // An image edit's precondition window is its whole image.
+        for labelled in recipe.windows() {
+            let name = format!("{} {}", recipe.recipe_id, labelled.owner);
+            windows.push((&recipe.target.release, labelled.window, name));
         }
     }
     windows.sort_by(|a, b| (a.0, a.1.start, a.1.end).cmp(&(b.0, b.1.start, b.1.end)));

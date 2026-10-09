@@ -78,6 +78,7 @@ impl Fixture {
             label: "Ver1.16".to_owned(),
             reported_version: "0.10".to_owned(),
             replacements,
+            image_edits: Vec::new(),
             expected: None,
         }
     }

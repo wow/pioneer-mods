@@ -31,8 +31,8 @@ pub struct PatchArgs {
 
     /// A protected set: run-time address ranges of the code that runs at start-up or in the update
     /// path, measured in emulation and kept outside the repository (format in docs/recipes.md).
-    /// A schema-v2 recipe whose span or precondition window overlaps it is refused before the
-    /// input is read. Without it, `XDJ700_PROTECTED_SET` names the file.
+    /// A schema-v2 recipe whose span, precondition window or edited image overlaps it is refused
+    /// before the input is read. Without it, `XDJ700_PROTECTED_SET` names the file.
     #[arg(long, conflicts_with = "no_protected_set")]
     pub protected_set: Option<PathBuf>,
 
@@ -97,6 +97,7 @@ fn patch_v2(args: &PatchArgs, raw: &[u8]) -> Result<()> {
     println!("input_file: {}", firmware_file_name(&args.input));
     println!("input_sha256_hex: {}", target.release.upd_sha256);
     println!("replacements: {}", recipe.replacements.len());
+    println!("image_edits: {}", recipe.image_edits.len());
     println!(
         "application_reported_version: {}",
         rebuilt.application_reported_version().unwrap_or("none")

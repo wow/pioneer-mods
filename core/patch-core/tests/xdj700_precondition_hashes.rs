@@ -5,7 +5,7 @@ mod common;
 
 use common::recipe::{Fixture, PADDING, replacement, stock_application, windowed};
 use patch_core::RebuildError;
-use patch_core::xdj700::{RecipeChecks, RecipeError, precondition_hashes};
+use patch_core::xdj700::{PreconditionHashes, RecipeChecks, RecipeError, precondition_hashes};
 use patch_schema::Replacement;
 
 const PLACEHOLDER: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -34,8 +34,9 @@ fn hashes_every_window_of_a_draft_and_the_completed_recipe_applies() {
         .iter()
         .map(|replacement| replacement.precondition.sha256.as_str())
         .collect();
-    assert_eq!(hashes, expected);
-    for (replacement, sha256) in recipe.replacements.iter_mut().zip(hashes) {
+    assert_eq!(hashes.replacements, expected);
+    assert!(hashes.image_edits.is_empty());
+    for (replacement, sha256) in recipe.replacements.iter_mut().zip(hashes.replacements) {
         replacement.precondition.sha256 = sha256;
     }
     assert!(fixture.apply(&recipe).is_ok());
@@ -52,7 +53,13 @@ fn hashes_nothing_for_a_recipe_without_replacements() {
         RecipeChecks::NONE,
     );
 
-    assert_eq!(hashes, Ok(vec![]));
+    assert_eq!(
+        hashes,
+        Ok(PreconditionHashes {
+            replacements: vec![],
+            image_edits: vec![]
+        })
+    );
 }
 
 #[test]
