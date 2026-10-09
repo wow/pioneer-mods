@@ -228,7 +228,8 @@ observed.**
   panel link are running. Everything that runs before that branch is the code the next bullet
   is about.
 - **The unprotected case:** an application whose checksum is valid but which crashes or hangs
-  before its update mode starts cannot be recovered by software.
+  before its update mode starts, or whose update mode can no longer complete an update, cannot
+  be recovered by software (the fallback updater starts only on a bad checksum).
   - *Observed:* the stage-1b and stage-3 files did not cause this. On one owner's unit stage 1b
     was accepted and stage 3 was visibly written (UTILITY changed to `0.10`); the unit booted
     normally each time, and its update mode still worked (stage 4). Stage 3's application differs
@@ -250,9 +251,11 @@ observed.**
     outside it; both committed recipes do. A check in `patch-cli` is planned; until then the
     maintainer checks it by hand before a recipe is committed, since the set is kept outside
     this repository;
-  - **the set covers code, not the data that code reads.** A recipe that changes a table or a
-    constant must also show, in emulation, that its replaced bytes are not read during a normal
-    boot or an update-mode boot. For stage 5 the replaced byte was written once, by the loader
+  - **the set covers code, not the data that code reads.** Every recipe must also show, in
+    emulation, that the bytes its replacements change are not read during a normal boot or an
+    update-mode boot (code bytes included: a self-check or a shared constant would read them).
+    The version block is outside this rule: it changes only through `reported_version`, and the
+    updater reads it by design. For stage 5 the replaced byte was written once, by the loader
     while unpacking the application, and never read in a normal boot to the main screen or in
     an update-mode boot. Touching BEAT LOOP 16 on the PERFORM screen then read it (one
     instruction, 40 reads), which shows that the watch sees such reads, and the emulated loop

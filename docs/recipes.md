@@ -174,8 +174,8 @@ into place.
   works, cannot be recovered by software (flashing guide, section 5). In emulation the decision
   is one branch (`0x08D50D78`). The functions a normal boot runs before it, an update-mode boot
   runs, and two complete updates run are recorded as a set of address ranges (a lower bound:
-  the unit runs code the model does not). A recipe's windows must lie outside it, and bytes it
-  replaces in a table or constant must not be read during a normal or an update-mode boot. The
+  the unit runs code the model does not). A recipe's windows must lie outside it, and the bytes
+  its replacements change must not be read during a normal or an update-mode boot. The
   engine protects only the header. The set is kept outside this repository, so the maintainer
   checks these rules by hand, with an emulator rehearsal of the update and of the restore, and
   by staged hardware testing; a `patch-cli` check is planned.
