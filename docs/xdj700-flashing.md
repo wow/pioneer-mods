@@ -212,14 +212,16 @@ observed.**
   stock no-op stick. Untested in this situation.
 - **Interruptions in the loader region are not covered.** The file carries loader-region
   records, identical to the installed bytes. Whether the updater writes them was unknown; in
-  emulation it does not: a local QEMU model of the board (not part of this repository) boots the
+  emulation it does not: a local emulation of the board (not part of this repository) boots the
   unit's flash through its own loader and runs the application's update mode with a stick. In
   four traced updates (an empty flash, stock to the `Ver1.16` no-op, stock to stage 5, stage 5
   to official v1.15) the updater never erased or wrote the loader region `0x000000`–`0x03FFFF`.
-  Each update erased the 122 application sectors `0x040000`–`0x7DFFFF` and the 8 settings
-  sectors `0x7E0000`–`0x7FFFFF`; a same-version file erased only the settings sectors, the skip
-  section 1 describes. Not verified on hardware, so an interruption while the loader region is
-  written is still treated as uncovered, for official files too. **Never interrupt an update.**
+  From a stock flash, an update erased the application region `0x040000`–`0x7DFFFF` and the
+  settings region `0x7E0000`–`0x7FFFFF`; a same-version file erased only the settings region,
+  the skip section 1 describes. Not verified on hardware, and not tested with a file whose
+  loader region differs from the installed one (the project's files never differ there), so an
+  interruption while the loader region is written is still treated as uncovered, for official
+  files too. **Never interrupt an update.**
 - **No button combination reaches the fallback.** The IN + RELOOP/EXIT update mode belongs to
   the application itself. In emulation its decision is one branch of the application (at
   `0x08D50D78`, in the function at `0x08D50D24`), taken after the kernel, its tasks and the
@@ -239,19 +241,32 @@ observed.**
     code that runs before the update-mode decision.
 - **Rules for every future modification:**
   - stay out of the code that runs before the update-mode decision, and out of the update path
-    itself (above). In emulation that set is measured: the blocks a normal boot runs before the
-    branch at `0x08D50D78`, plus every block a 30-second update-mode boot runs (1,359 address
-    ranges, about 350 KiB of the application). It is a lower bound: the unit runs code the
-    model does not (the real panel, storage, DSP replies). Every recipe window must lie outside
-    it; a check in `patch-cli` is planned, until then it is checked by hand before a recipe is
-    committed;
-  - **rehearse the update in emulation before a stage file is offered.** The rehearsal flashes
-    the current flash image with the file through the application's own update mode, then
-    checks that the flash holds the file's MAIN records exactly, that a normal reboot through
-    the loader reaches the running system, and that a reboot holding IN + RELOOP/EXIT reaches
-    the update path again. Stages 5 and 6 passed this rehearsal (2026-10-09), as they did on
-    the owner's unit. A file that fails it is not offered for flashing. Emulation is not the
-    unit: a rehearsal that passes lowers the risk, it does not remove it;
+    itself (above). In emulation that code is measured as a set of functions: those a normal
+    boot runs before the branch at `0x08D50D78`, those an update-mode boot runs, and those two
+    complete updates run (stock to stage 5, and stage 5 back to official v1.15: reading the file
+    from the stick, the version check, erasing and writing flash). That is 1,692 address
+    ranges, about 460 KiB of the application. It is a lower bound: the unit runs code the model
+    does not (the real panel and storage, the DSP's replies). Every recipe window must lie
+    outside it; both committed recipes do. A check in `patch-cli` is planned; until then the
+    maintainer checks it by hand before a recipe is committed, since the set is kept outside
+    this repository;
+  - **the set covers code, not the data that code reads.** A recipe that changes a table or a
+    constant must also show, in emulation, that its replaced bytes are not read during a normal
+    boot or an update-mode boot. For stage 5 the replaced byte was written once, by the loader
+    while unpacking the application, and never read in a normal boot to the main screen or in
+    an update-mode boot. Touching BEAT LOOP 16 on the PERFORM screen then read it (one
+    instruction, 40 reads), which shows that the watch sees such reads, and the emulated loop
+    spanned 32 beats, as on the owner's unit;
+  - **rehearse the update in emulation, both ways, before a stage file is offered.** The
+    rehearsal installs the file over the current flash image through the application's own
+    update mode, then checks that the flash holds the file's MAIN records exactly, that a
+    normal reboot through the loader reaches the running system, and that a reboot holding
+    IN + RELOOP/EXIT reaches the update path again. It is then repeated in reverse, installing
+    the official v1.15 file over the candidate: reaching the update path is not enough, the
+    candidate's own updater must restore stock. Stage 5 and its restore passed both ways
+    (2026-10-09), as they did on the owner's unit. A file that fails is not offered for
+    flashing. Emulation is not the unit: a rehearsal that passes lowers the risk, it does not
+    remove it;
   - **report a version lower than 1.15**, and change the version block only through
     `rebuild --report-version` or a schema-v2 recipe's `reported_version` (both refuse 1.15 or
     higher; a recipe's replacements cannot reach the block). The official v1.15 file and the
