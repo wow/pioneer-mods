@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "recipe_id": "xdj700-v1.15-beat-loop-32-labelled",
-  "description": "Experimental: the BEAT LOOP button labelled 16 sets a 32-beat loop and is relabelled 32 in all six of its images (normal, pressed, greyed out, lit, lit-pressed, lit-greyed out). The table change is the one in beat-loop-16-plays-32.json, which passed on an owner's unit; the label is drawn at patch time from the owner's own file (the recipe carries only coordinates and its own glyph mask). The application reports version 0.12, so the official v1.15 update restores stock. Rehearsed in emulation, not yet flashed. For staged hardware testing (docs/xdj700-flashing.md, stage 7).",
+  "description": "Experimental: the BEAT LOOP button labelled 16 sets a 32-beat loop and is relabelled 32 in all six of its images (normal, pressed, greyed out, lit, lit-pressed, lit-greyed out). The table change is the one in beat-loop-16-plays-32.json, which passed on an owner's unit; the label is drawn at patch time from the owner's own file (the recipe carries only coordinates and its own glyph mask). The application reports version 0.12, so the official v1.15 update is expected to restore stock (observed for stages 3 to 6 on an owner's unit; rehearsed in emulation for this file). Rehearsed in emulation, not yet flashed. For staged hardware testing (docs/xdj700-flashing.md, stage 7).",
   "target": {
     "release": "xdj700-v1.15",
     "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
