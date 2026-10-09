@@ -44,9 +44,10 @@ pub struct RecipeTarget<'a> {
 /// The releases recipes may target.
 ///
 /// v1.15 protects `[0, 0x800)`: the application header and its version block (the version changes
-/// only through `reported_version`); code starts at `0x800`. The code that runs early during
-/// start-up is **not yet mapped**, so keeping recipes out of it is still a review and
-/// hardware-staging rule (`docs/xdj700-flashing.md`, section 5), not something this list enforces.
+/// only through `reported_version`). The entry point is at `0x800`, but code below it also runs at
+/// start-up (the set measured in emulation starts at `0x600`), so this range must not be narrowed
+/// to the version block. Keeping recipes out of the code and data that start-up and the update
+/// path use is not enforced by this list: the rules are in `docs/xdj700-flashing.md`, section 5.
 pub const RECIPE_TARGETS: &[RecipeTarget<'static>] = &[RecipeTarget {
     id: "xdj700-v1.15",
     release: OFFICIAL_V115,

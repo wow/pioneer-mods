@@ -67,9 +67,9 @@ table says otherwise. Photograph the **MAIN line** of every update (section 4).
 | Stage | File | What to look for | Next |
 | --- | --- | --- | --- |
 | 0 | The **official** v1.15 update, if the unit runs an older version | MAIN progresses to v1.15 | Stage 1b |
-| 1 | *(done: the probe that established the policy)* No-op rebuild labelled `Ver0.90`, lower than the installed version | Skipped at once, as the policy predicts; nothing was written | — |
+| 1 | *(done: the probe that established the policy)* No-op rebuild labelled `Ver0.90`, lower than the installed version | Skipped at once, as the policy predicts; the application was not written | — |
 | 1b | **No-op rebuild labelled `Ver1.16`** (higher) | **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes, as in a real write; the unit still reports `1.15`. *(Passed on an owner's unit, 2026-10-08: about 3 minutes, normal cold boots, browsing, playback, cue and loop unchanged.)* **Skipped:** MAIN jumps to 100%: stop and report it. **An error at any point:** stop and follow section 6 | Stage 2 |
-| 2 | The **official** v1.15 update again (optional: it only confirms section 1) | `MAIN Ver1.15 -> Ver1.15` and a skip, so the label did not stick. *(Observed on an owner's unit, 2026-10-08.)* Nothing is written | Stage 3 |
+| 2 | The **official** v1.15 update again (optional: it only confirms section 1) | `MAIN Ver1.15 -> Ver1.15` and a skip, so the label did not stick. *(Observed on an owner's unit, 2026-10-08.)* The application is not written | Stage 3 |
 | 3 | **Stock application reporting `0.10`, labelled `Ver1.16`** (built **with** `--report-version 0.10`; the recovery stick is built without it): only the application's 4-byte version string differs from stock. This is the first flashed application that differs from stock. A static scan finds one pointer to the string, in a small table with the model string, and no code literal that points to it directly (computed addresses are not ruled out); the reference implementation changed the same string and its build booted on hardware | *(Passed on an owner's unit, 2026-10-08: about 3 minutes; UTILITY showed `0.10`; the owner's checks of the unit were all good. Whether Pro DJ Link or rekordbox was exercised was not stated.)* **Real flash:** MAIN shows `Ver1.15 -> Ver1.16` and progresses for about 3 minutes. Afterwards the boot screen and UTILITY show **`0.10`**; the unit otherwise behaves as stock (cold boots, browsing, playback, cue, loop, and Pro DJ Link or rekordbox if you use them: the version may be announced there). **Skipped**, or UTILITY still shows `1.15`: stop and report it (the unit then runs an application equivalent to stock; the `Ver1.16` stick restores it exactly). **An error:** section 6 | Stage 4 |
 | 4 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-08: `MAIN Ver0.10 -> Ver1.15` progressed for about 3 minutes and UTILITY returned to `1.15`.)* **Real flash:** `MAIN Ver0.10 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again: the vendor file restores stock. **If it is skipped** (`MAIN Ver0.10 -> Ver1.15` at 100% at once, UTILITY still `0.10`): use the `Ver1.16` stock no-op stick, which is higher than `0.10`, and report it | Done: the unit runs the official application. Stage 5 is an optional experiment |
 | 5 | **Beat-loop experiment, reporting `0.11`, labelled `Ver1.16`** (`patch` with `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`). **The first file that changes behaviour.** Besides the version string, one table entry differs from stock: the BEAT LOOP button labelled 16 selects the player's existing 32-beat length instead of 16. By static analysis only the PERFORM screen's BEAT LOOP touch handler reads that table, so the change acts when the button is touched, not during start-up | *(Passed on an owner's unit, 2026-10-09: the owner reported that all steps were tested and worked as expected, and that BEAT LOOP 16 looped 32 beats. Which storage options were tried, and how long the update ran, were not stated.)* **Real flash:** `MAIN Ver1.15 -> Ver1.16` progressing for about 3 minutes; UTILITY shows **`0.11`**; three cold boots reach the normal screen. **Skipped**, or UTILITY still shows `1.15`: stop and report it. The experiment was not installed, so the checks below would say nothing about it. Then, with an analysed track (beat grid) loaded, touch BEAT LOOP **16**: the loop should span **32 beats** (8 bars: count bars on the waveform or the beat display). Touch 1/2, 1, 2, 4 and 8: each unchanged. Exit and reloop, and loop with QUANTIZE on and off: unchanged. Also try the cases most likely to differ from stock: a **slow track** (about 70 BPM: 32 beats last about 27 seconds, twice the longest loop this button gave before); **storing the 32-beat loop** wherever the unit can (REC to a hot cue, a memory) and recalling it; **loading another track** while the loop plays; and **three more cold boots after** these checks, in case loop state is saved. **16 still gives 16 beats** (after a real flash): the player limits this path; report it. **Anything odd** (a freeze, a wrong length, a display glitch): note it and go to stage 6. **An error:** section 6 | Stage 6 |
@@ -77,7 +77,9 @@ table says otherwise. Photograph the **MAIN line** of every update (section 4).
 
 A no-op rebuild's application is the official one, re-compressed, so nothing should change
 functionally in it. Stage 3 changes only the text of the application's version string. Stage 5
-also changes one table entry, the first change to behaviour.
+also changes one table entry, the first change to behaviour. From 2026-10-09 every new stage
+file is rehearsed in emulation before it is offered. Stages 1b, 3 and 5 were rehearsed after
+they had been flashed, and the rehearsals agree with the hardware results (section 5).
 
 The stage files built from the official v1.15 file (`XDJ700.UPD`, 17,371,335 bytes, SHA-256
 `73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c`) are always the same. All are
@@ -110,6 +112,9 @@ owner-input tests check.
 ## 3. Before every flash
 
 1. **Power:** mains power. Never power off or pull the USB stick during an update.
+   **Note your settings first** (UTILITY, and MY SETTINGS if you use them). In emulation every
+   update, even a skipped one, erased the part of the flash where the application keeps its
+   settings (section 5). Whether the unit keeps your settings through an update is not known.
 2. **Write the file to a local disk first**, not straight to the stick. From the repository
    root (the output directory must exist):
 
@@ -198,7 +203,15 @@ Then check each of these:
 ## 5. Recovery: what protects the unit, and what does not
 
 **Everything in this section comes from static analysis of the v1.15 loader, except where marked
-observed.**
+*observed* (on an owner's unit) or *in emulation*.** *In emulation* means a local emulation of
+the board (not part of this repository, and not hardware): it boots a flash image built from an
+update file through the unit's own loader, and runs the application's update mode with a stick.
+
+**Addresses:** the application is linked at `0x08000000`, so a decoded-application offset `o`,
+as in a recipe's `offset` or the version string's `0x740`, is the run-time address
+`0x08000000 + o`. Run-time addresses are used for code below (`0x08D50D78`, the protected set).
+The loader, application and settings regions are flash offsets; the application is stored there
+compressed, so a flash offset does not map to a run-time address.
 
 - **The loader checks the application before running it.** It verifies the application
   section's checksum before starting it.
@@ -209,13 +222,26 @@ observed.**
   stick it expects are unknown. If the unit powers on into an unfamiliar update or USB prompt,
   try the official v1.15 stick first. If its MAIN line jumps to 100%, try the `Ver1.16`
   stock no-op stick. Untested in this situation.
-- **Interruptions in the loader region are not covered.** The update also writes the loader
-  region; it is part of the file, rewritten with identical bytes. An interruption there is not
-  covered by the fallback, for official files too. So **never interrupt an update**.
+- **Interruptions in the loader region are not covered.** The file carries loader-region
+  records, identical to the installed bytes on a unit already running v1.15 (an official update
+  over an older version may differ there). Whether the updater writes them was unknown. *In
+  emulation* it does not: in the seven rehearsals listed at the end of this section, the
+  updater never erased or wrote the loader region `0x000000`–`0x03FFFF`. Installing a file
+  erased the application region `0x040000`–`0x7DFFFF` and the settings area at the top of the
+  flash (from `0x7E0000` in the emulated layout, whose sector sizes may differ from the unit's).
+  A skipped update erased only the settings area. In both cases the application wrote data to
+  the settings area again afterwards; whether the unit keeps an owner's settings through an
+  update is not known (section 3). Not verified on hardware, and not tested with a file whose
+  loader region differs from the installed one, so an interruption while the loader region is
+  written is still treated as uncovered, for official files too. **Never interrupt an update.**
 - **No button combination reaches the fallback.** The IN + RELOOP/EXIT update mode belongs to
-  the application itself.
+  the application itself. *In emulation* its decision is one branch of the application (at
+  `0x08D50D78`, in the function at `0x08D50D24`), taken after the kernel, its tasks and the
+  panel link are running. What runs before that branch, and the update path after it, is the
+  code the next two bullets are about.
 - **The unprotected case:** an application whose checksum is valid but which crashes or hangs
-  before its update mode starts cannot be recovered by software.
+  before its update mode starts, or whose update mode can no longer complete an update, cannot
+  be recovered by software (the fallback updater starts only on a bad checksum).
   - *Observed:* the stage-1b and stage-3 files did not cause this. On one owner's unit stage 1b
     was accepted and stage 3 was visibly written (UTILITY changed to `0.10`); the unit booted
     normally each time, and its update mode still worked (stage 4). Stage 3's application differs
@@ -225,14 +251,64 @@ observed.**
     the unit booted normally and behaved as expected, and its update mode still worked (stage 6,
     with the official file). An application whose code is changed is still untested.
   - Files that change behaviour can cause it, so every future modification must stay out of the
-    code that runs early during start-up.
-- **Rules for every future modification:**
-  - stay out of the code that runs early during start-up (above);
+    code that runs before the update-mode decision and out of the update path.
+- **Rules for every future modification** (this list is the project's authoritative statement
+  of them; `docs/recipes.md` and the code refer to it):
+  - stay out of the code that runs before the update-mode decision and out of the update path.
+    *In emulation* that code is measured as a set of functions: those a normal boot runs
+    before the branch at `0x08D50D78`, those an update-mode boot runs, and those the complete
+    updates of the rehearsals below run (reading the file from the stick, the version check,
+    erasing and writing flash). That is 1,692 ranges of run-time addresses, about 460 KiB of
+    the application; the seven rehearsals below added no new function to it. It is a lower bound:
+    the unit runs code the model does not (the real panel and storage, the DSP's replies).
+    Every recipe window must lie outside it; both committed recipes do. A check in `patch-cli`
+    is planned; until then the maintainer checks it by hand before a recipe is committed,
+    since the set is kept outside this repository;
+  - **the set covers code, not the data that code reads.** Every recipe must also show, *in
+    emulation*, that the bytes its replacements change are not read during a normal boot, an
+    update-mode boot, or a complete update in either rehearsal direction (code bytes included:
+    a self-check or a shared constant would read them). The version block is outside this
+    rule: it changes only through `reported_version`, and the updater reads it by design. For
+    stage 5 the replaced byte was written once, by the loader while unpacking the application,
+    and never read in a normal boot to the main screen, in an update-mode boot, or while stage
+    5 was installed over stock or official v1.15 over stage 5. Touching BEAT LOOP 16 on the
+    PERFORM screen then read it (one instruction, 40 reads), which shows that the watch sees
+    such reads, and the emulated loop spanned 32 beats, as on the owner's unit;
+  - **rehearse every new stage file in emulation before it is offered.** The rehearsal builds
+    a flash from the file the unit runs, installs the new file through the application's own
+    update mode, and checks that the flash then holds the new file's MAIN records exactly,
+    that a normal reboot through the loader reaches the running system, and that a reboot
+    holding IN + RELOOP/EXIT reaches the update path again. For a file whose application
+    reports a version lower than 1.15, it is repeated in reverse, installing the official
+    v1.15 file over the new one: reaching the update path is not enough, the new application's
+    own updater must restore stock. A no-op file reports 1.15, so the official file is skipped
+    over it (section 1); its reverse rehearsal passes when the skip leaves the application
+    region unchanged, since its application is the official one, re-compressed. A file that
+    fails is not offered for flashing. Emulation is not the unit: a rehearsal that passes
+    lowers the risk, it does not remove it;
   - **report a version lower than 1.15**, and change the version block only through
     `rebuild --report-version` or a schema-v2 recipe's `reported_version` (both refuse 1.15 or
     higher; a recipe's replacements cannot reach the block). The official v1.15 file and the
     `Ver1.16` stock no-op are then both higher, so both can restore the stock application. A
     modified application that reported 1.16 or more would make the updater skip both.
+
+**Rehearsals so far** (*in emulation*, 2026-10-09). Each starts from a flash built from the first
+file and booted through the loader. In every run the loader region was untouched, a normal
+reboot reached the running system, and a reboot holding IN + RELOOP/EXIT reached the update path.
+
+| Flash built from | File installed | Update | Also checked | Result |
+| --- | --- | --- | --- | --- |
+| official v1.15 | stage 1b, `Ver1.16` no-op | written | flash holds the file's records | passed |
+| stage 1b | official v1.15 | skipped, equal version | application region unchanged | passed |
+| official v1.15 | stage 3, reports `0.10` | written | flash holds the file's records | passed |
+| stage 3 | official v1.15 | written | flash holds the file's records | passed |
+| official v1.15 | stage 5, reports `0.11` | written | records; the replaced byte was not read | passed |
+| stage 5 | official v1.15 | written | records; the replaced byte was not read | passed |
+| official v1.15 | official v1.15 | skipped, equal version | application region unchanged | passed |
+
+Stages 1b, 3 and 5 were flashed on an owner's unit before these rehearsals existed; the
+rehearsals came afterwards and agree with the hardware results. Stage 1 (`Ver0.90`) was not
+rehearsed: it is skipped on any v1.15 unit and is not offered any more.
 
 ## 6. If something goes wrong
 

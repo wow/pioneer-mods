@@ -169,10 +169,14 @@ into place.
 - **Report a version lower than 1.15** (the engine enforces this). The official v1.15 update then
   restores stock. This was observed on an owner's unit for a version-only change (the
   flashing guide's stages 3 and 4).
-- **Stay out of the code that runs early during start-up.** An application that crashes before
-  its own update mode starts cannot be recovered by software (flashing guide, section 5). The
-  engine protects only the header; **the start-up path is not yet mapped**, so this rule is
-  enforced by review and staged hardware testing, not by the tool.
+- **Stay out of start-up and the update path.** An application that crashes before its own
+  update mode starts, or whose updater no longer works, cannot be recovered by software. Follow
+  the rules for every modification in the flashing guide, section 5, which is their
+  authoritative statement: windows outside the protected set measured in emulation, replaced
+  bytes not read during start-up or an update, and an emulator rehearsal before a file is
+  offered. Its addresses are run-time addresses, `0x08000000` plus a recipe's `offset`. The
+  engine enforces only the header (`[0, 0x800)`); the maintainer checks the rest by hand until
+  a `patch-cli` check lands.
 - **Same length only.** Growing the application (for example appending code) is not supported
   until the memory after the application is understood.
 - **Test on hardware in stages**, as the flashing guide describes, and record the result.
