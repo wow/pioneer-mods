@@ -1,13 +1,13 @@
-//! The precondition windows of a schema-v2 recipe as one labelled list: each replacement's window
-//! (with the span it writes) and each image edit's image. The checks that compare windows with
-//! each other, with protected ranges or across recipes read this list, so a rule for windows, or a
-//! new kind of edit, is added in one place.
+//! The windows of a schema-v2 recipe as one labelled list: each replacement's precondition window
+//! (with the span it writes) and each edited image. The checks that compare windows with each
+//! other, with protected ranges or across recipes read this list, so a rule for windows, or a new
+//! kind of edit, is added in one place.
 
 use crate::v2::RecipeV2;
 use std::fmt;
 use std::ops::Range;
 
-/// What a precondition window belongs to.
+/// What a window belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum WindowOwner {
     /// `replacements[index]`.
@@ -25,11 +25,12 @@ impl fmt::Display for WindowOwner {
     }
 }
 
-/// One precondition window, in decoded-application offsets.
+/// One window, in decoded-application offsets.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabelledWindow {
     pub owner: WindowOwner,
-    /// The bytes the window's hash covers.
+    /// A replacement's precondition window (the bytes its hash covers), or an edited image (the
+    /// bytes the edit reads; no hash covers them).
     pub window: Range<u64>,
     /// The bytes a replacement writes, inside its window; `None` for an image edit, which may
     /// change any row of its image (`ImageEdit::changed_rows` says which).
@@ -37,7 +38,8 @@ pub struct LabelledWindow {
 }
 
 impl RecipeV2 {
-    /// Every precondition window, in recipe order: the replacements', then the image edits'.
+    /// Every window, in recipe order: the replacements' precondition windows, then the edited
+    /// images.
     /// A window that does not fit the 64-bit range is left out (`validate` refuses it).
     pub fn windows(&self) -> Vec<LabelledWindow> {
         let replacements = self

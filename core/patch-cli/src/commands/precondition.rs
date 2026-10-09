@@ -13,8 +13,9 @@ pub struct PreconditionArgs {
     #[arg(long)]
     pub input: PathBuf,
 
-    /// Path to a schema-v2 recipe, typically a draft whose precondition hashes are placeholders
-    /// (any 64 hex digits). Every other field must already be valid.
+    /// Path to a schema-v2 recipe, typically a draft whose precondition hashes (and, with image
+    /// edits, `expected.application_sha256`) are placeholders (any 64 hex digits). Every other
+    /// field must already be valid.
     #[arg(long)]
     pub recipe: PathBuf,
 
@@ -42,9 +43,10 @@ pub struct PreconditionArgs {
     pub no_protected_set: bool,
 }
 
-/// Prints the SHA-256 of every precondition window of a schema-v2 recipe. Each is computed on the
-/// official update only after the recipe's checks, the check against the committed recipes, and
-/// the window's bounds and leak checks. It writes nothing.
+/// Prints the SHA-256 of every precondition window of a schema-v2 recipe and the identities of its
+/// output, from a rebuild of the recipe on the official update that runs only after the recipe's
+/// checks and the check against the committed recipes, and hashes each window only after its
+/// bounds and leak checks. It writes nothing.
 pub fn precondition(args: PreconditionArgs) -> Result<()> {
     let (raw, schema_version) = read_recipe_versioned(&args.recipe)?;
     if schema_version != SCHEMA_VERSION_V2 {
@@ -81,16 +83,8 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
     println!("input_file: {}", firmware_file_name(&args.input));
     println!("input_sha256_hex: {}", target.release.upd_sha256);
     println!("replacements: {}", hashes.replacements.len());
-    println!("image_edits: {}", hashes.image_edits.len());
-    let mut differing = 0;
-    let mut status = |declared: &str, sha256: &str| {
-        if declared.eq_ignore_ascii_case(sha256) {
-            "as declared"
-        } else {
-            differing += 1;
-            "the recipe declares another hash"
-        }
-    };
+    println!("image_edits: {}", recipe.image_edits.len());
+    let (mut windows, mut outputs) = (Tally::default(), Tally::default());
     for (index, (replacement, sha256)) in recipe
         .replacements
         .iter()
@@ -98,36 +92,67 @@ pub fn precondition(args: PreconditionArgs) -> Result<()> {
         .enumerate()
     {
         let window = replacement.precondition_window().expect("a checked recipe");
-        let status = status(&replacement.precondition.sha256, sha256);
+        let differs = !replacement.precondition.sha256.eq_ignore_ascii_case(sha256);
+        let status = windows.status(true, differs);
         println!(
             "replacements[{index}].precondition: {:#x}..{:#x} sha256 {sha256} ({status})",
             window.start, window.end
         );
     }
-    for (index, (edit, sha256)) in recipe
-        .image_edits
-        .iter()
-        .zip(&hashes.image_edits)
-        .enumerate()
-    {
+    for (index, edit) in recipe.image_edits.iter().enumerate() {
         let window = edit.window().expect("a checked recipe");
-        let status = status(&edit.sha256, sha256);
         println!(
-            "image_edits[{index}].sha256: {:#x}..{:#x} ({}x{}) sha256 {sha256} ({status})",
+            "image_edits[{index}]: {:#x}..{:#x} ({}x{}), no hash published",
             window.start, window.end, edit.width, edit.height
         );
     }
+    for pin in hashes.output.pins(recipe.expected.as_ref()) {
+        let status = outputs.status(pin.declared.is_some(), pin.differs());
+        println!("expected.{}: {} ({status})", pin.field, pin.actual);
+    }
     println!("{}", protected_set_line(&source, protected_set.as_ref()));
     println!(
-        "checked: recipe, release pins, bounds, protected ranges, committed recipes' windows and \
-         leak checks; each hash covers whatever is at its declared offset, so check the offsets \
-         against your own analysis"
+        "checked: recipe, release pins, bounds, protected ranges, committed recipes' windows, \
+         leak checks and the rebuild; each hash covers whatever is at its declared offset, so \
+         check the offsets against your own analysis"
     );
-    let total = hashes.replacements.len() + hashes.image_edits.len();
-    if args.check && differing > 0 {
-        bail!(
-            "{differing} of {total} declared precondition hashes differ from the official update"
-        );
+    let failures: Vec<String> = [
+        (
+            windows,
+            "precondition hashes differ from the official update",
+        ),
+        (outputs, "output identities differ from the rebuilt output"),
+    ]
+    .into_iter()
+    .filter(|(tally, _)| tally.differing > 0)
+    .map(|(tally, what)| format!("{} of {} declared {what}", tally.differing, tally.compared))
+    .collect();
+    if args.check && !failures.is_empty() {
+        bail!("{}", failures.join("; "));
     }
     Ok(())
+}
+
+/// Declared values of one kind, compared with those computed.
+#[derive(Debug, Default, Clone, Copy)]
+struct Tally {
+    compared: usize,
+    differing: usize,
+}
+
+impl Tally {
+    /// Counts one value and describes it: `declared` says whether the recipe declares it, and
+    /// `differs` whether the declared value differs from the computed one.
+    fn status(&mut self, declared: bool, differs: bool) -> &'static str {
+        if !declared {
+            return "not declared";
+        }
+        self.compared += 1;
+        if differs {
+            self.differing += 1;
+            "the recipe declares another hash"
+        } else {
+            "as declared"
+        }
+    }
 }

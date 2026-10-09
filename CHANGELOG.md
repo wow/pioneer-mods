@@ -8,19 +8,21 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 
 ### Added
 - Image edits in schema-v2 recipes (`image_edits`, `patch_schema::ImageEdit`): changes to a 16-bit
-  RGB565 image stored in the decoded application that publish no stock pixel. An edit names the
-  image (offset, width, height) and pins it by the SHA-256 of the whole stock image; it erases a
-  box by interpolating each row between the stock pixels just outside it, then draws the author's
-  own coverage mask (one hex digit per pixel) in the colour of a stock pixel it names. The pixel
-  arithmetic is fixed in `patch_schema` (`ImageEdit::erase_row`, `blend`). Images are refused if
-  they leave the application, overlap each other, a replacement's window, a protected range or
-  the protected set, or are predictable: fewer than 16 distinct pixel values, or fewer than 64
-  pixels the median edge predictor misses (`unpredicted_pixels`), since the published hash of a
-  fill or shallow gradient could be inverted (a heuristic: steep ramps and regular patterns can
-  pass, so review remains the backstop); across committed recipes their windows count like
-  replacement windows. The output
-  may differ from stock only in the edited rows. `patch-cli precondition` prints each image's
-  hash for a draft (`xdj700::PreconditionHashes`), and `patch` reports `image_edits`.
+  RGB565 image stored in the decoded application that publish no stock pixel and no hash of one
+  (anyone could check a guess at the pixels against it). An edit names the image (offset, width,
+  height); it erases a box by interpolating each row between the stock pixels just outside it,
+  then draws the author's own coverage mask (one hex digit per pixel) in the colour of a stock
+  pixel it names. The pixel arithmetic is fixed in `patch_schema` (`ImageEdit::erase_row`,
+  `blend`). A recipe with image edits must pin its output (`expected.application_sha256`,
+  `RecipeV2Error::UnpinnedImageEdits`): with the input pinned, that catches a changed offset or
+  arithmetic. Images are refused if they leave the application or overlap each other, a
+  replacement's window (also another committed recipe's), a protected range or the protected set;
+  images of different recipes may overlap. The output may differ from stock only in the edited
+  rows. `patch-cli precondition` now rebuilds every draft once: it prints each image without a
+  hash and the output identities (`xdj700::PreconditionHashes::output`,
+  `xdj700::OutputIdentities`), compared through one list with `patch` (`OutputIdentities::pins`);
+  `--check` counts precondition hashes and output identities separately. `patch` reports
+  `image_edits`.
   `RecipeError` moved to its own module, with the image refusals. Format in `docs/recipes.md`,
   "Image edits".
 - The protected set on `patch-cli patch` and `precondition` (`xdj700::ProtectedSet`,

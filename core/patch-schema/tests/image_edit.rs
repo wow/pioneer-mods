@@ -1,13 +1,12 @@
-//! Image edits in schema-v2 recipes: the pixel arithmetic every front end shares, the rows an edit
-//! may change, and the static checks.
+//! Image edits in schema-v2 recipes: the rows an edit may change, the static checks and the
+//! checks across recipes. The pixel arithmetic is in `image_pixels.rs`.
 
-use patch_schema::{
-    ImageEdit, ImageEditError, RecipeV2, RecipeV2Error, blend, check_windows_across,
-};
+use patch_schema::{ImageEditError, RecipeV2, RecipeV2Error, check_windows_across};
 use serde_json::{Value, json};
 
 /// A valid recipe with one replacement (window 0x900..0x940) and one image edit: a 16x8 image at
-/// 0xd00, erasing x 4..10, y 2..5 and drawing a 3x2 glyph at (5, 3).
+/// 0xd00, erasing x 4..10, y 2..5 and drawing a 3x2 glyph at (5, 3). It pins its output, as a
+/// recipe with image edits must.
 fn recipe_json() -> Value {
     json!({
         "schema_version": 2,
@@ -26,7 +25,8 @@ fn recipe_json() -> Value {
             "precondition": {"before": 16, "after": 46, "sha256": "ab".repeat(32)},
             "purpose": "test"
         }],
-        "image_edits": [image_json(0xd00)]
+        "image_edits": [image_json(0xd00)],
+        "expected": {"application_sha256": "ee".repeat(32)}
     })
 }
 
@@ -35,7 +35,6 @@ fn image_json(offset: u64) -> Value {
         "offset": offset,
         "width": 16,
         "height": 8,
-        "sha256": "cd".repeat(32),
         "erase": {"x": 4, "y": 2, "width": 6, "height": 3},
         "glyph": {
             "at": {"x": 5, "y": 3, "width": 3, "height": 2},
@@ -94,29 +93,48 @@ fn unknown_fields_in_an_edit_are_refused() {
 }
 
 #[test]
-fn blend_keeps_the_background_at_zero_and_paints_the_colour_at_fifteen() {
-    assert_eq!(blend(0x1234, 0xffff, 0), 0x1234);
-    assert_eq!(blend(0x1234, 0xffff, 15), 0xffff);
-    assert_eq!(blend(0x0000, 0xffff, 15), 0xffff);
-    // Halfway between black and white, per channel, rounded: red 31 * 8 / 15 = 16.5 -> 17.
-    assert_eq!(blend(0x0000, 0xffff, 8), (17 << 11) | (34 << 5) | 17);
-    // Alpha above 15 counts as 15.
-    assert_eq!(blend(0x1234, 0xabcd, 200), 0xabcd);
+fn an_image_hash_is_refused_as_an_unknown_field() {
+    // No hash of a stock image is published; a draft that still declares one fails to parse.
+    let mut json = recipe_json();
+    json["image_edits"][0]["sha256"] = json!("cd".repeat(32));
+
+    let error = serde_json::from_value::<RecipeV2>(json).expect_err("unknown field");
+
+    assert!(
+        error.to_string().contains("unknown field `sha256`"),
+        "{error}"
+    );
 }
 
 #[test]
-fn erasing_interpolates_between_the_pixels_beside_the_box() {
-    // Black to white over three pixels: a quarter, a half and three quarters of the way.
-    let row = ImageEdit::erase_row(0x0000, 0xffff, 3);
-    let red = |pixel: u16| pixel >> 11;
-    let green = |pixel: u16| (pixel >> 5) & 0x3f;
-    assert_eq!(row.iter().map(|&p| red(p)).collect::<Vec<_>>(), [8, 16, 23]);
+fn a_recipe_with_image_edits_must_pin_its_output_application() {
+    let without = |expected: Option<Value>| {
+        let mut json = recipe_json();
+        match expected {
+            Some(expected) => json["expected"] = expected,
+            None => {
+                json.as_object_mut().expect("object").remove("expected");
+            }
+        }
+        serde_json::from_value::<RecipeV2>(json)
+            .expect("valid JSON")
+            .validate()
+    };
+
+    assert_eq!(without(None), Err(RecipeV2Error::UnpinnedImageEdits));
+    let upd_only = json!({"upd_sha256": "ee".repeat(32)});
     assert_eq!(
-        row.iter().map(|&p| green(p)).collect::<Vec<_>>(),
-        [16, 32, 47]
+        without(Some(upd_only)),
+        Err(RecipeV2Error::UnpinnedImageEdits)
     );
-    // A flat background stays flat.
-    assert_eq!(ImageEdit::erase_row(0x4a69, 0x4a69, 5), vec![0x4a69; 5]);
+    let both = json!({"application_sha256": "ee".repeat(32), "upd_sha256": "ff".repeat(32)});
+    assert_eq!(without(Some(both)), Ok(()));
+    // Without image edits, the output pin stays optional.
+    let mut json = recipe_json();
+    json.as_object_mut().expect("object").remove("expected");
+    json["image_edits"] = json!([]);
+    let recipe: RecipeV2 = serde_json::from_value(json).expect("valid JSON");
+    assert_eq!(recipe.validate(), Ok(()));
 }
 
 #[test]
@@ -233,18 +251,11 @@ fn refuses_a_mask_of_the_wrong_length_non_hex_or_painting_nothing() {
 }
 
 #[test]
-fn refuses_an_empty_purpose_and_a_malformed_hash() {
+fn refuses_an_empty_purpose() {
     let purpose = with_image(|image| image["purpose"] = json!("  "));
     assert_eq!(
         image_error(&purpose),
         Some(ImageEditError::EmptyPurpose { index: 0 })
-    );
-    let hash = with_image(|image| image["sha256"] = json!("cd"));
-    assert_eq!(
-        hash.validate(),
-        Err(RecipeV2Error::InvalidSha256 {
-            field: "image_edits[0].sha256".to_owned()
-        })
     );
 }
 
@@ -292,20 +303,58 @@ fn refuses_an_image_over_a_replacement_window() {
     assert_eq!(clear.validate(), Ok(()));
 }
 
+/// Another recipe for the same release, `recipe_id` `id`, with the given replacements and images.
+fn other(id: &str, replacements: Value, images: Value) -> RecipeV2 {
+    let mut json = recipe_json();
+    json["recipe_id"] = json!(id);
+    json["replacements"] = replacements;
+    json["image_edits"] = images;
+    serde_json::from_value(json).expect("JSON")
+}
+
 #[test]
-fn image_windows_count_across_recipes() {
-    let first = recipe();
-    let mut second_json = recipe_json();
-    second_json["recipe_id"] = json!("other");
-    second_json["replacements"] = json!([]);
-    second_json["image_edits"] = json!([image_json(0xd80)]);
-    let second: RecipeV2 = serde_json::from_value(second_json).expect("JSON");
+fn images_of_different_recipes_may_overlap() {
+    // Each recipe is applied on its own and publishes no image hash.
+    let second = other("other", json!([]), json!([image_json(0xd80)]));
 
-    let error = check_windows_across([&first, &second]).expect_err("overlap");
+    assert_eq!(check_windows_across([&recipe(), &second]), Ok(()));
+}
 
-    assert_eq!(error.first, "image-test image_edits[0]");
+#[test]
+fn an_image_may_not_overlap_another_recipes_window() {
+    // The first recipe's window is 0x900..0x940; its hash would cover the image's pixels.
+    let second = other("other", json!([]), json!([image_json(0x920)]));
+
+    let error = check_windows_across([&recipe(), &second]).expect_err("overlap");
+
+    assert_eq!(error.first, "image-test replacements[0]");
+    assert_eq!(error.first_window, 0x900..0x940);
     assert_eq!(error.second, "other image_edits[0]");
-    assert_eq!(error.second_window, 0xd80..0xe80);
+    assert_eq!(error.second_window, 0x920..0xa20);
+}
+
+#[test]
+fn finds_a_window_inside_an_image_past_another_image() {
+    // A tall image 0xa00..0xe00, a second image inside it, then another recipe's window
+    // 0xc00..0xc40 inside the first image only: neighbours alone would pair it with the second.
+    let mut tall = image_json(0xa00);
+    tall["height"] = json!(32);
+    let first = other("tall", json!([]), json!([tall]));
+    let second = other("inner", json!([]), json!([image_json(0xa20)]));
+    let mut window = recipe_json()["replacements"][0].clone();
+    window["offset"] = json!(0xc10);
+    let mut third_json = recipe_json();
+    third_json["recipe_id"] = json!("window");
+    third_json["replacements"] = json!([window]);
+    third_json["image_edits"] = json!([]);
+    let third: RecipeV2 = serde_json::from_value(third_json).expect("JSON");
+
+    let error = check_windows_across([&first, &second, &third]).expect_err("overlap");
+
+    assert_eq!(error.first, "tall image_edits[0]");
+    assert_eq!(error.first_window, 0xa00..0xe00);
+    assert_eq!(error.second, "window replacements[0]");
+    assert_eq!(error.second_window, 0xc00..0xc40);
 }
 
 #[test]
@@ -321,21 +370,4 @@ fn counts_mask_characters_not_bytes() {
             found: 3
         })
     );
-}
-
-#[test]
-fn box_ranges_saturate_instead_of_overflowing() {
-    let far = patch_schema::PixelBox {
-        x: u32::MAX - 1,
-        y: u32::MAX,
-        width: 5,
-        height: 5,
-    };
-
-    assert_eq!(far.columns(), u32::MAX - 1..u32::MAX);
-    assert_eq!(far.rows(), u32::MAX..u32::MAX);
-    // erase_row's arithmetic is 64-bit: the widest rows a validated edit can have stay exact.
-    let row = ImageEdit::erase_row(0x0000, 0xffff, 1024);
-    assert_eq!(row.len(), 1024);
-    assert_eq!(row[1023] >> 11, (31 * 1024 + 512) / 1025);
 }

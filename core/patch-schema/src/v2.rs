@@ -14,8 +14,8 @@
 //! guard against accidental leaks; they are heuristics, so windows belong over code, not strings
 //! or tables, and review is the backstop.
 //! Only the project's own replacement bytes are written. Image edits ([`crate::image`]) change
-//! RGB565 images without publishing any stock pixel: their precondition window is the whole
-//! image. The static checks here need no
+//! RGB565 images without publishing any stock pixel or any hash of one; a recipe with image edits
+//! must pin its output instead (`expected.application_sha256`). The static checks here need no
 //! firmware; the release-specific rules (protected ranges, label and reported-version order,
 //! preconditions) are enforced by the engine in `patch-core`.
 
@@ -55,7 +55,8 @@ pub struct RecipeV2 {
     /// clear of the replacements' windows ([`ImageEdit`]).
     #[serde(default)]
     pub image_edits: Vec<ImageEdit>,
-    /// Identities the output must have, when declared.
+    /// Identities the output must have, when declared. A recipe with image edits must declare
+    /// `application_sha256`.
     #[serde(default)]
     pub expected: Option<ExpectedV2>,
 }
@@ -177,6 +178,12 @@ pub enum RecipeV2Error {
     OverlappingPreconditions { index: usize, previous: usize },
     #[error("expected must pin at least one identity when present")]
     EmptyExpected,
+    #[error(
+        "a recipe with image_edits must pin expected.application_sha256 (no hash of an edited \
+         image is published, so the output pin is what checks the edits); in a draft, use any 64 \
+         hex digits and copy the value `precondition` prints"
+    )]
+    UnpinnedImageEdits,
     #[error(transparent)]
     ImageEdit(#[from] ImageEditError),
 }
@@ -250,6 +257,13 @@ impl RecipeV2 {
             previous_window_end = Some((index, window.end));
         }
         self.validate_image_edits()?;
+        let pinned = self
+            .expected
+            .as_ref()
+            .and_then(|e| e.application_sha256.as_ref());
+        if !self.image_edits.is_empty() && pinned.is_none() {
+            return Err(RecipeV2Error::UnpinnedImageEdits);
+        }
         if let Some(expected) = &self.expected {
             if expected.application_sha256.is_none() && expected.upd_sha256.is_none() {
                 return Err(RecipeV2Error::EmptyExpected);
@@ -270,7 +284,6 @@ impl RecipeV2 {
     fn validate_image_edits(&self) -> Result<(), RecipeV2Error> {
         let mut previous_end: Option<(usize, u64)> = None;
         for (index, edit) in self.image_edits.iter().enumerate() {
-            check_sha256(&format!("image_edits[{index}].sha256"), &edit.sha256)?;
             edit.validate(index)?;
             let window = edit.window().expect("validated");
             if let Some((previous, end)) = previous_end

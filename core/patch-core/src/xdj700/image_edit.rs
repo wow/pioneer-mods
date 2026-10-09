@@ -1,19 +1,11 @@
 //! Image edits of schema-v2 recipes on the stock application ([`patch_schema::ImageEdit`]): where
-//! an image lies, whether it is the stock image the recipe was written for, and the edited pixels.
-//!
-//! An image's precondition is the SHA-256 of the whole stock image, which the recipe publishes. So
-//! the image must hold at least [`patch_schema::MIN_IMAGE_DISTINCT_PIXELS`] distinct pixel values
-//! and [`patch_schema::MIN_IMAGE_UNPREDICTED_PIXELS`] pixels its neighbours do not predict: a fill,
-//! a two-colour pattern or a shallow gradient could be recovered from its hash by trying its few
-//! parameters. It is a heuristic (steep ramps and regular patterns can pass), so review is the
-//! backstop. The edit reads every pixel it uses from the owner's file; the recipe carries only
-//! coordinates and the author's own glyph mask.
+//! an image lies and the edited pixels. The edit reads every pixel it uses from the owner's file;
+//! the recipe carries only coordinates and the author's own glyph mask, and no hash of the image
+//! (the recipe's output pin checks the edit instead).
 
-use super::precondition::DeclaredHash;
 use super::recipe_checks::{bounded, out_of_bounds};
 use super::recipe_error::RecipeError;
-use crate::identity::sha256_hex;
-use patch_schema::{ImageEdit, WindowOwner, blend, predictability};
+use patch_schema::{ImageEdit, WindowOwner, blend};
 use std::ops::Range;
 
 /// The edit's image, if it lies inside an application of `application_len`.
@@ -27,37 +19,6 @@ pub(super) fn image_range(
         application_len,
         out_of_bounds(WindowOwner::ImageEdit(index), application_len),
     )
-}
-
-/// The edit's image on the stock application, after every per-image rule: inside the application,
-/// matching the declared hash when `declared` asks for it, and not predictable. Applying a recipe
-/// and computing a draft's hashes both go through it. The hash is compared first, so a mistyped
-/// offset reads as a mismatch.
-pub(super) fn checked_image(
-    index: usize,
-    edit: &ImageEdit,
-    stock: &[u8],
-    declared: DeclaredHash,
-) -> Result<Range<usize>, RecipeError> {
-    let range = image_range(index, edit, stock.len())?;
-    if declared == DeclaredHash::Compare
-        && !sha256_hex(&stock[range.clone()]).eq_ignore_ascii_case(&edit.sha256)
-    {
-        return Err(RecipeError::ImagePrecondition {
-            index,
-            expected: edit.sha256.clone(),
-        });
-    }
-    let image: Vec<u16> = pixels(&stock[range.clone()]).collect();
-    let measured = predictability(&image, edit.width as usize);
-    if !measured.passes() {
-        return Err(RecipeError::PredictableImage {
-            index,
-            distinct: measured.distinct,
-            unpredicted: measured.unpredicted,
-        });
-    }
-    Ok(range)
 }
 
 /// Applies `edit` to the image at `range` of `decoded`, which still holds the stock image there,
@@ -106,12 +67,4 @@ pub(super) fn apply_image_edit(
         .into_iter()
         .map(|(y, columns)| range.start + at(columns.start, y)..range.start + at(columns.end, y))
         .collect()
-}
-
-fn pixels(bytes: &[u8]) -> impl Iterator<Item = u16> + '_ {
-    bytes
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|pair| u16::from_le_bytes(*pair))
 }

@@ -48,9 +48,10 @@ This repository currently includes:
   it they run only when `--no-protected-set` skips that check on purpose; emulator rehearsals
   and staged hardware tests do the rest. See
   [docs/recipes.md](./docs/recipes.md) and the flashing guide.
-- `precondition` command: prints a draft recipe's precondition hashes, computed on the official
-  file only after the recipe, committed-recipe and leak checks, so authors never compute a hash
-  themselves and never see one for a window those rules refuse
+- `precondition` command: prints a draft recipe's precondition hashes and its output identities
+  (and each edited image, with no hash), from a rebuild of the draft on the official file after
+  the recipe, committed-recipe and leak checks, so authors never compute a hash themselves and
+  never see one for a window those rules refuse
 
 ## Quick start (developer)
 
@@ -105,10 +106,11 @@ cargo run --release -p patch-cli -- patch \
 checked the committed recipes against the protected set, which is not published (see "The
 protected set" in [docs/recipes.md](./docs/recipes.md)).
 
-To write a recipe, `precondition` prints its precondition hashes, computed on the official file
-after the recipe, committed-recipe and leak checks, so a draft's placeholders can be filled in;
-`--check` confirms a completed recipe (see "Writing a recipe" in
-[docs/recipes.md](./docs/recipes.md)):
+To write a recipe, `precondition` prints its precondition hashes and output identities, from a
+rebuild on the official file after the recipe, committed-recipe and leak checks, so a draft's
+placeholders can be filled in (a recipe with image edits needs a placeholder
+`expected.application_sha256` too); `--check` confirms a completed recipe (see "Writing a recipe"
+in [docs/recipes.md](./docs/recipes.md)):
 
 ```bash
 cargo run --release -p patch-cli -- precondition \

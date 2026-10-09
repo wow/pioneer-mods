@@ -1,19 +1,17 @@
 //! Image edits in the schema-v2 engine, on the synthetic release: the edited pixels, the bounded
-//! diff, the whole-image precondition, the flat-image rule, protected ranges and the protected
-//! set, and the draft hashes. Synthetic images only.
+//! diff, the output pin that replaces a per-image hash, protected ranges and the protected set, and
+//! the draft's output identities. Synthetic images only.
 
 mod common;
 
 use common::recipe::{Fixture, PADDING, replacement, stock_application};
-use patch_core::sha256_hex;
 use patch_core::xdj700::{
-    ProtectedSet, RecipeChecks, RecipeError, VERSION_STRING_OFFSET, apply_recipe_v2_to,
-    precondition_hashes,
+    OutputIdentities, ProtectedSet, RecipeChecks, RecipeError, VERSION_STRING_OFFSET,
+    apply_recipe_v2_to, precondition_hashes,
 };
-use patch_schema::{Glyph, ImageEdit, Pixel, PixelBox};
+use patch_schema::{ExpectedV2, Glyph, ImageEdit, Pixel, PixelBox, RecipeV2};
 
-/// A 17x8 image of the synthetic application's byte pattern, at 0xd00 (17 pixels wide, its rows do
-/// not line the pattern up, so its neighbours do not predict it).
+/// A 17x8 image of the synthetic application's byte pattern, at 0xd00.
 const IMAGE: usize = 0xd00;
 const WIDTH: u32 = 17;
 const HEIGHT: u32 = 8;
@@ -25,16 +23,10 @@ fn pixel(bytes: &[u8], x: u32, y: u32) -> u16 {
 
 /// Erases x 4..10, y 2..5 and draws a 3x2 glyph at (5, 3) in the colour of pixel (1, 1).
 fn edit(offset: usize) -> ImageEdit {
-    let stock = stock_application();
-    let len = (WIDTH * HEIGHT * 2) as usize;
     ImageEdit {
         offset: offset as u64,
         width: WIDTH,
         height: HEIGHT,
-        // An image placed past the end on purpose gets a placeholder hash.
-        sha256: stock
-            .get(offset..offset + len)
-            .map_or_else(|| "00".repeat(32), sha256_hex),
         erase: Some(PixelBox {
             x: 4,
             y: 2,
@@ -80,9 +72,36 @@ fn expected_pixel(stock: &[u8], x: u32, y: u32) -> u16 {
     value
 }
 
-fn with_edits(fixture: &Fixture, edits: Vec<ImageEdit>) -> patch_schema::RecipeV2 {
+/// A recipe with `edits` and a placeholder output pin, as in a draft.
+fn with_edits(fixture: &Fixture, edits: Vec<ImageEdit>) -> RecipeV2 {
     let mut recipe = fixture.recipe(Vec::new());
     recipe.image_edits = edits;
+    recipe.expected = Some(ExpectedV2 {
+        application_sha256: Some("00".repeat(32)),
+        upd_sha256: None,
+    });
+    recipe
+}
+
+/// The output identities of `recipe` as a draft, from the engine's draft path.
+fn draft_output(fixture: &Fixture, recipe: &RecipeV2) -> OutputIdentities {
+    precondition_hashes(
+        recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    )
+    .expect("draft")
+    .output
+}
+
+/// `recipe` with both output identities pinned, as its author completes it.
+fn pinned(fixture: &Fixture, mut recipe: RecipeV2) -> RecipeV2 {
+    let output = draft_output(fixture, &recipe);
+    recipe.expected = Some(ExpectedV2 {
+        application_sha256: Some(output.application_sha256),
+        upd_sha256: Some(output.upd_sha256),
+    });
     recipe
 }
 
@@ -91,9 +110,9 @@ fn edits_exactly_the_documented_pixels_and_nothing_else() {
     let fixture = Fixture::new();
     let stock = stock_application();
 
-    let output = fixture
-        .apply(&with_edits(&fixture, vec![edit(IMAGE)]))
-        .expect("apply");
+    let recipe = pinned(&fixture, with_edits(&fixture, vec![edit(IMAGE)]));
+
+    let output = fixture.apply(&recipe).expect("apply");
 
     for y in 0..HEIGHT {
         for x in 0..WIDTH {
@@ -122,6 +141,7 @@ fn applies_the_same_bytes_every_time_and_alongside_replacements() {
     let fixture = Fixture::new();
     let mut recipe = with_edits(&fixture, vec![edit(IMAGE)]);
     recipe.replacements = vec![replacement(0x900, &[0xde, 0xad])];
+    let recipe = pinned(&fixture, recipe);
 
     let first = fixture.apply(&recipe).expect("first");
     let again = fixture.apply(&recipe).expect("again");
@@ -132,36 +152,57 @@ fn applies_the_same_bytes_every_time_and_alongside_replacements() {
 }
 
 #[test]
-fn refuses_a_stock_image_that_does_not_match_its_hash() {
+fn refuses_an_output_that_does_not_match_its_pin() {
     let fixture = Fixture::new();
-    let mut wrong = edit(IMAGE);
-    wrong.sha256 = "00".repeat(32);
-
-    let result = fixture.apply(&with_edits(&fixture, vec![wrong]));
+    let recipe = with_edits(&fixture, vec![edit(IMAGE)]);
+    let output = draft_output(&fixture, &recipe);
 
     assert_eq!(
-        result,
-        Err(RecipeError::ImagePrecondition {
-            index: 0,
-            expected: "00".repeat(32)
+        fixture.apply(&recipe),
+        Err(RecipeError::UnexpectedOutput {
+            field: "application_sha256",
+            expected: "00".repeat(32),
+            actual: output.application_sha256
         })
     );
-    // The actual hash is not reported: it is the whole image's, which the edit's own `sha256`
-    // holds, so build the message's absence from the same range.
-    let image = IMAGE..IMAGE + (WIDTH * HEIGHT * 2) as usize;
-    let actual = sha256_hex(&stock_application()[image]);
-    assert_eq!(actual, edit(IMAGE).sha256);
-    let message = result.unwrap_err().to_string();
-    assert!(!message.contains(&actual));
 }
 
+/// What a per-image hash used to catch: an offset changed after the recipe was completed.
 #[test]
-fn refuses_a_flat_image_whose_hash_could_be_inverted() {
+fn the_output_pin_catches_a_moved_image() {
     let fixture = Fixture::new();
-    // 8x4 pixels of zero padding.
-    let mut flat = edit(PADDING.start);
+    let mut recipe = pinned(&fixture, with_edits(&fixture, vec![edit(IMAGE)]));
+    recipe.image_edits[0].offset += 2;
+
+    let result = fixture.apply(&recipe);
+
+    assert!(
+        matches!(
+            result,
+            Err(RecipeError::UnexpectedOutput {
+                field: "application_sha256",
+                ..
+            })
+        ),
+        "{result:?}"
+    );
+}
+
+/// Without a published hash there is nothing to invert, so a mostly flat image is edited like any
+/// other: four rows of zero padding over one row of the pattern, whose first pixel gives the glyph
+/// colour.
+#[test]
+fn edits_a_flat_image() {
+    let fixture = Fixture::new();
+    let stock = stock_application();
+    let base = PADDING.start;
+    let at = |bytes: &[u8], x: usize, y: usize| {
+        let i = base + (y * 8 + x) * 2;
+        u16::from_le_bytes([bytes[i], bytes[i + 1]])
+    };
+    let mut flat = edit(base);
     flat.width = 8;
-    flat.height = 4;
+    flat.height = 5;
     flat.erase = Some(PixelBox {
         x: 1,
         y: 1,
@@ -175,32 +216,26 @@ fn refuses_a_flat_image_whose_hash_could_be_inverted() {
         height: 1,
     };
     flat.glyph.alpha_hex = "ff".to_owned();
-    flat.sha256 = sha256_hex(&stock_application()[PADDING]);
-    let recipe = with_edits(&fixture, vec![flat]);
+    flat.glyph.colour_from = Pixel { x: 0, y: 4 };
+    let recipe = pinned(&fixture, with_edits(&fixture, vec![flat]));
 
-    assert_eq!(
-        fixture.apply(&recipe),
-        Err(RecipeError::PredictableImage {
-            index: 0,
-            distinct: 1,
-            unpredicted: 0
-        })
-    );
-    // No hash is computed for it either.
-    let hashes = precondition_hashes(
-        &recipe,
-        &fixture.target(),
-        &fixture.update,
-        RecipeChecks::NONE,
-    );
-    assert_eq!(
-        hashes,
-        Err(RecipeError::PredictableImage {
-            index: 0,
-            distinct: 1,
-            unpredicted: 0
-        })
-    );
+    let output = fixture.apply(&recipe).expect("apply");
+
+    let colour = at(&stock, 0, 4);
+    assert_ne!(colour, 0);
+    for x in [1, 2] {
+        assert_eq!(at(&stock, x, 1), 0);
+        assert_eq!(at(&output, x, 1), colour, "glyph pixel ({x}, 1)");
+    }
+    // The erase interpolates between zeros, so only the glyph's 4 bytes and the version string
+    // change.
+    let glyph = base + 18..base + 22;
+    let version = VERSION_STRING_OFFSET..VERSION_STRING_OFFSET + 4;
+    for (i, (a, b)) in stock.iter().zip(&output).enumerate() {
+        if !glyph.contains(&i) && !version.contains(&i) {
+            assert_eq!(a, b, "byte {i:#x}");
+        }
+    }
 }
 
 #[test]
@@ -216,10 +251,8 @@ fn refuses_an_image_past_the_end_or_in_the_protected_header() {
         })
     );
 
-    let mut header = edit(0x700);
-    header.sha256 = "00".repeat(32);
     assert_eq!(
-        fixture.apply(&with_edits(&fixture, vec![header])),
+        fixture.apply(&with_edits(&fixture, vec![edit(0x700)])),
         Err(RecipeError::ImageProtected {
             index: 0,
             start: 0x700,
@@ -255,13 +288,14 @@ fn refuses_an_image_in_the_protected_set() {
     );
 }
 
+/// A draft whose window hashes and output pin are placeholders: the draft path computes them, and
+/// the completed recipe applies.
 #[test]
-fn draft_hashes_include_every_image_and_complete_the_recipe() {
+fn draft_output_identities_complete_the_recipe() {
     let fixture = Fixture::new();
-    let complete = edit(IMAGE);
-    let mut draft = complete.clone();
-    draft.sha256 = "00".repeat(32);
-    let mut recipe = with_edits(&fixture, vec![draft]);
+    let mut recipe = with_edits(&fixture, vec![edit(IMAGE)]);
+    recipe.replacements = vec![replacement(0x900, &[0xde, 0xad])];
+    recipe.replacements[0].precondition.sha256 = "00".repeat(32);
 
     let hashes = precondition_hashes(
         &recipe,
@@ -271,29 +305,21 @@ fn draft_hashes_include_every_image_and_complete_the_recipe() {
     )
     .expect("hashes");
 
-    assert!(hashes.replacements.is_empty());
-    assert_eq!(hashes.image_edits, vec![complete.sha256.clone()]);
-    recipe.image_edits[0].sha256 = hashes.image_edits[0].clone();
-    assert!(fixture.apply(&recipe).is_ok());
-}
-
-#[test]
-fn refuses_an_image_its_neighbours_predict_despite_many_values() {
-    let fixture = Fixture::new();
-    // 16 pixels wide, the pattern repeats from row to row: 128 distinct values, but a smooth
-    // structure whose hash could be inverted.
-    let mut aligned = edit(IMAGE);
-    aligned.width = 16;
-    aligned.sha256 = sha256_hex(&stock_application()[IMAGE..IMAGE + 256]);
-
-    assert_eq!(
-        fixture.apply(&with_edits(&fixture, vec![aligned])),
-        Err(RecipeError::PredictableImage {
-            index: 0,
-            distinct: 128,
-            unpredicted: 24
-        })
-    );
+    let output = hashes.output;
+    recipe.replacements[0].precondition.sha256 = hashes.replacements[0].clone();
+    recipe.expected = Some(ExpectedV2 {
+        application_sha256: Some(output.application_sha256.clone()),
+        upd_sha256: Some(output.upd_sha256.clone()),
+    });
+    let rebuilt = apply_recipe_v2_to(
+        &recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    )
+    .expect("apply");
+    assert_eq!(rebuilt.application_sha256(), output.application_sha256);
+    assert_eq!(rebuilt.sha256(), output.upd_sha256);
 }
 
 /// As for a relabelled button: the colour pixel lies inside the erase box (a stroke of the old
@@ -304,10 +330,9 @@ fn reads_the_glyph_colour_before_the_erase() {
     let stock = stock_application();
     let mut inside = edit(IMAGE);
     inside.glyph.colour_from = Pixel { x: 6, y: 3 };
+    let recipe = pinned(&fixture, with_edits(&fixture, vec![inside]));
 
-    let output = fixture
-        .apply(&with_edits(&fixture, vec![inside]))
-        .expect("apply");
+    let output = fixture.apply(&recipe).expect("apply");
 
     // The erase changes that pixel, so reading it afterwards would give another colour.
     let erased_row = ImageEdit::erase_row(pixel(&stock, 3, 3), pixel(&stock, 10, 3), 6);
