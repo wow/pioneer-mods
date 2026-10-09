@@ -175,10 +175,10 @@ into place.
   is one branch (`0x08D50D78`). The functions a normal boot runs before it, an update-mode boot
   runs, and two complete updates run are recorded as a set of address ranges (a lower bound:
   the unit runs code the model does not). A recipe's windows must lie outside it, and the bytes
-  its replacements change must not be read during a normal or an update-mode boot. The
-  engine protects only the header. The set is kept outside this repository, so the maintainer
-  checks these rules by hand, with an emulator rehearsal of the update and of the restore, and
-  by staged hardware testing; a `patch-cli` check is planned.
+  its replacements change must not be read during a normal or an update-mode boot. The engine
+  protects only the header. The set is kept outside this repository, so the maintainer checks
+  these rules by hand, with an emulator rehearsal of the update and of the restore, and by
+  staged hardware testing; a `patch-cli` check is planned.
 - **Same length only.** Growing the application (for example appending code) is not supported
   until the memory after the application is understood.
 - **Test on hardware in stages**, as the flashing guide describes, and record the result.
