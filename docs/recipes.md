@@ -232,7 +232,7 @@ Then, on the official file:
 2. On the stock application, before anything is replaced, each precondition window matches its
    SHA-256 and passes the [window rules](#precondition-windows), and each span changes its first
    and last bytes and, of the bytes it writes, at most half equal stock, fewer than 32 in a row.
-   Kept bytes (`--`) stay stock.
+   Kept bytes (`--`) stay stock: only written bytes are declared, so the next check covers them.
 3. The modified application differs from stock **only** in the declared spans, the edited image
    rows and the version string (a byte-by-byte check that the rebuild entry point runs for every
    edit).
