@@ -243,17 +243,32 @@ pub(crate) fn check_sha256(field: &str, value: &str) -> Result<(), EntryError> {
 
 /// A recipe path relative to the repository root: `recipes/…/<file>.json`.
 pub(crate) fn check_recipe_path(field: &str, value: &str) -> Result<(), EntryError> {
+    checked(is_repo_path(value, "recipes/", ".json"), || {
+        EntryError::RecipePath {
+            field: field.to_owned(),
+            value: value.to_owned(),
+        }
+    })
+}
+
+/// A document path relative to the repository root: `docs/…/<file>.md`.
+pub(crate) fn check_doc_path(field: &str, value: &str) -> Result<(), EntryError> {
+    checked(is_repo_path(value, "docs/", ".md"), || EntryError::Rule {
+        field: field.to_owned(),
+        problem: "a path relative to the repository root, docs/…/<file>.md".to_owned(),
+    })
+}
+
+/// A path relative to the repository root, under `dir`, ending in `extension`, with no empty,
+/// `.` or `..` component and only printable ASCII (no `\` or `:`).
+fn is_repo_path(value: &str, dir: &str, extension: &str) -> bool {
     let components_ok = value
         .split('/')
         .all(|part| !part.is_empty() && part != "." && part != "..");
     let chars_ok = value
         .chars()
         .all(|c| c.is_ascii_graphic() && c != '\\' && c != ':');
-    let ok = value.starts_with("recipes/") && value.ends_with(".json") && components_ok && chars_ok;
-    checked(ok, || EntryError::RecipePath {
-        field: field.to_owned(),
-        value: value.to_owned(),
-    })
+    value.starts_with(dir) && value.ends_with(extension) && components_ok && chars_ok
 }
 
 /// The labels a feature gives a slot, or a skin draws: at least one, each a short printable

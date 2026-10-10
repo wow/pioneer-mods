@@ -61,14 +61,17 @@ pub struct Fragment {
     /// The least settled of the implementations that name the recipe.
     pub maturity: Maturity,
     pub builds: Vec<String>,
-    /// Whether the profile's label and reported version are the recipe's own, so that the
-    /// fragment alone builds the very file its pins describe.
+    /// The SHA-256 of the update file the recipe pins, if it pins one.
+    pub pinned_update: Option<String>,
+    /// Whether the fragment alone builds the very file its pins describe: the profile's label and
+    /// reported version are the recipe's own, and the recipe pins its update file.
     pub as_pinned: bool,
 }
 
 impl Resolution {
     /// The tier of the build: its least settled fragment's when the build is one fragment under
-    /// the recipe's own label and reported version (the very file its pins describe), and
+    /// the recipe's own label and reported version, pinning its update (the very file its pins
+    /// describe), and
     /// `experimental` at most otherwise: a combination, or another label or version, is a new
     /// update that no listed combination covers yet (`docs/modular-builds.md`, "Building a
     /// profile"). `None` with no fragment.
@@ -83,6 +86,49 @@ impl Resolution {
             _ => least.min(Maturity::Experimental),
         })
     }
+
+    /// The tier of a build of this resolution, when it may be built: refused when nothing is on,
+    /// or when the tier is less settled than the profile accepts. Every front end that builds
+    /// calls it, as `patch-cli build` does.
+    ///
+    /// # Errors
+    ///
+    /// [`BuildError::NothingOn`] or [`BuildError::LessSettled`].
+    pub fn buildable(&self) -> Result<Maturity, BuildError> {
+        let tier = self.tier().ok_or(BuildError::NothingOn)?;
+        if tier < self.maturity {
+            return Err(BuildError::LessSettled {
+                tier,
+                accepts: self.maturity,
+            });
+        }
+        Ok(tier)
+    }
+
+    /// The update file a build must be, byte for byte: the lone fragment's pinned update when the
+    /// build is that recipe's own output. A builder checks its output against it before writing.
+    pub fn pinned_output(&self) -> Option<&str> {
+        match self.fragments.as_slice() {
+            [lone] if lone.as_pinned => lone.pinned_update.as_deref(),
+            _ => None,
+        }
+    }
+}
+
+/// Why a resolution cannot be built ([`Resolution::buildable`]).
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum BuildError {
+    #[error("nothing to build; every choice is off or keeps the stock skin")]
+    NothingOn,
+
+    /// The build is a new update, `experimental` at most, and the profile accepts only `stable`.
+    #[error(
+        "the build is {tier} (a combination, or a recipe under another label or reported version \
+         than its own or pinning no update file, is a new update and experimental at most); the \
+         profile accepts {}",
+        .accepts.accepted()
+    )]
+    LessSettled { tier: Maturity, accepts: Maturity },
 }
 
 /// Why a profile cannot be resolved at all (anything narrower is switched off instead).

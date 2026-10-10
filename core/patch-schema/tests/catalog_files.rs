@@ -149,6 +149,20 @@ fn players_and_screens_are_checked_on_their_own() {
     let mut bad = fixture.player.clone();
     bad["screen_class"]["height"] = json!(0);
     assert!(is_rule(player(bad)));
+    for guide in [
+        "../docs/p.md",
+        "docs/p.txt",
+        "docs/../p.md",
+        "notes/p.md",
+        "docs\\p.md",
+    ] {
+        let mut bad = fixture.player.clone();
+        bad["restore"]["guide"] = json!(guide);
+        assert!(is_rule(player(bad)), "{guide}");
+    }
+    let mut bad = fixture.player.clone();
+    bad["restore"]["backup"] = json!("one line\nanother");
+    assert!(player(bad).is_err());
 
     let screen = |value: Value| {
         serde_json::from_value::<Screen>(value)

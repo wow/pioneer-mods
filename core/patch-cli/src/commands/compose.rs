@@ -50,7 +50,6 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
     }
     let refusing = format!("refusing to compose recipes for '{}'", args.input.display());
     let mut recipes = Vec::with_capacity(args.recipes.len());
-    let mut names = Vec::with_capacity(args.recipes.len());
     for path in &args.recipes {
         let (raw, schema_version) = read_recipe_versioned(path)?;
         if schema_version != SCHEMA_VERSION_V2 {
@@ -62,12 +61,11 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
         }
         // Each recipe's refusals name it.
         let context = format!("{refusing}: recipe '{}'", path.display());
-        recipes.push(CheckedRecipe::load(path, &raw, context)?);
-        names.push(format!("'{}'", path.display()));
+        let name = format!("'{}'", path.display());
+        recipes.push((CheckedRecipe::load(path, &raw, context)?, name));
     }
     compose_checked(ComposeJob {
         recipes,
-        names,
         refusing,
         verb: "compose",
         input: &args.input,
@@ -76,6 +74,7 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
         reported_version: &args.report_version,
         protected_set: args.protected_set.as_deref(),
         no_protected_set: args.no_protected_set,
+        pinned_output: None,
     })?;
     println!(
         "note: a combination is a new update with no pin of its own: rehearse it both ways in \
@@ -87,9 +86,8 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
 
 /// Recipes that passed their own checks, and what to compose them into.
 pub(super) struct ComposeJob<'a> {
-    pub(super) recipes: Vec<CheckedRecipe>,
-    /// How refusals name each recipe (`'recipes/…/r.json'`).
-    pub(super) names: Vec<String>,
+    /// Each recipe, and how refusals name it (`'recipes/…/r.json'`).
+    pub(super) recipes: Vec<(CheckedRecipe, String)>,
     /// Why a refusal happened, for example "refusing to compose recipes for 'XDJ700.UPD'".
     pub(super) refusing: String,
     /// The command, for the input's refusals ("refusing to compose '…/XDJ700.UPD'").
@@ -100,6 +98,9 @@ pub(super) struct ComposeJob<'a> {
     pub(super) reported_version: &'a str,
     pub(super) protected_set: Option<&'a Path>,
     pub(super) no_protected_set: bool,
+    /// The SHA-256 the output must have, when it is to be a recipe's own pinned update; checked
+    /// before anything is written.
+    pub(super) pinned_output: Option<&'a str>,
 }
 
 /// Composes `job`: every check that needs no firmware (the release, the protected set, the
@@ -107,8 +108,7 @@ pub(super) struct ComposeJob<'a> {
 /// the identities; the caller prints what kind of update it is.
 pub(super) fn compose_checked(job: ComposeJob<'_>) -> Result<()> {
     let ComposeJob {
-        recipes: checked,
-        names,
+        recipes,
         refusing,
         verb,
         input: input_path,
@@ -117,7 +117,9 @@ pub(super) fn compose_checked(job: ComposeJob<'_>) -> Result<()> {
         reported_version,
         protected_set,
         no_protected_set,
+        pinned_output,
     } = job;
+    let (checked, names): (Vec<CheckedRecipe>, Vec<String>) = recipes.into_iter().unzip();
     let target = checked.first().context("nothing to compose")?.target();
     if let Some(other) = checked.iter().find(|c| c.target().id != target.id) {
         bail!(
@@ -171,6 +173,16 @@ pub(super) fn compose_checked(job: ComposeJob<'_>) -> Result<()> {
 
     let composed = composition.compose(&input).map_err(refuse)?;
     let rebuilt = &composed.rebuilt;
+    if let Some(pin) = pinned_output
+        && !rebuilt.sha256().eq_ignore_ascii_case(pin)
+    {
+        bail!(
+            "{refusing}: the build is to be {}'s own pinned update (SHA-256 {pin}), but its \
+             SHA-256 is {}; nothing was written",
+            names[0],
+            rebuilt.sha256()
+        );
+    }
     write_output_atomically(output, rebuilt.bytes(), Overwrite::Never)?;
 
     println!("release: {}", target.id);
@@ -208,7 +220,13 @@ pub(super) fn compose_checked(job: ComposeJob<'_>) -> Result<()> {
     println!(
         "verified: each recipe reproduced its own pinned output alone; the composed application \
          equals each recipe's output where it changes bytes and stock elsewhere; the rebuild was \
-         re-parsed and checked against the input; file read back before it was renamed into place"
+         re-parsed and checked against the input; {}file read back before it was renamed into \
+         place",
+        if pinned_output.is_some() {
+            "the output is the recipe's own pinned update; "
+        } else {
+            ""
+        }
     );
     Ok(())
 }

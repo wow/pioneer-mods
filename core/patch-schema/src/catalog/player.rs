@@ -2,8 +2,8 @@
 //! screens (`catalog/players/<id>.json`).
 
 use super::entry::{
-    CatalogEntry, EntryError, check_id, check_name, check_player_id, check_schema_version,
-    check_sha256, check_text, check_unique, unique_keys,
+    CatalogEntry, EntryError, check_doc_path, check_id, check_name, check_player_id,
+    check_schema_version, check_sha256, check_text, check_unique, unique_keys,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -23,6 +23,7 @@ pub struct Player {
     pub capabilities: BTreeMap<String, Capability>,
     /// The screens catalogued for this player, each in `catalog/screens/<player>/<screen>.json`.
     pub screens: Vec<String>,
+    pub restore: Restore,
     pub maintainer: String,
 }
 
@@ -34,6 +35,19 @@ pub struct Firmware {
     pub file: String,
     pub upd_sha256: String,
     pub application_sha256: String,
+}
+
+/// How an owner brings back the stock application after flashing a build of this player; a
+/// builder prints it with every build.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Restore {
+    /// What the official update does over a build, and why.
+    pub official: String,
+    /// The backup when the official update is not enough.
+    pub backup: String,
+    /// The player's flashing guide, relative to the repository root (`docs/<file>.md`).
+    pub guide: String,
 }
 
 /// The display a skin is drawn for.
@@ -107,6 +121,9 @@ impl CatalogEntry for Player {
             "firmware.application_sha256",
             &self.firmware.application_sha256,
         )?;
+        check_text("restore.official", &self.restore.official)?;
+        check_text("restore.backup", &self.restore.backup)?;
+        check_doc_path("restore.guide", &self.restore.guide)?;
         if self.screen_class.width == 0 || self.screen_class.height == 0 {
             return Err(EntryError::Rule {
                 field: "screen_class".to_owned(),

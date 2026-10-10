@@ -1,6 +1,6 @@
 use super::compose::{ComposeJob, compose_checked};
-use super::resolve::print_resolution;
-use anyhow::{Context, Result, bail};
+use super::resolve::{note, print_resolution};
+use anyhow::{Context, Result};
 use patch_cli::catalog::{load_catalog, read_profile, resolve_profile};
 use patch_cli::recipe::CheckedRecipe;
 use std::path::PathBuf;
@@ -36,36 +36,29 @@ pub struct BuildArgs {
 
 /// Resolves a profile against the catalog and composes its fragments under the profile's label
 /// and reported version into one verified update (`docs/catalog.md`, "Building a profile").
-/// Everything that needs no firmware is checked before the input is read. Reports the
-/// resolution (each item on with its evidence), the output's identity and the restore plan.
+/// Everything that needs no firmware is checked before the input is read. Prints the resolution
+/// (each item on with its evidence) first, so that a refusal shows what was resolved; then, once
+/// the file is written, its identity, what it is and the player's restore plan.
 pub fn build(args: BuildArgs) -> Result<()> {
     let catalog = load_catalog(&args.root)?;
     let profile = read_profile(&args.profile)?;
     let refusing = format!("refusing to build profile '{}'", args.profile.display());
     let resolution = resolve_profile(&catalog, &profile).with_context(|| refusing.clone())?;
+    let player = catalog
+        .catalog()
+        .player(&resolution.player)
+        .expect("resolution refuses a player the catalog lacks");
     print_resolution(&resolution);
-    let Some(tier) = resolution.tier() else {
-        bail!("{refusing}: nothing to build; every choice is off or keeps the stock skin");
-    };
-    if tier < profile.maturity {
-        bail!(
-            "{refusing}: the build is {tier} (a combination, or a recipe under another label or \
-             reported version than its own, is a new update and experimental at most); the \
-             profile accepts {}",
-            profile.maturity.accepted()
-        );
-    }
+    resolution.buildable().with_context(|| refusing.clone())?;
     let mut recipes = Vec::with_capacity(resolution.fragments.len());
-    let mut names = Vec::with_capacity(resolution.fragments.len());
     for fragment in &resolution.fragments {
         let recipe = catalog.recipes()[&fragment.recipe].clone();
         let context = format!("{refusing}: recipe '{}'", fragment.recipe);
-        recipes.push(CheckedRecipe::from_recipe(recipe, context)?);
-        names.push(format!("'{}'", fragment.recipe));
+        let name = format!("'{}'", fragment.recipe);
+        recipes.push((CheckedRecipe::from_recipe(recipe, context)?, name));
     }
     compose_checked(ComposeJob {
         recipes,
-        names,
         refusing,
         verb: "build",
         input: &args.input,
@@ -74,16 +67,15 @@ pub fn build(args: BuildArgs) -> Result<()> {
         reported_version: &resolution.reported_version,
         protected_set: args.protected_set.as_deref(),
         no_protected_set: args.no_protected_set,
+        pinned_output: resolution.pinned_output(),
     })?;
-    // The resolution's player is in the catalog; resolution refuses one it lacks.
-    let player = catalog.catalog().player(&resolution.player);
-    let file = player.map_or("its file", |player| player.firmware.file.as_str());
+    println!("{}", note(&resolution));
+    let restore = &player.restore;
     println!(
-        "restore: the official update ({file}, the input) brings back the stock application: the \
-         build reports {}, lower than the official release, so the unit accepts the official \
-         file over it; keep the stock no-op stick as the backup (docs/xdj700-flashing.md, \
-         section 3, step 5)",
-        resolution.reported_version
+        "restore: the official update ({}, the input), over this build reporting {}: {}",
+        player.firmware.file, resolution.reported_version, restore.official
     );
+    println!("restore_backup: {}", restore.backup);
+    println!("restore_guide: {}", restore.guide);
     Ok(())
 }

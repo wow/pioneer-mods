@@ -48,6 +48,9 @@ letters, digits and `_` joined by `.` (`beat_loop.pad`). A slot is referred to a
   evidence shows, not necessarily everything the firmware holds: `beat_loop.lengths` names the six
   stock button lengths and 32, the one other length a button has been shown to set.
 - `screens`: the screens catalogued for it, each with its own file.
+- `restore`: how an owner brings back the stock application after flashing a build, which
+  `patch-cli build` prints with every build: what the `official` update does over a build, the
+  `backup`, and the player's flashing `guide` (`docs/<file>.md`, a file the loader checks).
 
 ## Screen
 
@@ -170,6 +173,9 @@ tier: experimental
 note: the build is recipes/xdj700-v1.15/beat-loop-1-to-32.json's own output, under its own …
 ```
 
+A fragment line ends with why its build is a new update when it is: the profile's label or
+reported version is not the recipe's own, or the recipe pins no update file.
+
 The profile's label and reported version must pass the release's rules (higher than its own
 version, and lower), as a build applies them. The choices are honoured as far as they fit, and
 nothing is dropped silently:
@@ -194,18 +200,21 @@ the first in screen and file order. The search is small for real catalogs; one n
 65,536 configurations is refused.
 
 The **tier** of the build is its least settled fragment's when it is one fragment under the recipe's
-own label and reported version (the very file its pins describe), and `experimental` at most
-otherwise: a combination, or another label or version, is a new update that no listed combination
-covers yet ([modular-builds.md](./modular-builds.md)). Only an invalid profile, a player the catalog
-lacks, a label or version the release refuses, or a search over more than 65,536 configurations is
-refused outright. Front ends call `patch_cli::catalog::resolve_profile`, which applies the release's
-label and version rules before the search.
+own label and reported version, pinning its update file (the very file its pins describe), and
+`experimental` at most otherwise: a combination, another label or version, or a recipe that pins no
+update file, is a new update that no listed combination covers yet
+([modular-builds.md](./modular-builds.md)). `Resolution::buildable` gives the tier of a build, or
+why there is none to make, and `Resolution::pinned_output` the update file a build must be. Only an
+invalid profile, a player the catalog lacks, a label or version the release refuses, or a search
+over more than 65,536 configurations is refused outright. Front ends call
+`patch_cli::catalog::resolve_profile`, which applies the release's label and version rules before
+the search.
 
 ## Building a profile
 
-`patch-cli build` resolves the profile as above, prints the resolution, and composes its
-fragments under the profile's label and reported version into one update, as `patch-cli compose`
-does ([recipes.md](./recipes.md), "Composing recipes"):
+`patch-cli build` resolves the profile as above, prints the resolution (without the note), and
+composes its fragments under the profile's label and reported version into one update, as
+`patch-cli compose` does ([recipes.md](./recipes.md), "Composing recipes"):
 
 ```bash
 cargo run --release -p patch-cli -- build \
@@ -216,20 +225,20 @@ cargo run --release -p patch-cli -- build \
 ```
 
 Before the input is read, the build is refused when nothing is on (every choice is off or keeps
-`stock`), or when its tier is less settled than the profile accepts (a combination, or a recipe
-under another label or reported version, is `experimental` at most). Every fragment then passes
-its own checks and the protected set, and the composition its checks; the input must be the
-player's official update; each fragment is applied alone and must reproduce its pinned output,
-and the composed build is checked against each fragment's output byte for byte before it is
-written. A profile with one feature under its recipe's own label and version builds that
-recipe's own pinned file: the owner-input tests build the stage-5 and stage-7 files this way.
+`stock`), or when its tier is less settled than the profile accepts (`Resolution::buildable`;
+a new update is `experimental` at most). Every fragment then passes its own checks and the
+protected set, and the composition its checks; the input must be the player's official update;
+each fragment is applied alone and must reproduce its pinned output, and the composed build is
+checked against each fragment's output byte for byte before it is written. A profile with one
+feature under its recipe's own label and version builds that recipe's own pinned update, and the
+output is checked against that pin before it is written: the owner-input tests build the stage-5
+and stage-7 files this way.
 
-The note at the end of the resolution says what the build is. Anything but a recipe's own pinned
-file is a new update: rehearse it both ways in emulation before flashing, and follow the
-[flashing guide](./xdj700-flashing.md). Flashing is the owner's decision. After the output's
-identity, `restore:` gives the restore plan: the official update, accepted over the build because
-the build reports a lower version, and the stock no-op stick as the backup (flashing guide,
-section 3, step 5).
+Once the file is written, `build` prints its identity, the note saying what it is, and the
+player's restore plan (`restore:`, `restore_backup:`, `restore_guide:`, from the player's
+`restore`). A refused build prints the resolution only. Anything but a recipe's own pinned file
+is a new update: rehearse it both ways in emulation before flashing, and follow the player's
+flashing guide ([XDJ-700](./xdj700-flashing.md)). Flashing is the owner's decision.
 
 ## Checks
 
@@ -241,7 +250,8 @@ Each file is checked on its own, then the catalog as a whole, with no firmware:
   counts; a skin named in `draws_labels` is built in, or exists, is for that screen and has an
   implementation for the player;
 - every recipe named exists, is a valid schema-v2 recipe for its player, carries the player's pins
-  and pins its output.
+  and pins its output;
+- every player's flashing guide is a file in the repository, not a symbolic link.
 
 The loader (`patch_cli::catalog::load_catalog`) then holds the catalog to the engine: every
 player is a release the engine pins, with the same pins and budget, and every recipe passes the

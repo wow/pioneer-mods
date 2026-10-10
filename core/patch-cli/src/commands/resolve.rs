@@ -23,11 +23,15 @@ pub fn resolve(args: ResolveArgs) -> Result<()> {
     let resolution = resolve_profile(&catalog, &profile)
         .with_context(|| format!("refusing profile '{}'", args.profile.display()))?;
     print_resolution(&resolution);
+    if resolution.tier().is_some() {
+        println!("{}", note(&resolution));
+    }
     Ok(())
 }
 
 /// Prints every choice of `resolution`, on (with its evidence and limits) or off with its reason,
-/// its fragments and its tier.
+/// its fragments and its tier. What a build of it is ([`note`]) is for the caller to print:
+/// `build` prints it only once the file is written.
 pub(super) fn print_resolution(resolution: &Resolution) {
     println!("player: {}", resolution.player);
     println!("label: {}", resolution.label);
@@ -59,29 +63,26 @@ pub(super) fn print_resolution(resolution: &Resolution) {
     }
     println!("fragments: {}", resolution.fragments.len());
     for (index, fragment) in resolution.fragments.iter().enumerate() {
+        let new_update = match (fragment.as_pinned, &fragment.pinned_update) {
+            (true, _) => "",
+            (false, None) => "; the recipe pins no update file",
+            (false, Some(_)) => "; under another label or reported version than its own",
+        };
         println!(
-            "fragment[{index}]: {} ({}; {}{})",
+            "fragment[{index}]: {} ({}; {}{new_update})",
             fragment.recipe,
             fragment.maturity,
             fragment.builds.join(", "),
-            if fragment.as_pinned {
-                ""
-            } else {
-                "; under another label or reported version than its own"
-            }
         );
     }
     match resolution.tier() {
         None => println!("tier: none; nothing to build"),
-        Some(tier) => {
-            println!("tier: {tier}");
-            println!("{}", note(resolution));
-        }
+        Some(tier) => println!("tier: {tier}"),
     }
 }
 
 /// What a build of `resolution` is: the very file its one recipe pins, or a new update.
-fn note(resolution: &Resolution) -> String {
+pub(super) fn note(resolution: &Resolution) -> String {
     match resolution.fragments.as_slice() {
         [lone] if lone.as_pinned => format!(
             "note: the build is {}'s own output, under its own label and reported version",

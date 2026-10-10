@@ -12,15 +12,15 @@ mod common;
 #[path = "../../patch-core/tests/common/official_pins.rs"]
 mod official_pins;
 
-use common::{repo_root, write_bytes};
+use common::{profile, repo_root, run_with_profile};
 use official_pins::{
     STAGE5_REPORTED_VERSION, STAGE5_UPD_LEN, STAGE5_UPD_SHA256, STAGE7_APPLICATION_SHA256,
     STAGE7_REPORTED_VERSION, STAGE7_UPD_LEN, STAGE7_UPD_SHA256, UPD_ENV,
 };
 use patch_core::sha256_hex;
 use serde_json::json;
+use std::ffi::OsString;
 use std::path::PathBuf;
-use std::process::Command;
 
 /// A profile choosing only `feature`, under `label` and `reported_version`, built from the
 /// official file.
@@ -29,28 +29,18 @@ fn build(feature: &str, label: &str, reported_version: &str) -> (Vec<u8>, String
         .map(PathBuf::from)
         .unwrap_or_else(|| panic!("set {UPD_ENV} to an owner-supplied official XDJ700.UPD"));
     let dir = tempfile::tempdir().expect("tempdir");
-    let profile = dir.path().join("profile.json");
-    let value = json!({
-        "schema_version": 1, "player": "xdj700-v1.15", "features": [feature],
-        "label": label, "reported_version": reported_version, "maturity": "experimental"
-    });
-    write_bytes(&profile, &serde_json::to_vec(&value).expect("json"));
+    let mut value = profile(&[feature], "experimental");
+    value["label"] = json!(label);
+    value["reported_version"] = json!(reported_version);
     let output = dir.path().join("XDJ700.UPD");
-
-    let result = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
-        .arg("build")
-        .arg("--profile")
-        .arg(&profile)
-        .arg("--input")
-        .arg(&input)
-        .arg("--output")
-        .arg(&output)
-        .arg("--root")
-        .arg(repo_root())
-        .arg("--no-protected-set")
-        .env_remove("XDJ700_PROTECTED_SET")
-        .output()
-        .expect("run patch-cli build");
+    let args: [OsString; 5] = [
+        "--input".into(),
+        input.into(),
+        "--output".into(),
+        output.clone().into(),
+        "--no-protected-set".into(),
+    ];
+    let result = run_with_profile("build", &value, &repo_root(), dir.path(), args);
 
     assert!(
         result.status.success(),
@@ -77,8 +67,11 @@ fn profiles_build_the_stage_files() {
         "tier: experimental",
         "'s own output, under its own label and reported version",
         &format!("output_sha256_hex: {STAGE7_UPD_SHA256}"),
-        "restore: the official update (XDJ700.UPD, the input) brings back the stock application: \
-         the build reports 0.12",
+        "the output is the recipe's own pinned update; ",
+        "restore: the official update (XDJ700.UPD, the input), over this build reporting 0.12: \
+         The unit accepts it",
+        "restore_backup: The stock no-op rebuild labelled Ver1.16",
+        "restore_guide: docs/xdj700-flashing.md",
     ] {
         assert!(stdout.contains(line), "{line}\n{stdout}");
     }
@@ -103,4 +96,5 @@ fn another_label_builds_a_new_update() {
     ] {
         assert!(stdout.contains(line), "{line}\n{stdout}");
     }
+    assert!(!stdout.contains("pinned update; "), "{stdout}");
 }

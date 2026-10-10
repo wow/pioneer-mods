@@ -3,6 +3,8 @@
 
 pub mod protected_set;
 
+use serde_json::{Value, json};
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -13,10 +15,11 @@ pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// A copy of the committed catalog and the recipes it names, under a temporary root.
+/// A copy of the committed catalog, the recipes it names and the docs (its players' flashing
+/// guides), under a temporary root.
 pub fn copy_catalog() -> tempfile::TempDir {
     let root = tempfile::tempdir().expect("tempdir");
-    for dir in ["catalog", "recipes"] {
+    for dir in ["catalog", "recipes", "docs"] {
         copy_tree(&repo_root().join(dir), &root.path().join(dir));
     }
     root
@@ -33,6 +36,42 @@ fn copy_tree(from: &Path, to: &Path) {
             std::fs::copy(entry.path(), &target).expect("copy");
         }
     }
+}
+
+/// A profile for the committed XDJ-700 v1.15 player choosing `features` under `Ver1.16` and
+/// `0.12` (stage 7's own), accepting `maturity`; tests change other fields in place.
+pub fn profile(features: &[&str], maturity: &str) -> Value {
+    json!({
+        "schema_version": 1, "player": "xdj700-v1.15", "features": features,
+        "label": "Ver1.16", "reported_version": "0.12", "maturity": maturity
+    })
+}
+
+/// Writes `profile` to `dir/profile.json` and runs `patch-cli <command> --profile <it> --root
+/// <root>`, then `extra`, with no protected set named by the environment.
+pub fn run_with_profile<I, S>(
+    command: &str,
+    profile: &Value,
+    root: &Path,
+    dir: &Path,
+    extra: I,
+) -> Output
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let path = dir.join("profile.json");
+    write_bytes(&path, &serde_json::to_vec(profile).expect("json"));
+    Command::new(env!("CARGO_BIN_EXE_patch-cli"))
+        .arg(command)
+        .arg("--profile")
+        .arg(&path)
+        .arg("--root")
+        .arg(root)
+        .args(extra)
+        .env_remove("XDJ700_PROTECTED_SET")
+        .output()
+        .unwrap_or_else(|error| panic!("run patch-cli {command}: {error}"))
 }
 
 /// The repository's recipe directory.

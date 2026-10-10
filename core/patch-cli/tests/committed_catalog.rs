@@ -180,6 +180,36 @@ fn symbolic_links_are_refused() {
     std::fs::remove_dir_all(&features).expect("remove");
     symlink(outside.path().join("missing"), &features).expect("link");
     assert!(refusal(root.path()).contains("is a symbolic link"));
+
+    // A player's flashing guide linked to a file outside the tree.
+    let root = copy();
+    let guide = root.path().join("docs/xdj700-flashing.md");
+    std::fs::rename(&guide, outside.path().join("guide.md")).expect("move");
+    symlink(outside.path().join("guide.md"), &guide).expect("link");
+    let message = refusal(root.path());
+    assert!(
+        message.contains("refusing flashing guide") && message.contains("is a symbolic link"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_player_without_its_flashing_guide_is_refused() {
+    let root = copy();
+    std::fs::remove_file(root.path().join("docs/xdj700-flashing.md")).expect("remove");
+    let message = refusal(root.path());
+    assert!(
+        message.contains("failed to read flashing guide"),
+        "{message}"
+    );
+
+    // A directory where the guide should be.
+    std::fs::create_dir(root.path().join("docs/xdj700-flashing.md")).expect("dir");
+    let message = refusal(root.path());
+    assert!(
+        message.contains("its flashing guide 'docs/xdj700-flashing.md' is not a file"),
+        "{message}"
+    );
 }
 
 /// Replaces `from` with `to` in every JSON file under `root`, and in every file and directory

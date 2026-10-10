@@ -87,12 +87,15 @@ impl State<'_> {
                 }
                 None => {
                     let own = &recipes[recipe];
+                    let pinned_update = own.expected.as_ref().and_then(|e| e.upd_sha256.clone());
                     fragments.push(Fragment {
                         recipe: recipe.clone(),
                         maturity: *maturity,
                         builds: vec![builds],
                         as_pinned: own.label == self.profile.label
-                            && own.reported_version == self.profile.reported_version,
+                            && own.reported_version == self.profile.reported_version
+                            && pinned_update.is_some(),
+                        pinned_update,
                     });
                 }
             }

@@ -4,44 +4,31 @@
 
 mod common;
 
-use common::{copy_catalog, repo_root, write_bytes};
+use common::{copy_catalog, profile, repo_root, run_with_profile, write_bytes};
 use serde_json::{Value, json};
+use std::ffi::OsString;
 use std::path::Path;
-use std::process::{Command, Output};
-
-fn profile(features: &[&str], maturity: &str) -> Value {
-    json!({
-        "schema_version": 1, "player": "xdj700-v1.15", "features": features,
-        "label": "Ver1.16", "reported_version": "0.12", "maturity": maturity
-    })
-}
+use std::process::Output;
 
 /// Runs `build` for `profile` against the catalog under `root`, with `extra` arguments, on
 /// `input` (a missing file when `None`); returns the output and whether the output file was
 /// written.
 fn run(profile: &Value, root: &Path, extra: &[&str], input: Option<&[u8]>) -> (Output, bool) {
     let dir = tempfile::tempdir().expect("tempdir");
-    let path = dir.path().join("profile.json");
-    write_bytes(&path, &serde_json::to_vec(profile).expect("json"));
+    let input_path = dir.path().join("missing.UPD");
     if let Some(bytes) = input {
-        write_bytes(&dir.path().join("missing.UPD"), bytes);
+        write_bytes(&input_path, bytes);
     }
-    let output = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
-        .arg("build")
-        .arg("--profile")
-        .arg(&path)
-        .arg("--input")
-        .arg(dir.path().join("missing.UPD"))
-        .arg("--output")
-        .arg(dir.path().join("out.UPD"))
-        .arg("--root")
-        .arg(root)
-        .env_remove("XDJ700_PROTECTED_SET")
-        .args(extra)
-        .output()
-        .expect("run patch-cli build");
-    let written = dir.path().join("out.UPD").exists();
-    (output, written)
+    let output_path = dir.path().join("out.UPD");
+    let mut args: Vec<OsString> = vec![
+        "--input".into(),
+        input_path.into(),
+        "--output".into(),
+        output_path.clone().into(),
+    ];
+    args.extend(extra.iter().map(OsString::from));
+    let output = run_with_profile("build", profile, root, dir.path(), args);
+    (output, output_path.exists())
 }
 
 fn refused(profile: &Value, root: &Path, extra: &[&str]) -> String {
@@ -128,6 +115,11 @@ fn the_build_prints_its_resolution_and_names_itself_in_input_refusals() {
     ] {
         assert!(stdout.contains(line), "{line}\n{stdout}");
     }
+    // What the build is, and how to restore, only once a file is written.
+    assert!(
+        !stdout.contains("note:") && !stdout.contains("restore"),
+        "{stdout}"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("refusing to build '") && stderr.contains("(1024 bytes, expected"),

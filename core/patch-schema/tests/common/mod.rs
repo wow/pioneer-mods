@@ -14,6 +14,8 @@ use std::collections::BTreeMap;
 
 pub const UPD: &str = "1111111111111111111111111111111111111111111111111111111111111111";
 pub const APP: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+/// The update file every fixture recipe pins as its output.
+pub const OUT: &str = "3333333333333333333333333333333333333333333333333333333333333333";
 
 pub struct Fixture {
     pub player: Value,
@@ -35,7 +37,7 @@ pub fn recipe(release: &str) -> Value {
         "schema_version": 2, "recipe_id": "r", "description": "d",
         "target": { "release": release, "upd_sha256": UPD, "application_sha256": APP },
         "label": "Ver1.16", "reported_version": "0.12",
-        "expected": { "application_sha256": APP }
+        "expected": { "application_sha256": APP, "upd_sha256": OUT }
     })
 }
 
@@ -97,6 +99,7 @@ impl Fixture {
                     "jog_display": { "unavailable": "absent on this model", "evidence": "e" }
                 },
                 "screens": ["main", "perform"],
+                "restore": { "official": "o", "backup": "b", "guide": "docs/p.md" },
                 "maintainer": "m"
             }),
             screens: vec![
