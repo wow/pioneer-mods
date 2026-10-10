@@ -1,0 +1,940 @@
+{
+  "schema_version": 2,
+  "recipe_id": "xdj700-v1.15-beat-loop-1-to-32",
+  "description": "Experimental: the PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16: each button selects the length the button after it selected, the last one 32 beats (as in stage 5), and each button's six images are relabelled with the project's own digits. The application reports version 0.12, so the official v1.15 update is expected to restore stock (observed for stages 3 to 6 on an owner's unit; rehearsed in emulation for this file). Rehearsed in emulation, not yet tested on hardware. For staged hardware testing (docs/xdj700-flashing.md, stage 7).",
+  "target": {
+    "release": "xdj700-v1.15",
+    "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
+    "application_sha256": "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939"
+  },
+  "label": "Ver1.16",
+  "reported_version": "0.12",
+  "replacements": [
+    {
+      "offset": 877088,
+      "bytes_hex": "08------09------0a------0b------0c",
+      "precondition": {
+        "before": 3000,
+        "after": 3,
+        "sha256": "25319904f897d6e189c790747ad70bb90c704b04b3ddb71667377f282a5aec2b"
+      },
+      "purpose": "The first five entries of the six-entry table that maps the PERFORM screen's BEAT LOOP buttons to the player's list of loop lengths: the buttons that selected 1/2, 1, 2, 4 and 8 beats select 1, 2, 4, 8 and 16 (each 4-byte entry's first byte; `--` keeps the stock bytes between them, unpublished). By static analysis only the BEAT LOOP touch handler reads the table; in emulation it was not read at start-up or in update mode. The sixth entry is the next replacement. The window lies over data before the table (docs/recipes.md, Known exceptions)."
+    },
+    {
+      "offset": 877108,
+      "bytes_hex": "0d",
+      "precondition": {
+        "before": 0,
+        "after": 1216,
+        "sha256": "1ef2fab950010865b384af1cd2c995d526644ce877dc8f0b01a581c9e743f117"
+      },
+      "purpose": "The last entry of the BEAT LOOP button table, repeated exactly from beat-loop-16-plays-32.json: the sixth button selects the list's 32-beat entry instead of its 16-beat one. Here that button is relabelled 32 (the image edits)."
+    }
+  ],
+  "image_edits": [
+    {
+      "offset": 3471680,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 17,
+        "width": 21,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 34,
+          "y": 20
+        }
+      },
+      "purpose": "The normal image of the BEAT LOOP button labelled 16 (pad 6 of 6): its label is erased and redrawn as 32 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3480160,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 17,
+        "width": 21,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 34,
+          "y": 24
+        }
+      },
+      "purpose": "The pressed image of the BEAT LOOP button labelled 16 (pad 6 of 6): its label is erased and redrawn as 32 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3488640,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 17,
+        "width": 21,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 43,
+          "y": 20
+        }
+      },
+      "purpose": "The greyed-out image of the BEAT LOOP button labelled 16 (pad 6 of 6): its label is erased and redrawn as 32 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3497120,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 17,
+        "width": 21,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 44,
+          "y": 19
+        }
+      },
+      "purpose": "The lit image of the BEAT LOOP button labelled 16 (pad 6 of 6): its label is erased and redrawn as 32 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3505600,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 17,
+        "width": 21,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 44,
+          "y": 19
+        }
+      },
+      "purpose": "The lit and pressed image of the BEAT LOOP button labelled 16 (pad 6 of 6): its label is erased and redrawn as 32 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3514080,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 30,
+        "y": 17,
+        "width": 21,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "018cc8100007cd9201dffffd100bffffe37fd55df805fe64cfb3a3005fb08f7002ff000009fb0150001ff007bcff40000009fc00efffd1000005ff400267ef800001ef80000004fe0000bfc00000000ff2006ff3004a2002ff002ef70009fb22bfb00cfc22212effffe20bfffffff03bffb3009fffffff",
+        "colour_from": {
+          "x": 34,
+          "y": 19
+        }
+      },
+      "purpose": "The lit and greyed-out image of the BEAT LOOP button labelled 16 (pad 6 of 6): its label is erased and redrawn as 32 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3522560,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 35,
+        "y": 17,
+        "width": 8,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "018cc8101dffffd18fe55ef8bf4005fd250004fd00000cf900008fe20003ff50001dfa00009fd10005ff40001efa2221dfffffffcffffffe",
+        "colour_from": {
+          "x": 39,
+          "y": 20
+        }
+      },
+      "purpose": "The normal image of the BEAT LOOP button labelled 1 (pad 2 of 6): its label is erased and redrawn as 2 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3531040,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 35,
+        "y": 17,
+        "width": 8,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "018cc8101dffffd18fe55ef8bf4005fd250004fd00000cf900008fe20003ff50001dfa00009fd10005ff40001efa2221dfffffffcffffffe",
+        "colour_from": {
+          "x": 39,
+          "y": 24
+        }
+      },
+      "purpose": "The pressed image of the BEAT LOOP button labelled 1 (pad 2 of 6): its label is erased and redrawn as 2 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3539520,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 26,
+        "y": 16,
+        "width": 29,
+        "height": 19
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "0008f800009ff90009fff9000bfcf9000018f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000004f700",
+        "colour_from": {
+          "x": 41,
+          "y": 18
+        }
+      },
+      "purpose": "The normal image of the BEAT LOOP button labelled 1/2 (pad 1 of 6): its label is erased and redrawn as 1 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3548000,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 26,
+        "y": 16,
+        "width": 29,
+        "height": 19
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "0008f800009ff90009fff9000bfcf9000018f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000004f700",
+        "colour_from": {
+          "x": 31,
+          "y": 24
+        }
+      },
+      "purpose": "The pressed image of the BEAT LOOP button labelled 1/2 (pad 1 of 6): its label is erased and redrawn as 1 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3556480,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 26,
+        "y": 16,
+        "width": 29,
+        "height": 19
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "0008f800009ff90009fff9000bfcf9000018f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000004f700",
+        "colour_from": {
+          "x": 41,
+          "y": 18
+        }
+      },
+      "purpose": "The greyed-out image of the BEAT LOOP button labelled 1/2 (pad 1 of 6): its label is erased and redrawn as 1 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3564960,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 26,
+        "y": 16,
+        "width": 29,
+        "height": 19
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "0008f800009ff90009fff9000bfcf9000018f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000004f700",
+        "colour_from": {
+          "x": 41,
+          "y": 18
+        }
+      },
+      "purpose": "The lit image of the BEAT LOOP button labelled 1/2 (pad 1 of 6): its label is erased and redrawn as 1 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3573440,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 26,
+        "y": 16,
+        "width": 29,
+        "height": 19
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "0008f800009ff90009fff9000bfcf9000018f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000004f700",
+        "colour_from": {
+          "x": 41,
+          "y": 18
+        }
+      },
+      "purpose": "The lit and pressed image of the BEAT LOOP button labelled 1/2 (pad 1 of 6): its label is erased and redrawn as 1 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3581920,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 26,
+        "y": 16,
+        "width": 29,
+        "height": 19
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "0008f800009ff90009fff9000bfcf9000018f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000008f9000004f700",
+        "colour_from": {
+          "x": 41,
+          "y": 18
+        }
+      },
+      "purpose": "The lit and greyed-out image of the BEAT LOOP button labelled 1/2 (pad 1 of 6): its label is erased and redrawn as 1 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3590400,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 35,
+        "y": 17,
+        "width": 8,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "018cc8101dffffd18fe55ef8bf4005fd250004fd00000cf900008fe20003ff50001dfa00009fd10005ff40001efa2221dfffffffcffffffe",
+        "colour_from": {
+          "x": 39,
+          "y": 20
+        }
+      },
+      "purpose": "The greyed-out image of the BEAT LOOP button labelled 1 (pad 2 of 6): its label is erased and redrawn as 2 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3598880,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 35,
+        "y": 17,
+        "width": 8,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "018cc8101dffffd18fe55ef8bf4005fd250004fd00000cf900008fe20003ff50001dfa00009fd10005ff40001efa2221dfffffffcffffffe",
+        "colour_from": {
+          "x": 39,
+          "y": 20
+        }
+      },
+      "purpose": "The lit image of the BEAT LOOP button labelled 1 (pad 2 of 6): its label is erased and redrawn as 2 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3607360,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 35,
+        "y": 17,
+        "width": 8,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "018cc8101dffffd18fe55ef8bf4005fd250004fd00000cf900008fe20003ff50001dfa00009fd10005ff40001efa2221dfffffffcffffffe",
+        "colour_from": {
+          "x": 39,
+          "y": 20
+        }
+      },
+      "purpose": "The lit and pressed image of the BEAT LOOP button labelled 1 (pad 2 of 6): its label is erased and redrawn as 2 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3615840,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 35,
+        "y": 17,
+        "width": 8,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "018cc8101dffffd18fe55ef8bf4005fd250004fd00000cf900008fe20003ff50001dfa00009fd10005ff40001efa2221dfffffffcffffffe",
+        "colour_from": {
+          "x": 40,
+          "y": 19
+        }
+      },
+      "purpose": "The lit and greyed-out image of the BEAT LOOP button labelled 1 (pad 2 of 6): its label is erased and redrawn as 2 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3624320,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "00005f700000df900007ff90001eff90008fff9002ffcf900afb8f904ff38f90cfe9cfd9ffffffff5888bfc700008f9000008f9000004f70",
+        "colour_from": {
+          "x": 37,
+          "y": 20
+        }
+      },
+      "purpose": "The normal image of the BEAT LOOP button labelled 2 (pad 3 of 6): its label is erased and redrawn as 4 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3632800,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "00005f700000df900007ff90001eff90008fff9002ffcf900afb8f904ff38f90cfe9cfd9ffffffff5888bfc700008f9000008f9000004f70",
+        "colour_from": {
+          "x": 42,
+          "y": 24
+        }
+      },
+      "purpose": "The pressed image of the BEAT LOOP button labelled 2 (pad 3 of 6): its label is erased and redrawn as 4 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3641280,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "00005f700000df900007ff90001eff90008fff9002ffcf900afb8f904ff38f90cfe9cfd9ffffffff5888bfc700008f9000008f9000004f70",
+        "colour_from": {
+          "x": 37,
+          "y": 20
+        }
+      },
+      "purpose": "The greyed-out image of the BEAT LOOP button labelled 2 (pad 3 of 6): its label is erased and redrawn as 4 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3649760,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "00005f700000df900007ff90001eff90008fff9002ffcf900afb8f904ff38f90cfe9cfd9ffffffff5888bfc700008f9000008f9000004f70",
+        "colour_from": {
+          "x": 38,
+          "y": 19
+        }
+      },
+      "purpose": "The lit image of the BEAT LOOP button labelled 2 (pad 3 of 6): its label is erased and redrawn as 4 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3658240,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "00005f700000df900007ff90001eff90008fff9002ffcf900afb8f904ff38f90cfe9cfd9ffffffff5888bfc700008f9000008f9000004f70",
+        "colour_from": {
+          "x": 38,
+          "y": 19
+        }
+      },
+      "purpose": "The lit and pressed image of the BEAT LOOP button labelled 2 (pad 3 of 6): its label is erased and redrawn as 4 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3666720,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "00005f700000df900007ff90001eff90008fff9002ffcf900afb8f904ff38f90cfe9cfd9ffffffff5888bfc700008f9000008f9000004f70",
+        "colour_from": {
+          "x": 38,
+          "y": 19
+        }
+      },
+      "purpose": "The lit and greyed-out image of the BEAT LOOP button labelled 2 (pad 3 of 6): its label is erased and redrawn as 4 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3675200,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 33,
+        "y": 17,
+        "width": 12,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "01affa100dffffd06fe33ef68f9009f86fc11cf61efeefe108ffff804ffddff4bf9009fbff2002ffef3003feafc33cfa2effffe202aeea20",
+        "colour_from": {
+          "x": 40,
+          "y": 20
+        }
+      },
+      "purpose": "The normal image of the BEAT LOOP button labelled 4 (pad 4 of 6): its label is erased and redrawn as 8 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3683680,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 33,
+        "y": 17,
+        "width": 12,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "01affa100dffffd06fe33ef68f9009f86fc11cf61efeefe108ffff804ffddff4bf9009fbff2002ffef3003feafc33cfa2effffe202aeea20",
+        "colour_from": {
+          "x": 37,
+          "y": 24
+        }
+      },
+      "purpose": "The pressed image of the BEAT LOOP button labelled 4 (pad 4 of 6): its label is erased and redrawn as 8 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3692160,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 33,
+        "y": 17,
+        "width": 12,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "01affa100dffffd06fe33ef68f9009f86fc11cf61efeefe108ffff804ffddff4bf9009fbff2002ffef3003feafc33cfa2effffe202aeea20",
+        "colour_from": {
+          "x": 41,
+          "y": 20
+        }
+      },
+      "purpose": "The greyed-out image of the BEAT LOOP button labelled 4 (pad 4 of 6): its label is erased and redrawn as 8 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3700640,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 33,
+        "y": 17,
+        "width": 12,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "01affa100dffffd06fe33ef68f9009f86fc11cf61efeefe108ffff804ffddff4bf9009fbff2002ffef3003feafc33cfa2effffe202aeea20",
+        "colour_from": {
+          "x": 40,
+          "y": 19
+        }
+      },
+      "purpose": "The lit image of the BEAT LOOP button labelled 4 (pad 4 of 6): its label is erased and redrawn as 8 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3709120,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 33,
+        "y": 17,
+        "width": 12,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "01affa100dffffd06fe33ef68f9009f86fc11cf61efeefe108ffff804ffddff4bf9009fbff2002ffef3003feafc33cfa2effffe202aeea20",
+        "colour_from": {
+          "x": 40,
+          "y": 19
+        }
+      },
+      "purpose": "The lit and pressed image of the BEAT LOOP button labelled 4 (pad 4 of 6): its label is erased and redrawn as 8 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3717600,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 33,
+        "y": 17,
+        "width": 12,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 36,
+          "y": 19,
+          "width": 8,
+          "height": 14
+        },
+        "alpha_hex": "01affa100dffffd06fe33ef68f9009f86fc11cf61efeefe108ffff804ffddff4bf9009fbff2002ffef3003feafc33cfa2effffe202aeea20",
+        "colour_from": {
+          "x": 40,
+          "y": 19
+        }
+      },
+      "purpose": "The lit and greyed-out image of the BEAT LOOP button labelled 4 (pad 4 of 6): its label is erased and redrawn as 8 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3726080,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "0008f8000007efe70009ff900008fffff009fff90002ff605500bfcf90008fb000000018f9000af7000000008f9000bf9ab8100008f9000bfffffe20008f9000bff96dfb0008f9000bf9002ff0008f9000bf6000df0008f9000af8001ff0008f90005fe53bfd0008f90000bfffff40004f7000008deb30",
+        "colour_from": {
+          "x": 37,
+          "y": 20
+        }
+      },
+      "purpose": "The normal image of the BEAT LOOP button labelled 8 (pad 5 of 6): its label is erased and redrawn as 16 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3734560,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "0008f8000007efe70009ff900008fffff009fff90002ff605500bfcf90008fb000000018f9000af7000000008f9000bf9ab8100008f9000bfffffe20008f9000bff96dfb0008f9000bf9002ff0008f9000bf6000df0008f9000af8001ff0008f90005fe53bfd0008f90000bfffff40004f7000008deb30",
+        "colour_from": {
+          "x": 37,
+          "y": 24
+        }
+      },
+      "purpose": "The pressed image of the BEAT LOOP button labelled 8 (pad 5 of 6): its label is erased and redrawn as 16 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3743040,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "0008f8000007efe70009ff900008fffff009fff90002ff605500bfcf90008fb000000018f9000af7000000008f9000bf9ab8100008f9000bfffffe20008f9000bff96dfb0008f9000bf9002ff0008f9000bf6000df0008f9000af8001ff0008f90005fe53bfd0008f90000bfffff40004f7000008deb30",
+        "colour_from": {
+          "x": 37,
+          "y": 20
+        }
+      },
+      "purpose": "The greyed-out image of the BEAT LOOP button labelled 8 (pad 5 of 6): its label is erased and redrawn as 16 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3751520,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "0008f8000007efe70009ff900008fffff009fff90002ff605500bfcf90008fb000000018f9000af7000000008f9000bf9ab8100008f9000bfffffe20008f9000bff96dfb0008f9000bf9002ff0008f9000bf6000df0008f9000af8001ff0008f90005fe53bfd0008f90000bfffff40004f7000008deb30",
+        "colour_from": {
+          "x": 38,
+          "y": 19
+        }
+      },
+      "purpose": "The lit image of the BEAT LOOP button labelled 8 (pad 5 of 6): its label is erased and redrawn as 16 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3760000,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "0008f8000007efe70009ff900008fffff009fff90002ff605500bfcf90008fb000000018f9000af7000000008f9000bf9ab8100008f9000bfffffe20008f9000bff96dfb0008f9000bf9002ff0008f9000bf6000df0008f9000af8001ff0008f90005fe53bfd0008f90000bfffff40004f7000008deb30",
+        "colour_from": {
+          "x": 38,
+          "y": 19
+        }
+      },
+      "purpose": "The lit and pressed image of the BEAT LOOP button labelled 8 (pad 5 of 6): its label is erased and redrawn as 16 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    },
+    {
+      "offset": 3768480,
+      "width": 80,
+      "height": 53,
+      "erase": {
+        "x": 34,
+        "y": 17,
+        "width": 11,
+        "height": 18
+      },
+      "glyph": {
+        "at": {
+          "x": 31,
+          "y": 19,
+          "width": 17,
+          "height": 14
+        },
+        "alpha_hex": "0008f8000007efe70009ff900008fffff009fff90002ff605500bfcf90008fb000000018f9000af7000000008f9000bf9ab8100008f9000bfffffe20008f9000bff96dfb0008f9000bf9002ff0008f9000bf6000df0008f9000af8001ff0008f90005fe53bfd0008f90000bfffff40004f7000008deb30",
+        "colour_from": {
+          "x": 38,
+          "y": 19
+        }
+      },
+      "purpose": "The lit and greyed-out image of the BEAT LOOP button labelled 8 (pad 5 of 6): its label is erased and redrawn as 16 with the project's own digits, so the pads read 1, 2, 4, 8, 16, 32."
+    }
+  ],
+  "expected": {
+    "application_sha256": "e3581ea660afc7c1317dcd79f7076d089a1da41c6750df5342623fb2362c0593",
+    "upd_sha256": "259c75daa04356d2be433ea731ed38b20fbc8cdea12e4fe14fe1dda353befa58"
+  }
+}

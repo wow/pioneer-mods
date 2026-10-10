@@ -9,7 +9,7 @@ mod recipe_files;
 use patch_core::xdj700::{
     ProtectedSet, check_recipe_against_protected_set, check_recipe_v2, recipe_target,
 };
-use patch_schema::check_windows_across;
+use patch_schema::{ImageEdit, check_windows_across};
 use recipe_files::committed_recipes;
 
 #[test]
@@ -58,6 +58,44 @@ fn committed_precondition_windows_are_disjoint_across_recipes() {
     assert_eq!(result, Ok(()));
 }
 
+/// BEAT LOOP 1, 2, 4, 8, 16, 32 draws one label per button: the six state images of a button share
+/// their erase box, glyph box and mask, and each `purpose` names its button. A slip in one copy
+/// would be built into the pinned output, so no other test would see it; it would show only on
+/// the unit, perhaps in a state with no known trigger.
+#[test]
+fn each_relabelled_button_shares_one_drawing() {
+    let recipes = committed_recipes();
+    let (_, recipe) = recipes
+        .iter()
+        .find(|(path, _)| path.ends_with("xdj700-v1.15/beat-loop-1-to-32.json"))
+        .expect("committed");
+    let mut drawings: Vec<(&ImageEdit, Vec<&str>)> = Vec::new();
+    for edit in &recipe.image_edits {
+        let button = edit.purpose.split_once("(pad ").expect("names its pad").1;
+        let button = button.split_once(')').expect("closes").0;
+        let same = |(drawn, _): &&mut (&ImageEdit, Vec<&str>)| {
+            (drawn.erase, drawn.glyph.at, &drawn.glyph.alpha_hex)
+                == (edit.erase, edit.glyph.at, &edit.glyph.alpha_hex)
+        };
+        match drawings.iter_mut().find(same) {
+            Some((_, buttons)) => buttons.push(button),
+            None => drawings.push((edit, vec![button])),
+        }
+    }
+
+    let mut buttons: Vec<&str> = drawings
+        .iter()
+        .map(|(_, buttons)| {
+            assert_eq!(buttons.len(), 6, "{buttons:?}: six states per drawing");
+            assert!(buttons.iter().all(|b| *b == buttons[0]), "{buttons:?}");
+            buttons[0]
+        })
+        .collect();
+    buttons.sort_unstable();
+    let expected: Vec<String> = (1..=6).map(|pad| format!("{pad} of 6")).collect();
+    assert_eq!(buttons, expected, "one drawing per button");
+}
+
 /// The maintainer's check against the protected set measured in emulation, which is kept outside
 /// the repository (`docs/xdj700-flashing.md`, section 5):
 ///
@@ -95,7 +133,11 @@ fn committed_recipes_avoid_the_protected_set() {
     }
 
     // A renamed or moved recipe directory must not turn this into a check of nothing.
-    for known in ["version-marker-0.10", "beat-loop-16-plays-32"] {
+    for known in [
+        "version-marker-0.10",
+        "beat-loop-16-plays-32",
+        "beat-loop-1-to-32",
+    ] {
         assert!(
             checked.iter().any(|id| id.ends_with(known)),
             "{known} was not checked; checked: {checked:?}"

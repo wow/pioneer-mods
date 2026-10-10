@@ -17,15 +17,15 @@
 
 #[path = "common/official_pins.rs"]
 mod official_pins;
+#[path = "common/recipe_diff.rs"]
+mod recipe_diff;
 #[path = "common/recipe_files.rs"]
 mod recipe_files;
 
 use official_pins::{
     NOOP_MAIN_LEN, NOOP_MAIN_SHA256, NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES,
     STAGE3_APPLICATION_SHA256, STAGE3_LABEL, STAGE3_MAIN_LEN, STAGE3_MAIN_SHA256, STAGE3_RECIPE,
-    STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STAGE5_APPLICATION_SHA256,
-    STAGE5_MAIN_LEN, STAGE5_MAIN_SHA256, STAGE5_RECIPE, STAGE5_REPORTED_VERSION,
-    STAGE5_TABLE_ENTRY_OFFSET, STAGE5_UPD_LEN, STAGE5_UPD_SHA256, STOCK_APPLICATION_SHA256,
+    STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STAGES, STOCK_APPLICATION_SHA256,
     UPD_ENV, UPD_SHA256,
 };
 use patch_core::xdj700::{
@@ -33,6 +33,8 @@ use patch_core::xdj700::{
     rebuild_with_application, rebuild_with_stock_application, verify_rebuild,
 };
 use patch_core::{RebuildError, parse_upd, read_firmware, read_regular_file, sha256_hex, xdj700};
+use patch_schema::RecipeV2;
+use recipe_diff::{changed_offsets, changes_outside_images};
 use recipe_files::committed_recipes;
 use std::path::PathBuf;
 
@@ -216,63 +218,49 @@ fn a_modified_application_reporting_1_16_is_refused() {
 }
 
 /// Every committed recipe applies to the official file and produces its pinned identities (the
-/// engine checks `expected`). The version marker reproduces the hardware-tested stage-3 file, and
-/// the beat-loop experiment the stage-5 file, whose application differs from stock in exactly
-/// three bytes: two in the version string (`1.15` to `0.11`) and the last entry of the BEAT LOOP
-/// button table. Compares offsets only; prints no bytes.
+/// engine checks `expected`), and its application differs from stock only where the recipe says
+/// (`changes_outside_images`). The stage recipes reproduce their stage files, with exactly the
+/// changed offsets outside the images that `STAGES` lists. Compares offsets only; prints no
+/// bytes.
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
 fn every_committed_recipe_applies_and_reproduces_its_stage_file() {
     let official = official_upd();
-    let (mut reproduced_stage3, mut reproduced_stage5) = (false, false);
+    let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    let mut reproduced = Vec::new();
 
     for (path, recipe) in committed_recipes() {
-        let name = path.display();
+        let name = path.display().to_string();
         let rebuilt = xdj700::apply_recipe_v2(&recipe, &official, RecipeChecks::NONE)
             .unwrap_or_else(|error| panic!("{name}: {error}"));
         assert!(recipe.expected.is_some(), "{name}: pins its outputs");
+        let changed = changed_offsets(stock.decoded(), rebuilt.bytes());
+        let outside_images = changes_outside_images(&name, &recipe, &changed);
 
-        if path.ends_with(STAGE3_RECIPE) {
-            assert_eq!(rebuilt.application_sha256(), STAGE3_APPLICATION_SHA256);
-            assert_eq!(rebuilt.main_image_sha256(), STAGE3_MAIN_SHA256);
-            assert_eq!(rebuilt.bytes().len(), STAGE3_UPD_LEN);
-            assert_eq!(rebuilt.sha256(), STAGE3_UPD_SHA256);
-            assert_eq!(
-                rebuilt.application_reported_version(),
-                Some(STAGE3_REPORTED_VERSION)
-            );
-            reproduced_stage3 = true;
-        }
-        if path.ends_with(STAGE5_RECIPE) {
-            assert_eq!(rebuilt.application_sha256(), STAGE5_APPLICATION_SHA256);
-            assert_eq!(rebuilt.main_image_len(), STAGE5_MAIN_LEN);
-            assert_eq!(rebuilt.main_image_sha256(), STAGE5_MAIN_SHA256);
-            assert_eq!(rebuilt.bytes().len(), STAGE5_UPD_LEN);
-            assert_eq!(rebuilt.sha256(), STAGE5_UPD_SHA256);
-            assert_eq!(
-                rebuilt.application_reported_version(),
-                Some(STAGE5_REPORTED_VERSION)
-            );
-            let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
-            let output =
-                decode_application(&parse_upd(rebuilt.bytes()).expect("parse")).expect("decode");
-            assert_eq!(output.decoded().len(), stock.decoded().len());
-            let changed: Vec<usize> = (stock.decoded().iter().zip(output.decoded()))
-                .enumerate()
-                .filter(|(_, (stock, output))| stock != output)
-                .map(|(offset, _)| offset)
-                .collect();
-            let version = xdj700::VERSION_STRING_OFFSET;
-            assert_eq!(
-                changed,
-                [version, version + 3, STAGE5_TABLE_ENTRY_OFFSET],
-                "{name}: only the version string and the table entry change"
-            );
-            reproduced_stage5 = true;
-        }
+        let Some(stage) = STAGES.iter().find(|stage| path.ends_with(stage.recipe)) else {
+            continue;
+        };
+        assert_eq!(
+            rebuilt.application_sha256(),
+            stage.application_sha256,
+            "{name}"
+        );
+        assert_eq!(rebuilt.main_image_len(), stage.main_len, "{name}");
+        assert_eq!(rebuilt.main_image_sha256(), stage.main_sha256, "{name}");
+        assert_eq!(rebuilt.bytes().len(), stage.upd_len, "{name}");
+        assert_eq!(rebuilt.sha256(), stage.upd_sha256, "{name}");
+        assert_eq!(
+            rebuilt.application_reported_version(),
+            Some(stage.reported_version),
+            "{name}"
+        );
+        assert_eq!(outside_images, stage.changed_outside_images, "{name}");
+        reproduced.push(stage.recipe);
     }
-    assert!(reproduced_stage3, "the version marker is committed");
-    assert!(reproduced_stage5, "the beat-loop experiment is committed");
+    reproduced.sort_unstable();
+    let mut stages: Vec<&str> = STAGES.iter().map(|stage| stage.recipe).collect();
+    stages.sort_unstable();
+    assert_eq!(reproduced, stages, "every stage recipe is committed");
 }
 
 /// On the real application, a precondition window over zero padding is refused although its hash
@@ -290,7 +278,7 @@ fn a_window_over_real_padding_is_refused() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../recipes")
         .join(STAGE3_RECIPE);
-    let mut recipe: patch_schema::RecipeV2 =
+    let mut recipe: RecipeV2 =
         serde_json::from_slice(&std::fs::read(path).expect("read")).expect("recipe JSON");
     recipe.expected = None;
     recipe.replacements = vec![patch_schema::Replacement {
