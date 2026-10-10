@@ -29,8 +29,12 @@ pub struct WindowOverlap {
     /// first.
     pub first: String,
     pub first_window: Range<u64>,
+    /// The position of the recipe holding the first window, in the order the recipes were given.
+    pub first_recipe: usize,
     pub second: String,
     pub second_window: Range<u64>,
+    /// The position of the recipe holding the second window.
+    pub second_recipe: usize,
 }
 
 /// Checks that, per release, the precondition windows of `recipes` are pairwise disjoint (or belong
@@ -45,7 +49,7 @@ pub fn check_windows_across<'a>(
     recipes: impl IntoIterator<Item = &'a RecipeV2>,
 ) -> Result<(), WindowOverlap> {
     let (mut windows, mut images): (Vec<Named<'a>>, Vec<Named<'a>>) = (Vec::new(), Vec::new());
-    for recipe in recipes {
+    for (position, recipe) in recipes.into_iter().enumerate() {
         for labelled in recipe.windows() {
             let replacement = match labelled.owner {
                 WindowOwner::Replacement(index) => recipe.replacements.get(index),
@@ -55,6 +59,7 @@ pub fn check_windows_across<'a>(
                 release: &recipe.target.release,
                 range: labelled.window,
                 name: format!("{} {}", recipe.recipe_id, labelled.owner),
+                position,
                 replacement,
             };
             match labelled.owner {
@@ -99,6 +104,8 @@ struct Named<'a> {
     range: Range<u64>,
     /// `recipe_id replacements[index]` or `recipe_id image_edits[index]`.
     name: String,
+    /// The position of the recipe in the order given.
+    position: usize,
     /// The replacement the window belongs to; `None` for an image.
     replacement: Option<&'a Replacement>,
 }
@@ -114,13 +121,7 @@ impl<'a> Named<'a> {
         let (Some(a), Some(b)) = (a.replacement, b.replacement) else {
             return false;
         };
-        a.offset == b.offset
-            && a.bytes_hex.eq_ignore_ascii_case(&b.bytes_hex)
-            && a.precondition.before == b.precondition.before
-            && a.precondition.after == b.precondition.after
-            && a.precondition
-                .sha256
-                .eq_ignore_ascii_case(&b.precondition.sha256)
+        a.repeats(b)
     }
 
     /// The overlap of `a` and `b`, the one that starts first first.
@@ -133,8 +134,26 @@ impl<'a> Named<'a> {
         WindowOverlap {
             first: first.name.clone(),
             first_window: first.range.clone(),
+            first_recipe: first.position,
             second: second.name.clone(),
             second_window: second.range.clone(),
+            second_recipe: second.position,
         }
+    }
+}
+
+impl Replacement {
+    /// Whether `other` repeats this replacement exactly: the same offset, `bytes_hex`, window and
+    /// hash (hex compared without regard to case); only the purpose may differ. A repeat publishes
+    /// nothing new, so recipes may share it, and a composed build applies it once.
+    pub fn repeats(&self, other: &Replacement) -> bool {
+        self.offset == other.offset
+            && self.bytes_hex.eq_ignore_ascii_case(&other.bytes_hex)
+            && self.precondition.before == other.precondition.before
+            && self.precondition.after == other.precondition.after
+            && self
+                .precondition
+                .sha256
+                .eq_ignore_ascii_case(&other.precondition.sha256)
     }
 }

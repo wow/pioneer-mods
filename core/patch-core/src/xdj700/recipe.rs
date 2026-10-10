@@ -172,14 +172,7 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
             return Err(mismatch(field, recipe_value, pinned));
         }
     }
-    let stock_label = format!("Ver{}", block.stock_version);
-    if !is_label_higher(&recipe.label, &stock_label)? {
-        return Err(RecipeError::LabelNotHigher {
-            label: recipe.label.clone(),
-            stock: block.stock_version.to_owned(),
-        });
-    }
-    block.validate_reported_version(&recipe.reported_version)?;
+    check_label_and_version(&recipe.label, &recipe.reported_version, target)?;
     check_ranges(recipe, target, target.protected, |found| {
         match found.owner {
             WindowOwner::Replacement(index) => RecipeError::Protected {
@@ -201,6 +194,28 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
     })
 }
 
+/// The label and reported-version rules of `target`'s release: a `VerX.YY` label higher than the
+/// release's own version, and an `X.YY` reported version lower than it.
+pub(super) fn check_label_and_version(
+    label: &str,
+    reported_version: &str,
+    target: &RecipeTarget<'_>,
+) -> Result<(), RecipeError> {
+    let block = target
+        .release
+        .version_block
+        .ok_or(RebuildError::NoVersionBlock)?;
+    let stock_label = format!("Ver{}", block.stock_version);
+    if !is_label_higher(label, &stock_label)? {
+        return Err(RecipeError::LabelNotHigher {
+            label: label.to_owned(),
+            stock: block.stock_version.to_owned(),
+        });
+    }
+    block.validate_reported_version(reported_version)?;
+    Ok(())
+}
+
 /// Applies `recipe` to `input` for an explicit `target` (tests pass synthetic targets; production
 /// code uses [`apply_recipe_v2`] or a target from [`recipe_target`]), after the built-in checks and
 /// those in `checks`.
@@ -217,6 +232,14 @@ pub fn apply_recipe_v2_to(
     check_recipe_v2(recipe, target)?;
     checks.run(recipe, target)?;
     let (rebuilt, _) = rebuild_recipe(recipe, target, input, DeclaredHash::Compare)?;
+    check_output_pins(recipe, rebuilt)
+}
+
+/// `rebuilt`, if it has the output identities `recipe` declares.
+pub(super) fn check_output_pins(
+    recipe: &RecipeV2,
+    rebuilt: RebuiltUpdate,
+) -> Result<RebuiltUpdate, RecipeError> {
     let output = OutputIdentities::of(&rebuilt);
     let pins = output.pins(recipe.expected.as_ref());
     if let Some(pin) = pins.iter().find(|pin| pin.differs()) {
