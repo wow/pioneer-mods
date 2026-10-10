@@ -183,9 +183,9 @@ firmware port:
 4. **Report.** The output identity, each fragment's evidence and tier, and the restore plan (the
    official file, and the stock no-op stick).
 
-Steps 2 to 4 for recipes are implemented as `patch-cli compose` ([recipes.md](./recipes.md),
-"Composing recipes"), and the catalog and profile formats in [catalog.md](./catalog.md);
-resolution and skins are not yet.
+Step 1 is implemented as `patch-cli resolve` and steps 2 to 4 for recipes as `patch-cli compose`
+([catalog.md](./catalog.md), [recipes.md](./recipes.md), "Composing recipes"); a command that
+builds a resolved profile, and skins, are not yet.
 
 A combination of fragments is a new update: its application yields a different compressed stream
 and needs its own test (flashing guide, section 5). So a **listed** combination is rehearsed as a

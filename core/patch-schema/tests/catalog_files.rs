@@ -62,6 +62,30 @@ fn features_are_checked_on_their_own() {
     let mut bad = labelled();
     bad["implementations"]["p-1.0"][0]["draws_labels"] = json!({ "main": "stock" });
     assert!(is_rule(feature(bad)));
+    // Only the stock style, for now: a skin cannot yet leave slots for a feature to draw.
+    let mut bad = labelled();
+    bad["implementations"]["p-1.0"][0]["draws_labels"] = json!({ "perform": "dark-pads" });
+    assert!(is_rule(feature(bad)));
+    // Text shown to the owner holds no control character.
+    // Nor a format or separator character: a bidirectional override, a line separator, a
+    // zero-width space.
+    for text in [
+        "one line\ntier: stable",
+        "x\u{202E}y",
+        "x\u{2028}y",
+        "x\u{200B}y",
+    ] {
+        let mut bad = plain();
+        bad["implementations"]["p-1.0"][0]["limits"] = json!([text]);
+        assert!(
+            matches!(feature(bad), Err(EntryError::Control { .. })),
+            "{text:?}"
+        );
+    }
+    // Other text, accents and dashes included, is fine.
+    let mut fine = plain();
+    fine["implementations"]["p-1.0"][0]["limits"] = json!(["Déjà vu – fine"]);
+    assert_eq!(feature(fine), Ok(()));
     // Two implementations for one player that draw the labels the same way.
     let mut bad = labelled();
     bad["implementations"]["p-1.0"][1]["draws_labels"] = json!({ "perform": "stock" });

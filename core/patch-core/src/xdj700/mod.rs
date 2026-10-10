@@ -43,7 +43,7 @@ pub use rebuild::{
 };
 pub use recipe::{
     RECIPE_TARGETS, RecipeError, RecipeTarget, apply_recipe_v2, apply_recipe_v2_to,
-    check_recipe_v2, recipe_target, unknown_release,
+    check_label_and_version, check_recipe_v2, recipe_target, unknown_release,
 };
 pub use recipe_checks::RecipeChecks;
 pub use release::{

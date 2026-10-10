@@ -6,8 +6,13 @@
 
 use crate::recipe::{read_capped, read_recipe_versioned};
 use anyhow::{Context, Result, bail};
-use patch_core::xdj700::{MAX_MAIN_GROWTH, check_recipe_v2, recipe_target, unknown_release};
-use patch_schema::catalog::{Catalog, CatalogEntry, Feature, Player, Screen, Skin};
+use patch_core::xdj700::{
+    MAX_MAIN_GROWTH, check_label_and_version, check_recipe_v2, recipe_target, unknown_release,
+};
+use patch_schema::catalog::{
+    Catalog, CatalogEntry, CheckedCatalog, Feature, Player, Profile, Resolution, ResolveError,
+    Screen, Skin, resolve,
+};
 use patch_schema::{RecipeV2, SCHEMA_VERSION_V2};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
@@ -22,13 +27,6 @@ const DIRS: [&str; 4] = ["players", "screens", "features", "skins"];
 /// Names skipped wherever they appear: notes for contributors, and the file Finder leaves.
 const SKIPPED: [&str; 2] = ["README.md", ".DS_Store"];
 
-/// A checked catalog and the recipes its implementations name, by path.
-#[derive(Debug, Clone)]
-pub struct LoadedCatalog {
-    pub catalog: Catalog,
-    pub recipes: BTreeMap<String, RecipeV2>,
-}
-
 /// Loads and checks `root/catalog`: `players/<id>.json`, `screens/<player>/<screen>.json`,
 /// `features/<id>.json` and `skins/<id>.json`, each file named after its id, and the recipes the
 /// implementations name (paths relative to `root`). `catalog/` must exist; a missing
@@ -40,7 +38,7 @@ pub struct LoadedCatalog {
 ///
 /// An unreadable, oversized, malformed or invalid file, a misplaced one, a recipe that is not a
 /// valid schema-v2 recipe, or a [`CatalogError`](patch_schema::catalog::CatalogError).
-pub fn load_catalog(root: &Path) -> Result<LoadedCatalog> {
+pub fn load_catalog(root: &Path) -> Result<CheckedCatalog> {
     let dir = root.join("catalog");
     if !is_dir(&dir)? {
         bail!("refusing catalog '{}': no such directory", dir.display());
@@ -94,9 +92,41 @@ pub fn load_catalog(root: &Path) -> Result<LoadedCatalog> {
     }
     let recipes = read_recipes(root, &catalog)?;
     let refusing = || format!("refusing catalog '{}'", dir.display());
-    catalog.check(&recipes).with_context(refusing)?;
-    check_against_engine(&catalog, &recipes).with_context(refusing)?;
-    Ok(LoadedCatalog { catalog, recipes })
+    let checked = catalog.into_checked(recipes).with_context(refusing)?;
+    check_against_engine(checked.catalog(), checked.recipes()).with_context(refusing)?;
+    Ok(checked)
+}
+
+/// Resolves `profile` against `catalog` as every front end should: the release's label and
+/// reported-version rules first (the engine's, as a build applies them), then
+/// [`resolve`].
+///
+/// # Errors
+///
+/// An invalid profile, a player the catalog lacks, a label or reported version the release
+/// refuses, or a search too large.
+pub fn resolve_profile(catalog: &CheckedCatalog, profile: &Profile) -> Result<Resolution> {
+    profile.validate().map_err(ResolveError::Profile)?;
+    if catalog.catalog().player(&profile.player).is_some() {
+        let target =
+            recipe_target(&profile.player).ok_or_else(|| unknown_release(&profile.player))?;
+        check_label_and_version(&profile.label, &profile.reported_version, target)?;
+    }
+    Ok(resolve(catalog, profile)?)
+}
+
+/// Reads an owner's profile: size-capped and parsed strictly (unknown fields and repeated keys
+/// refused). Whether it is valid is for [`patch_schema::catalog::resolve`] to say.
+pub fn read_profile(path: &Path) -> Result<Profile> {
+    let raw = read_capped(
+        path,
+        MAX_CATALOG_FILE_LEN,
+        "profile",
+        "profile",
+        "any profile",
+    )?;
+    serde_json::from_slice(&raw)
+        .with_context(|| format!("failed to parse profile '{}'", path.display()))
 }
 
 /// Every player is a release the engine pins, with the same pins and budget, and every recipe

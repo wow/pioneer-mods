@@ -20,6 +20,25 @@ pub struct Catalog {
     pub skins: Vec<Skin>,
 }
 
+/// A catalog that passed [`Catalog::check`] with the recipes its implementations name, held so
+/// that neither can change after the check: what [`resolve`](fn@super::resolve) takes.
+#[derive(Debug, Clone)]
+pub struct CheckedCatalog {
+    catalog: Catalog,
+    recipes: BTreeMap<String, RecipeV2>,
+}
+
+impl CheckedCatalog {
+    pub fn catalog(&self) -> &Catalog {
+        &self.catalog
+    }
+
+    /// The recipes the implementations name, by path.
+    pub fn recipes(&self) -> &BTreeMap<String, RecipeV2> {
+        &self.recipes
+    }
+}
+
 /// Why the catalog is inconsistent. `entry` names the file's kind and id
 /// (`feature beat-loop-1-to-32`).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -71,6 +90,26 @@ impl Catalog {
     ///
     /// The first [`CatalogError`] found.
     pub fn check(&self, recipes: &BTreeMap<String, RecipeV2>) -> Result<(), CatalogError> {
+        self.check_all(recipes)
+    }
+
+    /// [`Catalog::check`], keeping the catalog and `recipes` together as checked.
+    ///
+    /// # Errors
+    ///
+    /// The first [`CatalogError`] found.
+    pub fn into_checked(
+        self,
+        recipes: BTreeMap<String, RecipeV2>,
+    ) -> Result<CheckedCatalog, CatalogError> {
+        self.check(&recipes)?;
+        Ok(CheckedCatalog {
+            catalog: self,
+            recipes,
+        })
+    }
+
+    fn check_all(&self, recipes: &BTreeMap<String, RecipeV2>) -> Result<(), CatalogError> {
         self.check_entries()?;
         self.check_unique()?;
         self.check_screens()?;

@@ -114,43 +114,6 @@ fn an_implementation_must_meet_its_requirements() {
         message.contains("2 labels for perform.pad, which has 3 elements"),
         "{message}"
     );
-    let message = unmet(|f| {
-        f.features[1]["implementations"]["p-1.0"][0]["draws_labels"] =
-            json!({ "perform": "missing" })
-    });
-    assert_eq!(
-        message,
-        "feature labelled: skin missing is not in the catalog"
-    );
-
-    // Labels drawn in the style of a skin for another screen.
-    let mut fixture = Fixture::new();
-    let implementations = json!([implementation("recipes/p/stock-labels.json")]);
-    fixture.skins.push(common::skin(
-        "plain-main",
-        "main",
-        json!([]),
-        implementations,
-    ));
-    fixture.features[1]["implementations"]["p-1.0"][0]["draws_labels"] =
-        json!({ "perform": "plain-main" });
-    assert!(
-        fixture
-            .problem()
-            .contains("on screen perform as skin plain-main, which is for screen main")
-    );
-
-    // Labels drawn in the style of a skin with no implementation for the player.
-    let mut fixture = Fixture::new();
-    let other_player = fixture.skins[0]["implementations"]["p-1.0"].clone();
-    fixture.skins[0]["implementations"] = json!({ "q-1.0": other_player });
-    fixture.features[1]["implementations"]["p-1.0"][0]["draws_labels"] =
-        json!({ "perform": "dark-pads" });
-    assert_eq!(
-        fixture.problem(),
-        "feature labelled: it draws labels as skin dark-pads, which has no implementation for \
-         p-1.0"
-    );
 }
 
 #[test]

@@ -195,8 +195,14 @@ pub fn check_recipe_v2(recipe: &RecipeV2, target: &RecipeTarget<'_>) -> Result<(
 }
 
 /// The label and reported-version rules of `target`'s release: a `VerX.YY` label higher than the
-/// release's own version, and an `X.YY` reported version lower than it.
-pub(super) fn check_label_and_version(
+/// release's own version, and an `X.YY` reported version lower than it. Needs no firmware; a
+/// front end can run it on a profile before building.
+///
+/// # Errors
+///
+/// [`RecipeError::LabelNotHigher`], or a [`RecipeError::Rebuild`] for a malformed label or
+/// reported version, one that is not lower, or a release without a version block.
+pub fn check_label_and_version(
     label: &str,
     reported_version: &str,
     target: &RecipeTarget<'_>,

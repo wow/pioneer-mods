@@ -4,7 +4,7 @@
 use super::check::{Catalog, CatalogError, feature_entry, skin_entry};
 use super::feature::Feature;
 use super::player::Player;
-use super::skin::{STOCK_SKIN, Skin};
+use super::skin::Skin;
 use crate::v2::RecipeV2;
 use std::collections::BTreeMap;
 
@@ -57,46 +57,10 @@ impl Catalog {
                 check_label_count(&entry, slot_ref, labels.len(), count)?;
             }
             for implementation in implementations {
-                for (screen, skin) in &implementation.draws_labels {
-                    self.check_label_skin(&entry, player_id, screen, skin)?;
-                }
                 check_recipe(&entry, player, &implementation.recipe, recipes)?;
             }
         }
         Ok(())
-    }
-
-    /// A feature implementation for `player` that draws the labels on `screen` in `skin`'s
-    /// style: the skin is built in (`stock`), or exists, is for that screen and has an
-    /// implementation for the player.
-    fn check_label_skin(
-        &self,
-        entry: &str,
-        player: &str,
-        screen: &str,
-        skin: &str,
-    ) -> Result<(), CatalogError> {
-        if skin == STOCK_SKIN {
-            return Ok(());
-        }
-        let found = self.skin(skin).ok_or_else(|| CatalogError::Missing {
-            entry: entry.to_owned(),
-            what: skin_entry(skin),
-        })?;
-        let problem = if found.screen != screen {
-            format!(
-                "it draws the labels on screen {screen} as skin {skin}, which is for screen {}",
-                found.screen
-            )
-        } else if !found.implementations.contains_key(player) {
-            format!("it draws labels as skin {skin}, which has no implementation for {player}")
-        } else {
-            return Ok(());
-        };
-        Err(CatalogError::Inconsistent {
-            entry: entry.to_owned(),
-            problem,
-        })
     }
 
     pub(super) fn check_skin(

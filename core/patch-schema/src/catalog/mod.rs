@@ -12,10 +12,14 @@ mod entry;
 mod feature;
 mod player;
 mod profile;
+mod resolution;
+mod resolve;
+mod resolve_output;
+mod resolve_skins;
 mod screen;
 mod skin;
 
-pub use check::{Catalog, CatalogError};
+pub use check::{Catalog, CatalogError, CheckedCatalog};
 pub use entry::{
     CATALOG_SCHEMA_VERSION, CatalogEntry, EntryError, MAX_ID_LEN, MAX_LABEL_LEN, Maturity, is_id,
     is_name, is_player_id, split_slot_ref,
@@ -23,5 +27,9 @@ pub use entry::{
 pub use feature::{Feature, FeatureImplementation, Requires};
 pub use player::{Budgets, Capability, Firmware, PixelFormat, Player, ScreenClass};
 pub use profile::Profile;
+pub use resolution::{
+    FeatureResolution, Fragment, Resolution, ResolveError, ScreenResolution, Status,
+};
+pub use resolve::{MAX_CONFIGURATIONS, resolve};
 pub use screen::{Screen, Slot};
 pub use skin::{Art, STOCK_SKIN, Skin, SkinImplementation, SkinRequires};

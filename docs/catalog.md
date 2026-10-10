@@ -5,9 +5,10 @@ screens, the features that change behaviour and the skins that change a screen's
 one implementation (a schema-v2 recipe) per player. It implements the concepts of the design,
 [modular-builds.md](./modular-builds.md); recipes are described in [recipes.md](./recipes.md).
 
-**Status.** The schemas, the committed XDJ-700 v1.15 catalog and the checks that need no firmware
-are implemented. Choosing from it (a profile resolved into fragments, with a reason for every
-switched-off item) is next; composing fragments is already `patch-cli compose`.
+**Status.** The schemas, the committed XDJ-700 v1.15 catalog, the checks that need no firmware,
+and resolving a profile (`patch-cli resolve`, below) are implemented. Building a resolved profile
+(its fragments composed under its label and version) is next; composing recipes is already
+`patch-cli compose`.
 
 ## Layout
 
@@ -24,7 +25,9 @@ belong to a player in `players/` and hold at least one screen. Anything
 else in `catalog/` is refused, so a misnamed file cannot be skipped silently; only a `README.md`
 and a `.DS_Store` are skipped. A symbolic link in the catalog, or in a recipe path, is refused: it
 could point outside the tree. Every file has `"schema_version": 1` and names a `maintainer`.
-Unknown fields, and a key given twice in an object, are refused.
+Unknown fields, and a key given twice in an object, are refused, and so is a control, format or
+line-separator character (a line break, a tab, a bidirectional override) in any text shown to the
+owner.
 
 Ids are lowercase letters, digits and `-` (a player id may also hold `.`: `xdj700-v1.15`, the
 release id recipes name), at most 64 bytes. Capability and slot names are lowercase segments of
@@ -77,10 +80,12 @@ a screen accepts come with the screen catalogue (design roadmap, step 3).
     needed for `stable`, but the maintainer decides: `beat-loop-16-plays-32` passed on an owner's
     unit and stays `experimental` while its lit-pad limit stands.
   - `limits`: known limits the builder shows with the feature.
-  - `draws_labels`: the screens whose labels the recipe draws itself, each in the style of a skin
-    (`{"perform": "stock"}`), so each such screen must use that skin. A labelled screen not listed
-    is left to the chosen skin, which must have an implementation drawing that label set (the
-    built-in `stock` skin has none: its labels are drawn by features). Labels belong to skins;
+  - `draws_labels`: the screens whose labels the recipe draws itself in the stock style
+    (`{"perform": "stock"}`), so each such screen must keep the `stock` skin. A labelled screen
+    not listed is left to the chosen skin, which must have an implementation drawing that label
+    set (the built-in `stock` skin has none: its labels are drawn by features). Only `stock` is
+    accepted for now: a skin cannot yet leave slots for a feature to draw, so a feature drawing
+    in another skin's style would edit the same images as that skin. Labels belong to skins;
     today's stage-7 recipe draws its labels in the stock style, so the PERFORM screen keeps the
     stock skin with it.
 
@@ -142,6 +147,58 @@ The owner's choices, kept apart from the catalog so that they survive a firmware
 A screen not listed keeps the `stock` skin. `maturity` is the least settled implementation the
 owner accepts: `stable` (the default) or `experimental`; `dev` is never offered. The label and
 reported version follow the recipe rules; the engine checks them against the release.
+
+## Resolving a profile
+
+`patch-cli resolve --profile <file>` (run from the repository root, or with `--root`) loads the
+catalog, resolves the profile and prints every choice, on or off with its reason, and the
+fragments a build composes. It needs no firmware and writes nothing:
+
+```text
+player: xdj700-v1.15
+label: Ver1.16
+reported_version: 0.12
+accepts: experimental and stable
+screen main: stock
+screen perform: stock
+feature beat-loop-1-to-32: on (experimental, recipes/xdj700-v1.15/beat-loop-1-to-32.json)
+  limit: The lit pad follows the stock lengths: …
+fragments: 1
+fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json (experimental; feature beat-loop-1-to-32)
+tier: experimental
+note: a build composes these fragments under the profile's label and reported version; …
+```
+
+The profile's label and reported version must pass the release's rules (higher than its own
+version, and lower), as a build applies them. The choices are honoured as far as they fit, and
+nothing is dropped silently:
+
+1. A skin or feature that is not in the catalog, has no implementation for the player, or none
+   at the maturity the profile accepts, is off. So is a skin for another screen. A screen the
+   player lacks is listed apart, and the profile's choice for it is ignored.
+2. Chosen features that conflict are both off: the owner chooses one. This is decided once,
+   whatever the skins.
+3. The chosen skins are kept as far as they can be. Of every set of them, largest first, and
+   every choice of one implementation per kept skin, resolution takes the configuration in which
+   the most features are on, where each feature takes its first implementation that fits the
+   skins (it draws the labels of a screen that keeps `stock`, in the stock style, and leaves
+   those of a screen with a kept skin to that skin), and each kept skin's implementation draws
+   exactly the labels of the features kept on. A feature whose labels a kept skin does not draw
+   is off (with a note when it has a stock-style implementation); a skin left out keeps its
+   screen on `stock`.
+
+Keeping no skin always works, so there is always a result. Apart from ties, what is on does not
+depend on the order in which screens are listed; a tie between equally good configurations goes to
+the first in screen and file order. The search is small for real catalogs; one needing more than
+65,536 configurations is refused.
+
+The **tier** of the build is its least settled fragment's when it is one fragment under the recipe's
+own label and reported version (the very file its pins describe), and `experimental` at most
+otherwise: a combination, or another label or version, is a new update that no listed combination
+covers yet ([modular-builds.md](./modular-builds.md)). Only an invalid profile, a player the catalog
+lacks, a label or version the release refuses, or a search over more than 65,536 configurations is
+refused outright. Front ends call `patch_cli::catalog::resolve_profile`, which applies the release's
+label and version rules before the search.
 
 ## Checks
 

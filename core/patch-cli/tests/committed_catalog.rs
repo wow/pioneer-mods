@@ -15,7 +15,7 @@ fn repo_root() -> PathBuf {
 #[test]
 fn the_committed_catalog_loads_and_checks() {
     let loaded = load_catalog(&repo_root()).expect("committed catalog");
-    let catalog = &loaded.catalog;
+    let catalog = loaded.catalog();
 
     let player = catalog.player("xdj700-v1.15").expect("the XDJ-700 v1.15");
     assert_eq!(player.screens, ["main", "perform"]);
@@ -28,7 +28,7 @@ fn the_committed_catalog_loads_and_checks() {
 fn each_player_carries_the_engine_pins_and_budget() {
     let loaded = load_catalog(&repo_root()).expect("committed catalog");
 
-    for player in &loaded.catalog.players {
+    for player in &loaded.catalog().players {
         let target = recipe_target(&player.id).expect("a release the engine knows");
         let block = target.release.version_block.expect("a version block");
         assert_eq!(player.firmware.upd_sha256, target.release.upd_sha256);
@@ -47,8 +47,8 @@ fn each_player_carries_the_engine_pins_and_budget() {
 fn each_named_recipe_passes_the_engine_checks() {
     let loaded = load_catalog(&repo_root()).expect("committed catalog");
 
-    assert!(!loaded.recipes.is_empty());
-    for (path, recipe) in &loaded.recipes {
+    assert!(!loaded.recipes().is_empty());
+    for (path, recipe) in loaded.recipes() {
         let target = recipe_target(&recipe.target.release).expect("a known release");
         check_recipe_v2(recipe, target).unwrap_or_else(|error| panic!("{path}: {error}"));
     }

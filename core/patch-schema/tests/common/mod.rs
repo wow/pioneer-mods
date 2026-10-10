@@ -5,8 +5,10 @@
 // Each test crate uses a different subset of these helpers.
 #![allow(dead_code)]
 
+pub mod resolve;
+
 use patch_schema::RecipeV2;
-use patch_schema::catalog::{Catalog, CatalogError};
+use patch_schema::catalog::{Catalog, CatalogError, CheckedCatalog};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -140,9 +142,8 @@ impl Fixture {
         }
     }
 
-    pub fn check(&self) -> Result<(), CatalogError> {
-        let recipes: BTreeMap<String, RecipeV2> = self
-            .recipes
+    pub fn parsed_recipes(&self) -> BTreeMap<String, RecipeV2> {
+        self.recipes
             .iter()
             .map(|(path, value)| {
                 (
@@ -150,8 +151,17 @@ impl Fixture {
                     serde_json::from_value(value.clone()).expect("recipe"),
                 )
             })
-            .collect();
-        self.catalog().check(&recipes)
+            .collect()
+    }
+
+    pub fn check(&self) -> Result<(), CatalogError> {
+        self.catalog().check(&self.parsed_recipes())
+    }
+
+    pub fn checked(&self) -> CheckedCatalog {
+        self.catalog()
+            .into_checked(self.parsed_recipes())
+            .expect("a consistent catalog")
     }
 
     pub fn problem(&self) -> String {
