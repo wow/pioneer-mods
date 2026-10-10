@@ -364,6 +364,38 @@ cargo run --release -p patch-cli -- patch \
 `--no-protected-set`: the maintainer has checked the committed recipes against the
 [protected set](#the-protected-set), which is not published.
 
+## Composing recipes
+
+`patch-cli compose` builds one update from several schema-v2 recipes for the same release, with
+one label and one reported version (the design: [modular-builds.md](./modular-builds.md)):
+
+```bash
+cargo run --release -p patch-cli -- compose \
+  --input /path/to/XDJ700.UPD \
+  --recipe recipes/xdj700-v1.15/version-marker-0.10.json \
+  --recipe recipes/xdj700-v1.15/beat-loop-16-plays-32.json \
+  --label Ver1.16 --report-version 0.11 \
+  --output /path/to/new-dir/XDJ700.UPD \
+  --no-protected-set
+```
+
+Before the input is read, every recipe passes its own checks (and the protected set), the label
+and reported version pass the recipe rules, precondition windows are disjoint across the recipes
+except for exact repeats, and edited images are disjoint unless they are the same edit. Then:
+
+1. Each recipe must pin its output (`expected.application_sha256`), and is applied alone and must
+   reproduce it.
+2. Every distinct replacement and image edit is rebuilt at once (a repeat or a same edit once),
+   with every window checked on stock again.
+3. The composed application must equal, at every byte a recipe changes, that recipe's own output,
+   and stock everywhere else, apart from the version string.
+
+The result has no pin of its own: it is checked through its recipes' pins. **A combination is a
+new update:** rehearse it both ways in emulation before flashing; unless it is a listed
+combination it is experimental at most. Composing stage 3 with stage 5 (as above) reproduces the
+stage-5 file, and stage 5 with stage 7 (`--report-version 0.12`) the stage-7 file, byte for byte,
+as the owner-input tests check.
+
 ## Schema v1
 
 `schema_version` 1 manifests write raw byte spans to the input file. They cannot produce an

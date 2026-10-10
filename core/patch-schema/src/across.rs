@@ -114,13 +114,7 @@ impl<'a> Named<'a> {
         let (Some(a), Some(b)) = (a.replacement, b.replacement) else {
             return false;
         };
-        a.offset == b.offset
-            && a.bytes_hex.eq_ignore_ascii_case(&b.bytes_hex)
-            && a.precondition.before == b.precondition.before
-            && a.precondition.after == b.precondition.after
-            && a.precondition
-                .sha256
-                .eq_ignore_ascii_case(&b.precondition.sha256)
+        a.repeats(b)
     }
 
     /// The overlap of `a` and `b`, the one that starts first first.
@@ -136,5 +130,21 @@ impl<'a> Named<'a> {
             second: second.name.clone(),
             second_window: second.range.clone(),
         }
+    }
+}
+
+impl Replacement {
+    /// Whether `other` repeats this replacement exactly: the same offset, `bytes_hex`, window and
+    /// hash (hex compared without regard to case); only the purpose may differ. A repeat publishes
+    /// nothing new, so recipes may share it, and a composed build applies it once.
+    pub fn repeats(&self, other: &Replacement) -> bool {
+        self.offset == other.offset
+            && self.bytes_hex.eq_ignore_ascii_case(&other.bytes_hex)
+            && self.precondition.before == other.precondition.before
+            && self.precondition.after == other.precondition.after
+            && self
+                .precondition
+                .sha256
+                .eq_ignore_ascii_case(&other.precondition.sha256)
     }
 }

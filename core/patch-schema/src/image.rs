@@ -133,6 +133,24 @@ impl PixelBox {
 }
 
 impl ImageEdit {
+    /// Whether `other` is the same edit: the same image, boxes, mask and colour pixel; only the
+    /// purpose may differ. A composed build applies it once.
+    pub fn same_edit(&self, other: &ImageEdit) -> bool {
+        (
+            self.offset,
+            self.width,
+            self.height,
+            self.erase,
+            &self.glyph,
+        ) == (
+            other.offset,
+            other.width,
+            other.height,
+            other.erase,
+            &other.glyph,
+        )
+    }
+
     /// The image's size in bytes, or `None` if it overflows.
     pub fn len(&self) -> Option<u64> {
         u64::from(self.width)

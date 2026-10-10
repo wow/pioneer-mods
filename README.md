@@ -127,6 +127,10 @@ cargo run --release -p patch-cli -- patch \
 checked the committed recipes against the protected set, which is not published (see "The
 protected set" in [docs/recipes.md](./docs/recipes.md)).
 
+Several recipes for the same release can be composed into one update with `compose` (each is
+first checked against its own pinned output; see "Composing recipes" in
+[docs/recipes.md](./docs/recipes.md)).
+
 To write a recipe, `precondition` prints its precondition hashes and output identities, from a
 rebuild on the official file after the recipe, committed-recipe and leak checks, so a draft's
 placeholders can be filled in (a recipe with image edits needs a placeholder

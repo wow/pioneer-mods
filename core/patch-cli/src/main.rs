@@ -3,7 +3,8 @@ mod commands;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use commands::{
-    InspectArgs, PatchArgs, PreconditionArgs, RebuildArgs, inspect, patch, precondition, rebuild,
+    ComposeArgs, InspectArgs, PatchArgs, PreconditionArgs, RebuildArgs, compose, inspect, patch,
+    precondition, rebuild,
 };
 
 #[derive(Parser, Debug)]
@@ -29,6 +30,9 @@ enum Commands {
     /// Print the precondition hashes of a schema-v2 recipe for completing a draft, computed on the
     /// official update after the recipe, committed-recipe and leak checks (writes nothing).
     Precondition(PreconditionArgs),
+    /// Compose several schema-v2 recipes into one update, each checked against its own pinned
+    /// output (verified, never overwrites).
+    Compose(ComposeArgs),
 }
 
 fn main() -> Result<()> {
@@ -42,5 +46,6 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Patch(args) => patch(args),
         Commands::Rebuild(args) => rebuild(args),
         Commands::Precondition(args) => precondition(args),
+        Commands::Compose(args) => compose(args),
     }
 }

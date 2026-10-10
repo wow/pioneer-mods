@@ -11,6 +11,8 @@
 //! instead (static analysis of the v1.15 loader).
 
 mod app_version;
+mod compose;
+mod compose_error;
 mod grid;
 mod image_edit;
 mod label;
@@ -25,6 +27,7 @@ mod release;
 mod stock;
 
 pub use app_version::{VERSION_STRING_OFFSET, reported_version, reported_version_at};
+pub use compose::{ComposeError, ComposedUpdate, Composition, compose_recipes, compose_recipes_to};
 pub use grid::RECORD_DATA_LEN;
 pub use label::{OFFICIAL_V115_LABEL, is_label_higher, validate_version_label};
 pub use output::{OutputIdentities, OutputPin};

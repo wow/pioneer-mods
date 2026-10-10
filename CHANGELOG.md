@@ -7,6 +7,16 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `patch-cli compose` and `xdj700::compose_recipes` (`compose_recipes_to`, `Composition`,
+  `ComposedUpdate`, `ComposeError`): several schema-v2 recipes of one release built into one
+  update with one label and one reported version, as `docs/modular-builds.md` describes. Each
+  recipe must pin its output and is first applied alone and checked against it; windows must be
+  disjoint across the recipes except exact repeats, and images disjoint unless they are the same
+  edit (`patch_schema::Replacement::repeats`, `ImageEdit::same_edit`); repeats and same edits are
+  applied once; the composed application must equal each recipe's own output where it changes
+  bytes, and stock elsewhere apart from the version string. The owner-input tests compose stages 3
+  and 5, and stages 5 and 7, and reproduce the stage-5 and stage-7 files byte for byte. Format and
+  rules in `docs/recipes.md`, "Composing recipes".
 - `docs/modular-builds.md`: the design for modular builds (a proposal, nothing implemented yet).
   An owner picks a player, a skin per screen and features. Players, screens with named slots,
   features with requires/conflicts/provides, per-screen skins with fallbacks, and the owner's
