@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "recipe_id": "xdj700-v1.15-beat-loop-16-plays-32",
-  "description": "Experimental: the BEAT LOOP button labelled 16 sets a 32-beat loop; its label still reads 16. The application reports version 0.11, so the official v1.15 update restores stock (observed on an owner's unit, stages 5 and 6, 2026-10-09, where the button looped 32 beats). For staged hardware testing (docs/xdj700-flashing.md, stage 5). While that 32-beat loop plays no pad lights, because the firmware lights the pad whose stock length matches the loop (in emulation, 2026-10-10).",
+  "description": "Experimental: the BEAT LOOP button labelled 16 sets a 32-beat loop; its label still reads 16. The application reports version 0.11, so the official v1.15 update restores stock (observed on an owner's unit, stages 5 and 6, 2026-10-09, where the button looped 32 beats). For staged hardware testing (docs/xdj700-flashing.md, stage 5). While that 32-beat loop plays no pad lights (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\").",
   "target": {
     "release": "xdj700-v1.15",
     "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",

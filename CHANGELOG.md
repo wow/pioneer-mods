@@ -280,7 +280,10 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ### Changed
 - Stage 7's known limit is documented: the BEAT LOOP lengths are right, but the pad that lights
   is the one to the right of the touched pad, and the 32 pad lights none, because the firmware
-  picks the lit pad from the loop length in code (found in emulation, 2026-10-10). In the
+  lights the pad whose stock length matches the loop (found in emulation, 2026-10-10; no data
+  table holding that mapping was found). One explanation, "The lit BEAT LOOP pad" in the
+  flashing guide's section 2, with the stage-7 photo steps and the stage-5 and stage-8 checks
+  adjusted to it, and the other places linking to it. In the
   flashing guide (stage 7 row and checks, section 4, section 5), the recipes table and the
   recipe's description; the recipe's output is unchanged. The same rule means that at stage 5 no
   pad lights while the 32-beat loop plays (confirmed in emulation); noted for stage 5 too, output
