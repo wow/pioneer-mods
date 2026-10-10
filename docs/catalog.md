@@ -6,9 +6,8 @@ one implementation (a schema-v2 recipe) per player. It implements the concepts o
 [modular-builds.md](./modular-builds.md); recipes are described in [recipes.md](./recipes.md).
 
 **Status.** The schemas, the committed XDJ-700 v1.15 catalog, the checks that need no firmware,
-and resolving a profile (`patch-cli resolve`, below) are implemented. Building a resolved profile
-(its fragments composed under its label and version) is next; composing recipes is already
-`patch-cli compose`.
+resolving a profile (`patch-cli resolve`) and building one (`patch-cli build`) are implemented
+(below). No skin is committed yet.
 
 ## Layout
 
@@ -199,6 +198,33 @@ covers yet ([modular-builds.md](./modular-builds.md)). Only an invalid profile, 
 lacks, a label or version the release refuses, or a search over more than 65,536 configurations is
 refused outright. Front ends call `patch_cli::catalog::resolve_profile`, which applies the release's
 label and version rules before the search.
+
+## Building a profile
+
+`patch-cli build` resolves the profile as above, prints the resolution, and composes its
+fragments under the profile's label and reported version into one update, as `patch-cli compose`
+does ([recipes.md](./recipes.md), "Composing recipes"):
+
+```bash
+cargo run --release -p patch-cli -- build \
+  --profile /path/to/profile.json \
+  --input /path/to/XDJ700.UPD \
+  --output /path/to/new-dir/XDJ700.UPD \
+  --protected-set /path/to/protected-set.tsv
+```
+
+Before the input is read, the build is refused when nothing is on (every choice is off or keeps
+`stock`), or when its tier is less settled than the profile accepts (a combination, or a recipe
+under another label or reported version, is `experimental` at most). Every fragment then passes
+its own checks and the protected set, and the composition its checks; the input must be the
+player's official update; each fragment is applied alone and must reproduce its pinned output,
+and the composed build is checked against each fragment's output byte for byte before it is
+written. A profile with one feature under its recipe's own label and version builds that
+recipe's own pinned file: the owner-input tests build the stage-5 and stage-7 files this way.
+
+The note at the end of the resolution says what the build is. Anything but a recipe's own pinned
+file is a new update: rehearse it both ways in emulation before flashing, and follow the
+[flashing guide](./xdj700-flashing.md). Flashing is the owner's decision.
 
 ## Checks
 

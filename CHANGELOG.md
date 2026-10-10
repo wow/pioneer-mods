@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `patch-cli build`: a profile resolved against the catalog (as `patch-cli resolve`) and its
+  fragments composed under the profile's label and reported version (as `patch-cli compose`), with
+  every check that needs no firmware before the input is read; refused when nothing is on or when
+  the build is less settled than the profile accepts. A profile with one feature under its recipe's
+  own label and version builds that recipe's pinned file: the owner-input tests build the stage-5
+  and stage-7 files byte for byte. `docs/catalog.md`, "Building a profile".
+  `patch_cli::recipe::CheckedRecipe::from_recipe` checks a recipe already parsed.
 - `patch-cli resolve` and `patch_schema::catalog::resolve`: a profile resolved against the catalog
   (`Resolution`): every skin choice and feature on or off with its reason, the implementation each
   uses, the fragments a build composes and the build's tier (a lone fragment under its own label and

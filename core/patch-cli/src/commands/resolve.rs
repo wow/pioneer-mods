@@ -22,7 +22,12 @@ pub fn resolve(args: ResolveArgs) -> Result<()> {
     let profile = read_profile(&args.profile)?;
     let resolution = resolve_profile(&catalog, &profile)
         .with_context(|| format!("refusing profile '{}'", args.profile.display()))?;
+    print_resolution(&resolution);
+    Ok(())
+}
 
+/// Prints every choice of `resolution`, on or off with its reason, its fragments and its tier.
+pub(super) fn print_resolution(resolution: &Resolution) {
     println!("player: {}", resolution.player);
     println!("label: {}", resolution.label);
     println!("reported_version: {}", resolution.reported_version);
@@ -69,10 +74,9 @@ pub fn resolve(args: ResolveArgs) -> Result<()> {
         None => println!("tier: none; nothing to build"),
         Some(tier) => {
             println!("tier: {tier}");
-            println!("{}", note(&resolution));
+            println!("{}", note(resolution));
         }
     }
-    Ok(())
 }
 
 /// What a build of `resolution` is: the very file its one recipe pins, or a new update.

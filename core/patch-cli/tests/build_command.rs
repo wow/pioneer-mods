@@ -1,0 +1,104 @@
+//! `patch-cli build`: refusals that need no firmware. The input path does not exist, so each
+//! refusal here comes before the input is read. Building on the official file is in
+//! `official_build_command.rs`.
+
+mod common;
+
+use common::{copy_catalog, repo_root, write_bytes};
+use serde_json::{Value, json};
+use std::path::Path;
+use std::process::{Command, Output};
+
+fn profile(features: &[&str], maturity: &str) -> Value {
+    json!({
+        "schema_version": 1, "player": "xdj700-v1.15", "features": features,
+        "label": "Ver1.16", "reported_version": "0.12", "maturity": maturity
+    })
+}
+
+/// Runs `build` for `profile` against the catalog under `root`, with `extra` arguments; returns
+/// the output and whether the output file was written.
+fn run(profile: &Value, root: &Path, extra: &[&str]) -> (Output, bool) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("profile.json");
+    write_bytes(&path, &serde_json::to_vec(profile).expect("json"));
+    let output = Command::new(env!("CARGO_BIN_EXE_patch-cli"))
+        .arg("build")
+        .arg("--profile")
+        .arg(&path)
+        .arg("--input")
+        .arg(dir.path().join("missing.UPD"))
+        .arg("--output")
+        .arg(dir.path().join("out.UPD"))
+        .arg("--root")
+        .arg(root)
+        .env_remove("XDJ700_PROTECTED_SET")
+        .args(extra)
+        .output()
+        .expect("run patch-cli build");
+    let written = dir.path().join("out.UPD").exists();
+    (output, written)
+}
+
+fn refused(profile: &Value, root: &Path, extra: &[&str]) -> String {
+    let (output, written) = run(profile, root, extra);
+    assert!(!output.status.success());
+    assert!(!written);
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+#[test]
+fn a_profile_with_nothing_on_is_refused() {
+    // The committed features are experimental; a stable profile switches them off.
+    let stable = profile(&["beat-loop-1-to-32"], "stable");
+    let message = refused(&stable, &repo_root(), &["--no-protected-set"]);
+    assert!(message.contains("nothing to build"), "{message}");
+
+    let both = profile(
+        &["beat-loop-1-to-32", "beat-loop-16-plays-32"],
+        "experimental",
+    );
+    let message = refused(&both, &repo_root(), &["--no-protected-set"]);
+    assert!(message.contains("nothing to build"), "{message}");
+}
+
+#[test]
+fn a_build_less_settled_than_the_profile_accepts_is_refused() {
+    // A stable implementation, but under another reported version than its recipe's own: the
+    // build is a new update, experimental at most.
+    let root = copy_catalog();
+    let feature = root
+        .path()
+        .join("catalog/features/beat-loop-16-plays-32.json");
+    let text = std::fs::read_to_string(&feature).expect("read");
+    write_bytes(
+        &feature,
+        text.replace("\"maturity\": \"experimental\"", "\"maturity\": \"stable\"")
+            .as_bytes(),
+    );
+    let mut stable = profile(&["beat-loop-16-plays-32"], "stable");
+    stable["reported_version"] = json!("0.13");
+
+    let message = refused(&stable, root.path(), &["--no-protected-set"]);
+    assert!(
+        message.contains("the build is experimental")
+            && message.contains("the profile accepts stable only"),
+        "{message}"
+    );
+}
+
+#[test]
+fn the_release_rules_and_the_protected_set_apply_before_the_input() {
+    let mut not_higher = profile(&["beat-loop-1-to-32"], "experimental");
+    not_higher["label"] = json!("Ver1.15");
+    let message = refused(&not_higher, &repo_root(), &["--no-protected-set"]);
+    assert!(message.contains("is not higher"), "{message}");
+
+    let fine = profile(&["beat-loop-1-to-32"], "experimental");
+    let message = refused(&fine, &repo_root(), &[]);
+    assert!(message.contains("no protected set"), "{message}");
+
+    // With every check passed, the missing input is what refuses it.
+    let message = refused(&fine, &repo_root(), &["--no-protected-set"]);
+    assert!(message.contains("missing.UPD"), "{message}");
+}

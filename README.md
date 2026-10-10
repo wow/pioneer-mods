@@ -66,7 +66,7 @@ evidence, are in the design draft [docs/modular-builds.md](./docs/modular-builds
 so far: composing recipes into one verified update (`patch-cli compose`), and the catalog of
 players, screens, features and skins with its checks ([docs/catalog.md](./docs/catalog.md)).
 Resolving a profile against the catalog, with a reason for everything switched off, is
-`patch-cli resolve`; building a resolved profile is next.
+`patch-cli resolve`, and building it into one verified update is `patch-cli build`.
 
 ## Quick start (developer)
 
