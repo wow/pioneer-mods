@@ -337,10 +337,9 @@ reboot reached the running system, and a reboot holding IN + RELOOP/EXIT reached
 | stage 7 | official v1.15 | written | records; neither the table nor the images were read (two runs, one watch each) | passed |
 | official v1.15 | official v1.15 | skipped, equal version | application region unchanged | passed |
 
-Stages 1b, 3 and 5 were flashed on an owner's unit before these rehearsals existed; the
-rehearsals came afterwards and agree with the hardware results. Stage 7 was rehearsed before it
-was offered. Stage 1 (`Ver0.90`) was not
-rehearsed: it is skipped on any v1.15 unit and is not offered any more.
+Stages 1b, 3 and 5 were flashed on an owner's unit before these rehearsals existed; the rehearsals
+came afterwards and agree with the hardware results. Stage 7 was rehearsed before it was offered.
+Stage 1 (`Ver0.90`) was not rehearsed: it is skipped on any v1.15 unit and is not offered any more.
 
 ## 6. If something goes wrong
 
@@ -356,7 +355,8 @@ Then use a recovery stick (section 3, step 5), and **check whether MAIN really p
   is harmless after a no-op rebuild, whose application is already the official one. On a unit
   that reports a lower version (a modified application, section 5) it is written and restores
   the stock application (observed at stage 4, over an application changed only in its version
-  string, and at stage 6, over one with a changed table entry; untested over one whose code is
+  string, and at stage 6, over one with a changed table entry; over stage 7's, with changed table
+  entries and images, only rehearsed in emulation so far; untested over one whose code is
   changed).
 - **Otherwise, to write the official application**, use the `Ver1.16` stock no-op stick, or any
   stock no-op rebuild labelled higher than the version the unit reports. Writing it over the

@@ -114,6 +114,9 @@ repeating the replacement exactly.
     check only from 2,091 bytes before the table, and every size from there passes. At 3,000
     bytes the four most common values fill 39 percent, and the window holds 129 distinct 32-bit
     values that are neither zero, small numbers, text, pointers nor round floats.
+  - Of the 3,003 bytes outside the span, 32 percent are zero and 27 percent printable text (36
+    runs of 4 or more characters, the longest 45). Text is easy to guess, but guessing it and
+    the zeros still leaves the other 41 percent (1,244 bytes), which hold those 129 values.
   - The table's sixth entry is stage 5's replacement, repeated exactly, so it publishes nothing
     new and keeps stage 5's window.
 
@@ -348,7 +351,7 @@ runs the window rules) and check those identities.
 | --- | --- | --- |
 | `xdj700-v1.15/version-marker-0.10.json` | Only the reported version, `0.10`. The unit shows `0.10` on UTILITY. | The hardware-tested stage-3 file, `84cbd263…` |
 | `xdj700-v1.15/beat-loop-16-plays-32.json` | **Experimental; passed on an owner's unit (2026-10-09).** The BEAT LOOP button labelled 16 sets a 32-beat loop (its label still reads 16); reports `0.11`. One table entry changes: the length list the player uses already holds 32 beats, and the button table selects it instead of 16. | Stage 5, `144f4b55…` |
-| `xdj700-v1.15/beat-loop-1-to-32.json` | **Experimental; rehearsed in emulation, not yet tested on hardware.** The PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16; reports `0.12`. The button table selects the next length of the player's list for each button (its last entry as in stage 5, repeated exactly), and each button's six images are relabelled with the project's own digits (36 image edits). | Stage 7, `259c75da…` |
+| `xdj700-v1.15/beat-loop-1-to-32.json` | **Experimental; rehearsed in emulation, not yet tested on hardware.** The PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16; reports `0.12`. Each button selects the length the button after it selected, and the last one 32 beats (the table's last entry as in stage 5, repeated exactly), and each button's six images are relabelled with the project's own digits (36 image edits). | Stage 7, `259c75da…` |
 
 ```bash
 cargo run --release -p patch-cli -- patch \

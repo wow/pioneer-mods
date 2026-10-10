@@ -68,13 +68,17 @@ pub const STAGE3_UPD_LEN: usize = 17_368_543;
 pub const STAGE3_UPD_SHA256: &str =
     "84cbd2637b167893c6ad3ff8bc4a0b4cfb7cf5984dc399f6b018a8b5ddb0be5c";
 
+/// The decoded offset of the BEAT LOOP button table: six 4-byte entries, one per button, which
+/// stages 5 and 7 change.
+pub const BEAT_LOOP_TABLE_OFFSET: usize = 0xd6220;
+
 /// Stage 5: the beat-loop experiment, built with `patch` from the committed recipe below. Its
 /// application reports `0.11` and differs from stock in the version string and one entry of the
 /// BEAT LOOP button table (the button labelled 16 selects 32 beats); labelled `Ver1.16`.
 pub const STAGE5_RECIPE: &str = "xdj700-v1.15/beat-loop-16-plays-32.json";
 pub const STAGE5_REPORTED_VERSION: &str = "0.11";
-/// The decoded offset of the table entry, the recipe's only span.
-pub const STAGE5_TABLE_ENTRY_OFFSET: usize = 0xd6234;
+/// The decoded offset of the table entry, the recipe's only span: the table's sixth entry.
+pub const STAGE5_TABLE_ENTRY_OFFSET: usize = BEAT_LOOP_TABLE_OFFSET + 5 * 4;
 pub const STAGE5_APPLICATION_SHA256: &str =
     "dd5adad4ae531db95c9dae10d9fa534afc4e31d2ffd54daadc22da6e463f25db";
 pub const STAGE5_MAIN_LEN: usize = 7_250_752;
@@ -90,9 +94,6 @@ pub const STAGE5_UPD_SHA256: &str =
 /// six buttons' 36 images; labelled `Ver1.16`.
 pub const STAGE7_RECIPE: &str = "xdj700-v1.15/beat-loop-1-to-32.json";
 pub const STAGE7_REPORTED_VERSION: &str = "0.12";
-/// The decoded offset of the BEAT LOOP button table: six 4-byte entries, the last of which is
-/// stage 5's span.
-pub const BEAT_LOOP_TABLE_OFFSET: usize = 0xd6220;
 pub const STAGE7_APPLICATION_SHA256: &str =
     "e3581ea660afc7c1317dcd79f7076d089a1da41c6750df5342623fb2362c0593";
 pub const STAGE7_MAIN_LEN: usize = 7_250_308;
@@ -101,3 +102,66 @@ pub const STAGE7_MAIN_SHA256: &str =
 pub const STAGE7_UPD_LEN: usize = 17_367_457;
 pub const STAGE7_UPD_SHA256: &str =
     "259c75daa04356d2be433ea731ed38b20fbc8cdea12e4fe14fe1dda353befa58";
+
+/// A committed recipe's stage file: its pinned identities, and the offsets outside the edited
+/// images at which its application differs from stock.
+pub struct Stage {
+    pub recipe: &'static str,
+    pub reported_version: &'static str,
+    pub application_sha256: &'static str,
+    pub main_len: usize,
+    pub main_sha256: &'static str,
+    pub upd_len: usize,
+    pub upd_sha256: &'static str,
+    pub changed_outside_images: &'static [usize],
+}
+
+/// The version string, `X.YY`. Every reported version here differs from `1.15` in its first and
+/// last characters only.
+pub const VERSION: usize = patch_core::xdj700::VERSION_STRING_OFFSET;
+pub const VERSION_TEXT: std::ops::Range<usize> = VERSION..VERSION + 4;
+
+/// The stage files the committed recipes reproduce: the version marker (stage 3, hardware-tested),
+/// the beat-loop experiment (stage 5: also the table's last entry) and BEAT LOOP 1, 2, 4, 8, 16, 32
+/// (stage 7: the first byte of each of the table's six entries, besides its images).
+pub const STAGES: [Stage; 3] = [
+    Stage {
+        recipe: STAGE3_RECIPE,
+        reported_version: STAGE3_REPORTED_VERSION,
+        application_sha256: STAGE3_APPLICATION_SHA256,
+        main_len: STAGE3_MAIN_LEN,
+        main_sha256: STAGE3_MAIN_SHA256,
+        upd_len: STAGE3_UPD_LEN,
+        upd_sha256: STAGE3_UPD_SHA256,
+        changed_outside_images: &[VERSION, VERSION + 3],
+    },
+    Stage {
+        recipe: STAGE5_RECIPE,
+        reported_version: STAGE5_REPORTED_VERSION,
+        application_sha256: STAGE5_APPLICATION_SHA256,
+        main_len: STAGE5_MAIN_LEN,
+        main_sha256: STAGE5_MAIN_SHA256,
+        upd_len: STAGE5_UPD_LEN,
+        upd_sha256: STAGE5_UPD_SHA256,
+        changed_outside_images: &[VERSION, VERSION + 3, STAGE5_TABLE_ENTRY_OFFSET],
+    },
+    Stage {
+        recipe: STAGE7_RECIPE,
+        reported_version: STAGE7_REPORTED_VERSION,
+        application_sha256: STAGE7_APPLICATION_SHA256,
+        main_len: STAGE7_MAIN_LEN,
+        main_sha256: STAGE7_MAIN_SHA256,
+        upd_len: STAGE7_UPD_LEN,
+        upd_sha256: STAGE7_UPD_SHA256,
+        changed_outside_images: &[
+            VERSION,
+            VERSION + 3,
+            BEAT_LOOP_TABLE_OFFSET,
+            BEAT_LOOP_TABLE_OFFSET + 4,
+            BEAT_LOOP_TABLE_OFFSET + 8,
+            BEAT_LOOP_TABLE_OFFSET + 12,
+            BEAT_LOOP_TABLE_OFFSET + 16,
+            STAGE5_TABLE_ENTRY_OFFSET,
+        ],
+    },
+];

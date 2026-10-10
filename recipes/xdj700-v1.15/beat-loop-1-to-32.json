@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "recipe_id": "xdj700-v1.15-beat-loop-1-to-32",
-  "description": "Experimental: the PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16: the button table selects the next loop length for each button, and each button's six images are relabelled with the project's own digits. The application reports version 0.12, so the official v1.15 update is expected to restore stock (observed for stages 3 to 6 on an owner's unit; rehearsed in emulation for this file). Rehearsed in emulation, not yet tested on hardware. For staged hardware testing (docs/xdj700-flashing.md, stage 7).",
+  "description": "Experimental: the PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16: each button selects the length the button after it selected, the last one 32 beats (as in stage 5), and each button's six images are relabelled with the project's own digits. The application reports version 0.12, so the official v1.15 update is expected to restore stock (observed for stages 3 to 6 on an owner's unit; rehearsed in emulation for this file). Rehearsed in emulation, not yet tested on hardware. For staged hardware testing (docs/xdj700-flashing.md, stage 7).",
   "target": {
     "release": "xdj700-v1.15",
     "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",

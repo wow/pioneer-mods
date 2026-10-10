@@ -14,11 +14,15 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   replacement exactly, and 36 image edits relabel each button's six images with the project's own
   digits. In emulation no code read the table or the images at start-up, in update mode or while
   installing in either direction, the pads read 1, 2, 4, 8, 16, 32 and selected those lengths, and
-  the four rehearsals passed. The owner-input tests pin the stage-7 file (`259c75da…`), check that
-  its application differs from stock only in the version string, the six table bytes and the 36
-  label boxes, and run the guide's `patch` command for stages 5 and 7. The window over the 3,000
-  bytes before the table is recorded under "Known exceptions" in `docs/recipes.md`.
-  `docs/xdj700-flashing.md` adds stage 7 (the experiment) and stage 8 (restore).
+  the four rehearsals passed. The owner-input tests pin the stage-7 file (`259c75da…`) and run the
+  guide's `patch` command for stages 5 and 7. They now check every committed recipe's output against
+  a bounded diff derived from the recipe (the version string, the bytes its replacements write, and
+  its images' erase and glyph boxes), with the stage pins in one table and each stage's exact
+  changes outside the images; stage 3 now also pins its MAIN length. A firmware-free test checks
+  that each button's six image edits share one drawing, and the protected-set test requires the
+  stage-7 recipe. The window over the 3,000 bytes before the table is recorded under "Known
+  exceptions" in `docs/recipes.md`. `docs/xdj700-flashing.md` adds stage 7 (the experiment) and
+  stage 8 (restore).
 - Kept bytes in schema-v2 replacements: `--` in `bytes_hex` keeps the stock byte at that place
   and does not publish it (`Replacement::pattern`, `Replacement::written_runs`), so changes a few
   bytes apart, such as the fields of one table, fit one span without publishing the stock bytes
