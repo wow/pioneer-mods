@@ -7,6 +7,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `patch-cli resolve` and `patch_schema::catalog::resolve`: a profile resolved against the catalog
+  (`Resolution`): every skin choice and feature on or off with its reason, the implementation each
+  uses, the fragments a build composes and the build's tier. Features take the first implementation
+  that fits the screens' skins; chosen features that conflict are both off; a skin must have an
+  implementation drawing exactly the labels left to it. Needs no firmware; `docs/catalog.md`,
+  "Resolving a profile".
 - `patch_schema::catalog` and `catalog/`: the formats of players, screens, features, skins and
   profiles (`docs/catalog.md`), and the committed XDJ-700 v1.15 catalog: the player with its pins,
   budget and capabilities, the `main` and `perform` screens, and the two BEAT LOOP features with

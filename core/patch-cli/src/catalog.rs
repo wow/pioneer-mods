@@ -7,7 +7,7 @@
 use crate::recipe::{read_capped, read_recipe_versioned};
 use anyhow::{Context, Result, bail};
 use patch_core::xdj700::{MAX_MAIN_GROWTH, check_recipe_v2, recipe_target, unknown_release};
-use patch_schema::catalog::{Catalog, CatalogEntry, Feature, Player, Screen, Skin};
+use patch_schema::catalog::{Catalog, CatalogEntry, Feature, Player, Profile, Screen, Skin};
 use patch_schema::{RecipeV2, SCHEMA_VERSION_V2};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
@@ -97,6 +97,20 @@ pub fn load_catalog(root: &Path) -> Result<LoadedCatalog> {
     catalog.check(&recipes).with_context(refusing)?;
     check_against_engine(&catalog, &recipes).with_context(refusing)?;
     Ok(LoadedCatalog { catalog, recipes })
+}
+
+/// Reads an owner's profile: size-capped and parsed strictly (unknown fields and repeated keys
+/// refused). Whether it is valid is for [`patch_schema::catalog::resolve`] to say.
+pub fn read_profile(path: &Path) -> Result<Profile> {
+    let raw = read_capped(
+        path,
+        MAX_CATALOG_FILE_LEN,
+        "profile",
+        "profile",
+        "any profile",
+    )?;
+    serde_json::from_slice(&raw)
+        .with_context(|| format!("failed to parse profile '{}'", path.display()))
 }
 
 /// Every player is a release the engine pins, with the same pins and budget, and every recipe

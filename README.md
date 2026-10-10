@@ -65,7 +65,8 @@ builds one verified update. The design, and how the current safety limits will b
 evidence, are in the design draft [docs/modular-builds.md](./docs/modular-builds.md). Implemented
 so far: composing recipes into one verified update (`patch-cli compose`), and the catalog of
 players, screens, features and skins with its checks ([docs/catalog.md](./docs/catalog.md)).
-Choosing from the catalog, with a reason for everything switched off, is next.
+Resolving a profile against the catalog, with a reason for everything switched off, is
+`patch-cli resolve`; building a resolved profile is next.
 
 ## Quick start (developer)
 

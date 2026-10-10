@@ -5,9 +5,10 @@ screens, the features that change behaviour and the skins that change a screen's
 one implementation (a schema-v2 recipe) per player. It implements the concepts of the design,
 [modular-builds.md](./modular-builds.md); recipes are described in [recipes.md](./recipes.md).
 
-**Status.** The schemas, the committed XDJ-700 v1.15 catalog and the checks that need no firmware
-are implemented. Choosing from it (a profile resolved into fragments, with a reason for every
-switched-off item) is next; composing fragments is already `patch-cli compose`.
+**Status.** The schemas, the committed XDJ-700 v1.15 catalog, the checks that need no firmware,
+and resolving a profile (`patch-cli resolve`, below) are implemented. Building a resolved profile
+(its fragments composed under its label and version) is next; composing recipes is already
+`patch-cli compose`.
 
 ## Layout
 
@@ -142,6 +143,45 @@ The owner's choices, kept apart from the catalog so that they survive a firmware
 A screen not listed keeps the `stock` skin. `maturity` is the least settled implementation the
 owner accepts: `stable` (the default) or `experimental`; `dev` is never offered. The label and
 reported version follow the recipe rules; the engine checks them against the release.
+
+## Resolving a profile
+
+`patch-cli resolve --profile <file>` (run from the repository root, or with `--root`) loads the
+catalog, resolves the profile and prints every choice, on or off with its reason, and the
+fragments a build composes. It needs no firmware and writes nothing:
+
+```text
+player: xdj700-v1.15
+label: Ver1.16
+reported_version: 0.12
+accepts: experimental and stable
+screen main: stock
+screen perform: stock
+feature beat-loop-1-to-32: on (experimental, recipes/xdj700-v1.15/beat-loop-1-to-32.json)
+  limit: The lit pad follows the stock lengths: …
+fragments: 1
+fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json (experimental; feature beat-loop-1-to-32)
+tier: experimental
+```
+
+The profile's choices are honoured as far as they fit, and nothing is dropped silently:
+
+1. A skin or feature that is not in the catalog, has no implementation for the player, or none
+   at the maturity the profile accepts, is off. So is a skin for another screen, and a screen
+   the player lacks.
+2. Each feature takes its first implementation that fits the screens' skins: a screen whose
+   labels it draws must use that skin, and a screen whose labels it leaves to the skin must not
+   use `stock`, which draws none.
+3. Chosen features that conflict are both off: the owner chooses one.
+4. Each chosen skin needs an implementation drawing exactly the labels left to it. If it has
+   none, the features leaving labels to it are off (with a hint when a stock-style
+   implementation exists); with no labels to draw and no implementation without labels, the
+   skin is off and its screen keeps `stock`.
+
+A screen whose skin is off keeps `stock`. The **tier** of the build is its least settled
+fragment's, and `experimental` at most for a combination of several fragments, a new update that
+no listed combination covers yet ([modular-builds.md](./modular-builds.md)). Only an invalid
+profile, or a player the catalog lacks, is refused outright.
 
 ## Checks
 

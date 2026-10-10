@@ -3,8 +3,8 @@ mod commands;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use commands::{
-    ComposeArgs, InspectArgs, PatchArgs, PreconditionArgs, RebuildArgs, compose, inspect, patch,
-    precondition, rebuild,
+    ComposeArgs, InspectArgs, PatchArgs, PreconditionArgs, RebuildArgs, ResolveArgs, compose,
+    inspect, patch, precondition, rebuild, resolve,
 };
 
 #[derive(Parser, Debug)]
@@ -33,6 +33,9 @@ enum Commands {
     /// Compose several schema-v2 recipes into one update, each checked against its own pinned
     /// output (verified, never overwrites).
     Compose(ComposeArgs),
+    /// Resolve a profile against the catalog: every chosen skin and feature, on or off with its
+    /// reason, and the fragments a build composes (needs no firmware, writes nothing).
+    Resolve(ResolveArgs),
 }
 
 fn main() -> Result<()> {
@@ -47,5 +50,6 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Rebuild(args) => rebuild(args),
         Commands::Precondition(args) => precondition(args),
         Commands::Compose(args) => compose(args),
+        Commands::Resolve(args) => resolve(args),
     }
 }

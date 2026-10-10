@@ -12,6 +12,9 @@ mod entry;
 mod feature;
 mod player;
 mod profile;
+mod resolution;
+mod resolve;
+mod resolve_output;
 mod screen;
 mod skin;
 
@@ -23,5 +26,9 @@ pub use entry::{
 pub use feature::{Feature, FeatureImplementation, Requires};
 pub use player::{Budgets, Capability, Firmware, PixelFormat, Player, ScreenClass};
 pub use profile::Profile;
+pub use resolution::{
+    FeatureResolution, Fragment, Resolution, ResolveError, ScreenResolution, Status,
+};
+pub use resolve::resolve;
 pub use screen::{Screen, Slot};
 pub use skin::{Art, STOCK_SKIN, Skin, SkinImplementation, SkinRequires};
