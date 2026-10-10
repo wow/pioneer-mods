@@ -2,8 +2,9 @@
 //! player, with one implementation (a recipe) per player (`catalog/features/<id>.json`).
 
 use super::entry::{
-    EntryError, Maturity, check_id, check_implementation, check_labels, check_name,
-    check_player_id, check_schema_version, check_slot_ref, check_text, check_unique, unique_keys,
+    CatalogEntry, EntryError, Maturity, check_id, check_implementation, check_labels, check_name,
+    check_player_id, check_schema_version, check_slot_ref, check_text, check_unique,
+    split_slot_ref, unique_keys,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -56,20 +57,21 @@ pub struct FeatureImplementation {
     /// Known limits the builder shows with the feature.
     #[serde(default)]
     pub limits: Vec<String>,
-    /// Set when the recipe draws the feature's labels itself, in the style of this skin
-    /// (`stock`): the labelled screens must then use that skin. Unset, the recipe leaves its
-    /// labels to the chosen skin (a skin implementation drawing that label set).
-    #[serde(default)]
-    pub draws_labels: Option<String>,
+    /// The screens whose labels the recipe draws itself, each in the style of a skin
+    /// (`{"perform": "stock"}`): those screens must then use that skin. A labelled screen not
+    /// listed is left to the chosen skin (a skin implementation drawing that label set).
+    #[serde(default, deserialize_with = "unique_keys")]
+    pub draws_labels: BTreeMap<String, String>,
 }
 
-impl Feature {
-    /// Checks the file on its own (the catalog checks its references).
-    ///
-    /// # Errors
-    ///
-    /// The first [`EntryError`] found.
-    pub fn validate(&self) -> Result<(), EntryError> {
+impl CatalogEntry for Feature {
+    const KIND: &'static str = "feature";
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn validate(&self) -> Result<(), EntryError> {
         check_schema_version(self.schema_version)?;
         check_id("id", &self.id)?;
         check_text("title", &self.title)?;
@@ -137,7 +139,9 @@ impl Feature {
         }
         check_text("maintainer", &self.maintainer)
     }
+}
 
+impl Feature {
     fn check_implementation(
         &self,
         field: &str,
@@ -149,12 +153,18 @@ impl Feature {
             &implementation.evidence,
             &implementation.limits,
         )?;
-        if let Some(skin) = &implementation.draws_labels {
-            check_id(&format!("{field}.draws_labels"), skin)?;
-            if self.labels.is_empty() {
+        for (screen, skin) in &implementation.draws_labels {
+            check_id(&format!("{field}.draws_labels"), screen)?;
+            check_id(&format!("{field}.draws_labels.{screen}"), skin)?;
+            let labelled = self
+                .labels
+                .keys()
+                .filter_map(|slot| split_slot_ref(slot))
+                .any(|(labelled, _)| labelled == screen);
+            if !labelled {
                 return Err(EntryError::Rule {
-                    field: format!("{field}.draws_labels"),
-                    problem: "the feature gives no labels to draw".to_owned(),
+                    field: format!("{field}.draws_labels.{screen}"),
+                    problem: "the feature gives no labels on this screen".to_owned(),
                 });
             }
         }

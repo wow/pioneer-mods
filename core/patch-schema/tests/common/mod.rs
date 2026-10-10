@@ -70,7 +70,7 @@ impl Fixture {
             })
         };
         let mut stock_labels = implementation("recipes/p/labelled.json");
-        stock_labels["draws_labels"] = json!("stock");
+        stock_labels["draws_labels"] = json!({ "perform": "stock" });
         let mut labelled = feature(
             "labelled",
             "plain",

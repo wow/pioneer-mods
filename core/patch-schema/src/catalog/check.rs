@@ -2,7 +2,7 @@
 //! reference resolved, and every implementation consistent with its player and its recipe
 //! (`check_parts.rs`). Needs no firmware.
 
-use super::entry::EntryError;
+use super::entry::{CatalogEntry, EntryError};
 use super::feature::Feature;
 use super::player::Player;
 use super::screen::Screen;
@@ -85,24 +85,10 @@ impl Catalog {
     }
 
     fn check_entries(&self) -> Result<(), CatalogError> {
-        let invalid = |entry: String| move |error| CatalogError::Invalid { entry, error };
-        for player in &self.players {
-            player
-                .validate()
-                .map_err(invalid(player_entry(&player.id)))?;
-        }
-        for screen in &self.screens {
-            screen.validate().map_err(invalid(screen_entry(screen)))?;
-        }
-        for feature in &self.features {
-            feature
-                .validate()
-                .map_err(invalid(feature_entry(&feature.id)))?;
-        }
-        for skin in &self.skins {
-            skin.validate().map_err(invalid(skin_entry(&skin.id)))?;
-        }
-        Ok(())
+        validate_all(&self.players)?;
+        validate_all(&self.screens)?;
+        validate_all(&self.features)?;
+        validate_all(&self.skins)
     }
 
     fn check_unique(&self) -> Result<(), CatalogError> {
@@ -200,13 +186,21 @@ impl Catalog {
     }
 
     /// The element count of `slot_ref` (`<screen>.<slot name>`) on `player`, if it has the slot.
+    /// (`check_screens` has made every screen file of a player one it lists.)
     pub(super) fn slot_count(&self, player: &Player, slot_ref: &str) -> Option<u32> {
         let (screen, slot) = slot_ref.split_once('.')?;
-        if !player.screens.iter().any(|listed| listed == screen) {
-            return None;
-        }
         Some(self.screen(&player.id, screen)?.slots.get(slot)?.count)
     }
+}
+
+fn validate_all<T: CatalogEntry>(entries: &[T]) -> Result<(), CatalogError> {
+    for entry in entries {
+        entry.validate().map_err(|error| CatalogError::Invalid {
+            entry: entry.name(),
+            error,
+        })?;
+    }
+    Ok(())
 }
 
 pub(super) fn player_entry(id: &str) -> String {
@@ -214,7 +208,7 @@ pub(super) fn player_entry(id: &str) -> String {
 }
 
 fn screen_entry(screen: &Screen) -> String {
-    format!("screen {}/{}", screen.player, screen.id)
+    screen.name()
 }
 
 pub(super) fn feature_entry(id: &str) -> String {

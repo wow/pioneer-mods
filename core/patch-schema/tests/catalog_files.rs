@@ -3,7 +3,7 @@
 mod common;
 
 use common::Fixture;
-use patch_schema::catalog::{EntryError, Feature, Player, Profile, Screen, Skin};
+use patch_schema::catalog::{CatalogEntry, EntryError, Feature, Player, Profile, Screen, Skin};
 use serde_json::{Value, json};
 
 fn feature(value: Value) -> Result<(), EntryError> {
@@ -56,11 +56,15 @@ fn features_are_checked_on_their_own() {
     bad["labels"] = json!({ "main.pad": ["1"] });
     assert!(is_rule(feature(bad)));
     let mut bad = plain();
-    bad["implementations"]["p-1.0"][0]["draws_labels"] = json!("stock");
+    bad["implementations"]["p-1.0"][0]["draws_labels"] = json!({ "perform": "stock" });
+    assert!(is_rule(feature(bad)));
+    // Labels drawn on a screen the feature gives none on.
+    let mut bad = labelled();
+    bad["implementations"]["p-1.0"][0]["draws_labels"] = json!({ "main": "stock" });
     assert!(is_rule(feature(bad)));
     // Two implementations for one player that draw the labels the same way.
     let mut bad = labelled();
-    bad["implementations"]["p-1.0"][1]["draws_labels"] = json!("stock");
+    bad["implementations"]["p-1.0"][1]["draws_labels"] = json!({ "perform": "stock" });
     assert!(is_rule(feature(bad)));
     let mut bad = plain();
     bad["implementations"]["p-1.0"] = json!([]);

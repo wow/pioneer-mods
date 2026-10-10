@@ -60,6 +60,27 @@ pub enum EntryError {
     Rule { field: String, problem: String },
 }
 
+/// What every catalog file has: a kind and an id that name it, and its own checks. The catalog
+/// as a whole is checked by [`Catalog::check`](super::Catalog::check).
+pub trait CatalogEntry {
+    /// The kind of file, as messages name it (`feature`).
+    const KIND: &'static str;
+
+    fn id(&self) -> &str;
+
+    /// How messages name this entry (`feature beat-loop-1-to-32`).
+    fn name(&self) -> String {
+        format!("{} {}", Self::KIND, self.id())
+    }
+
+    /// Checks the file on its own (the catalog checks its references).
+    ///
+    /// # Errors
+    ///
+    /// The first [`EntryError`] found.
+    fn validate(&self) -> Result<(), EntryError>;
+}
+
 /// How settled an implementation is: `stable` (passed a hardware stage, and the maintainer
 /// offers it by default), `experimental` (emulator rehearsals at least), `dev` (never offered).
 #[derive(

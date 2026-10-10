@@ -101,15 +101,18 @@ fn a_copy_loads_and_misplaced_files_are_refused() {
     assert!(refusal(root.path()).contains("unexpected entry 'feature'"));
     std::fs::remove_file(catalog.join("feature")).expect("remove");
 
-    // A screen under another player's directory.
-    let other = catalog.join("screens/xdj700-v1.16");
-    std::fs::create_dir(&other).expect("dir");
-    std::fs::copy(
-        catalog.join("screens/xdj700-v1.15/main.json"),
-        other.join("main.json"),
-    )
-    .expect("copy");
-    assert!(refusal(root.path()).contains("lies under 'xdj700-v1.16'"));
+    // A screen for another player under this player's directory.
+    let main = catalog.join("screens/xdj700-v1.15/main.json");
+    let text = std::fs::read_to_string(&main).expect("read");
+    write_bytes(
+        &main,
+        text.replace(
+            "\"player\": \"xdj700-v1.15\"",
+            "\"player\": \"xdj700-v1.16\"",
+        )
+        .as_bytes(),
+    );
+    assert!(refusal(root.path()).contains("is for player xdj700-v1.16, but lies under"));
 }
 
 #[test]
@@ -120,7 +123,13 @@ fn a_missing_recipe_or_an_inconsistent_catalog_is_refused() {
             .join("recipes/xdj700-v1.15/beat-loop-16-plays-32.json"),
     )
     .expect("remove");
-    assert!(refusal(root.path()).contains("beat-loop-16-plays-32.json"));
+    let message = refusal(root.path());
+    assert!(
+        message.contains("failed to read recipe")
+            && message.contains("beat-loop-16-plays-32.json")
+            && message.contains("No such file or directory"),
+        "{message}"
+    );
 
     let root = copy();
     let screen = root
@@ -197,4 +206,89 @@ fn symbolic_links_are_refused() {
     std::fs::remove_dir_all(&features).expect("remove");
     symlink(outside.path().join("missing"), &features).expect("link");
     assert!(refusal(root.path()).contains("is a symbolic link"));
+}
+
+/// Replaces `from` with `to` in every JSON file under `root`, and in every file and directory
+/// name, as if the copy were for another release.
+fn rename_release(root: &Path, from: &str, to: &str) {
+    for entry in std::fs::read_dir(root).expect("read dir") {
+        let path = entry.expect("entry").path();
+        if path.is_dir() {
+            rename_release(&path, from, to);
+        } else if path
+            .extension()
+            .is_some_and(|extension| extension == "json")
+        {
+            let text = std::fs::read_to_string(&path).expect("read");
+            write_bytes(&path, text.replace(from, to).as_bytes());
+        }
+        let name = path
+            .file_name()
+            .expect("name")
+            .to_string_lossy()
+            .into_owned();
+        if name.contains(from) {
+            std::fs::rename(&path, path.with_file_name(name.replace(from, to))).expect("rename");
+        }
+    }
+}
+
+#[test]
+fn a_catalog_the_engine_would_refuse_is_refused() {
+    // A release the engine does not pin, consistent within the catalog.
+    let root = copy();
+    rename_release(root.path(), "xdj700-v1.15", "xdj700-v9.99");
+    let message = refusal(root.path());
+    assert!(
+        message.contains("unknown release \"xdj700-v9.99\""),
+        "{message}"
+    );
+
+    // Player and recipes that agree on another application pin.
+    let root = copy();
+    let application = "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939";
+    rename_release(root.path(), application, &"a".repeat(64));
+    let message = refusal(root.path());
+    assert!(
+        message.contains("differ from the engine's release"),
+        "{message}"
+    );
+
+    // Another budget.
+    let root = copy();
+    let player = root.path().join("catalog/players/xdj700-v1.15.json");
+    let text = std::fs::read_to_string(&player).expect("read");
+    write_bytes(&player, text.replace("262144", "262145").as_bytes());
+    assert!(refusal(root.path()).contains("differ from the engine's release"));
+
+    // A recipe the engine's own checks refuse (its label is not higher than the release's).
+    let root = copy();
+    let recipe = root
+        .path()
+        .join("recipes/xdj700-v1.15/beat-loop-1-to-32.json");
+    let text = std::fs::read_to_string(&recipe).expect("read");
+    write_bytes(
+        &recipe,
+        text.replace("\"Ver1.16\"", "\"Ver1.15\"").as_bytes(),
+    );
+    let message = refusal(root.path());
+    assert!(
+        message.contains("recipe recipes/xdj700-v1.15/beat-loop-1-to-32.json")
+            && message.contains("not higher"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_screen_directory_must_hold_a_known_players_screens() {
+    let root = copy();
+    std::fs::create_dir(root.path().join("catalog/screens/xdj700-v1.16")).expect("dir");
+    assert!(refusal(root.path()).contains("unexpected entry 'xdj700-v1.16'"));
+
+    let root = copy();
+    let screens = root.path().join("catalog/screens/xdj700-v1.15");
+    for screen in ["main.json", "perform.json"] {
+        std::fs::remove_file(screens.join(screen)).expect("remove");
+    }
+    assert!(refusal(root.path()).contains("it holds no screen"));
 }

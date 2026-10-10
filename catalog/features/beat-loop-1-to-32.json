@@ -23,7 +23,7 @@
         "limits": [
           "The lit pad follows the stock lengths: the pad to the right of the touched one lights, and the 32 pad lights none (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\")."
         ],
-        "draws_labels": "stock"
+        "draws_labels": { "perform": "stock" }
       }
     ]
   },

@@ -1,10 +1,13 @@
 //! Loading the catalog (`catalog/` under the repository root) and the recipes its implementations
 //! name, without trusting the files: each file is size-capped, parsed strictly and checked on its
-//! own before anything it names is read, then the whole is checked ([`Catalog::check`]).
+//! own before anything it names is read, then the whole is checked ([`Catalog::check`]), and so
+//! is every player and recipe against the engine's own release pins and checks. What loads here
+//! is what the engine accepts, short of the firmware itself.
 
 use crate::recipe::{read_capped, read_recipe_versioned};
 use anyhow::{Context, Result, bail};
-use patch_schema::catalog::{Catalog, EntryError, Feature, Player, Screen, Skin};
+use patch_core::xdj700::{MAX_MAIN_GROWTH, check_recipe_v2, recipe_target, unknown_release};
+use patch_schema::catalog::{Catalog, CatalogEntry, Feature, Player, Screen, Skin};
 use patch_schema::{RecipeV2, SCHEMA_VERSION_V2};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
@@ -57,14 +60,21 @@ pub fn load_catalog(root: &Path) -> Result<LoadedCatalog> {
     }
     let screens = dir.join("screens");
     for player in entries(&screens)? {
-        if !is_dir(&screens.join(&player))? {
+        if !is_dir(&screens.join(&player))? || catalog.player(&player).is_none() {
             bail!(
                 "refusing catalog directory '{}': unexpected entry '{player}'; it holds a \
-                 directory per player",
+                 directory per player in catalog/players",
                 screens.display()
             );
         }
-        for path in json_files(&screens.join(&player))? {
+        let files = json_files(&screens.join(&player))?;
+        if files.is_empty() {
+            bail!(
+                "refusing catalog directory '{}': it holds no screen",
+                screens.join(&player).display()
+            );
+        }
+        for path in files {
             let screen = read_entry::<Screen>(&path)?;
             if screen.player != player {
                 bail!(
@@ -83,34 +93,43 @@ pub fn load_catalog(root: &Path) -> Result<LoadedCatalog> {
         catalog.skins.push(read_entry::<Skin>(&path)?);
     }
     let recipes = read_recipes(root, &catalog)?;
-    catalog
-        .check(&recipes)
-        .with_context(|| format!("refusing catalog '{}'", dir.display()))?;
+    let refusing = || format!("refusing catalog '{}'", dir.display());
+    catalog.check(&recipes).with_context(refusing)?;
+    check_against_engine(&catalog, &recipes).with_context(refusing)?;
     Ok(LoadedCatalog { catalog, recipes })
 }
 
-/// A catalog file's type: how it names itself and checks itself.
-trait Entry: DeserializeOwned {
-    fn id(&self) -> &str;
-    fn validate(&self) -> Result<(), EntryError>;
-}
-
-macro_rules! entry {
-    ($($kind:ty),*) => {$(
-        impl Entry for $kind {
-            fn id(&self) -> &str {
-                &self.id
-            }
-            fn validate(&self) -> Result<(), EntryError> {
-                <$kind>::validate(self)
-            }
+/// Every player is a release the engine pins, with the same pins and budget, and every recipe
+/// passes the engine's firmware-free checks for its release.
+fn check_against_engine(catalog: &Catalog, recipes: &BTreeMap<String, RecipeV2>) -> Result<()> {
+    for player in &catalog.players {
+        let target = recipe_target(&player.id).ok_or_else(|| unknown_release(&player.id))?;
+        let release = &target.release;
+        let stock_application = release
+            .version_block
+            .map(|block| block.stock_application_sha256);
+        let firmware = &player.firmware;
+        let agrees = firmware.upd_sha256.eq_ignore_ascii_case(release.upd_sha256)
+            && stock_application
+                .is_some_and(|pin| firmware.application_sha256.eq_ignore_ascii_case(pin))
+            && player.budgets.compressed_main_growth_bytes == MAX_MAIN_GROWTH as u64;
+        if !agrees {
+            bail!(
+                "player {}: its firmware pins or budget differ from the engine's release {}",
+                player.id,
+                target.id
+            );
         }
-    )*};
+    }
+    for (path, recipe) in recipes {
+        let target = recipe_target(&recipe.target.release)
+            .ok_or_else(|| unknown_release(&recipe.target.release))?;
+        check_recipe_v2(recipe, target).with_context(|| format!("recipe {path}"))?;
+    }
+    Ok(())
 }
 
-entry!(Player, Screen, Feature, Skin);
-
-fn read_entry<T: Entry>(path: &Path) -> Result<T> {
+fn read_entry<T: CatalogEntry + DeserializeOwned>(path: &Path) -> Result<T> {
     let raw = read_capped(
         path,
         MAX_CATALOG_FILE_LEN,

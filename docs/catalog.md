@@ -19,7 +19,8 @@ catalog/
   skins/<skin>.json                 a look for one screen, with implementations per player
 ```
 
-Every file is named after its `id`, and a screen lies under its player's directory. Anything
+Every file is named after its `id`, and a screen lies under its player's directory, which must
+belong to a player in `players/` and hold at least one screen. Anything
 else in `catalog/` is refused, so a misnamed file cannot be skipped silently; only a `README.md`
 and a `.DS_Store` are skipped. A symbolic link in the catalog, or in a recipe path, is refused: it
 could point outside the tree. Every file has `"schema_version": 1` and names a `maintainer`.
@@ -76,10 +77,12 @@ a screen accepts come with the screen catalogue (design roadmap, step 3).
     needed for `stable`, but the maintainer decides: `beat-loop-16-plays-32` passed on an owner's
     unit and stays `experimental` while its lit-pad limit stands.
   - `limits`: known limits the builder shows with the feature.
-  - `draws_labels`: set when the recipe draws the feature's labels itself, in the style of a skin
-    (`stock`), so the labelled screen must use that skin; unset, the recipe changes behaviour only
-    and a skin implementation draws the labels. Labels belong to skins; today's stage-7 recipe
-    draws its labels in the stock style, so the PERFORM screen keeps the stock skin with it.
+  - `draws_labels`: the screens whose labels the recipe draws itself, each in the style of a skin
+    (`{"perform": "stock"}`), so each such screen must use that skin. A labelled screen not listed
+    is left to the chosen skin, which must have an implementation drawing that label set (the
+    built-in `stock` skin has none: its labels are drawn by features). Labels belong to skins;
+    today's stage-7 recipe draws its labels in the stock style, so the PERFORM screen keeps the
+    stock skin with it.
 
 The implementation must meet the feature's requirements on its player: the capabilities with
 their values, and the slots, with as many elements as there are labels.
@@ -147,14 +150,17 @@ Each file is checked on its own, then the catalog as a whole, with no firmware:
 - ids unique; every player's screens have files, and every screen's player lists it;
 - conflicts resolved and listed on both sides; features that relabel one slot conflict;
 - every implementation's player exists and meets the requirements; label counts match slot
-  counts; a skin named in `draws_labels` exists and is for the labelled screen;
+  counts; a skin named in `draws_labels` is built in, or exists, is for that screen and has an
+  implementation for the player;
 - every recipe named exists, is a valid schema-v2 recipe for its player, carries the player's pins
   and pins its output.
 
-CI runs them on the committed catalog (`core/patch-cli/tests/committed_catalog.rs`), and also
-checks each player's pins and budget against the engine's and runs the engine's firmware-free
-recipe checks on every recipe the catalog names. Whether a recipe applies to the official file,
-and what a composed build holds, needs the file and is checked by `patch` and `compose`.
+The loader (`patch_cli::catalog::load_catalog`) then holds the catalog to the engine: every
+player is a release the engine pins, with the same pins and budget, and every recipe passes the
+engine's firmware-free checks for its release. So what loads is what the engine accepts, short of
+the firmware itself. CI loads the committed catalog (`core/patch-cli/tests/committed_catalog.rs`).
+Whether a recipe applies to the official file, and what a composed build holds, needs the file
+and is checked by `patch` and `compose`.
 
 ## Not yet in the format
 

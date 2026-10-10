@@ -3,7 +3,7 @@
 //! The skin `stock` (the player's own look) is built in and has no file.
 
 use super::entry::{
-    EntryError, Maturity, check_id, check_implementation, check_labels, check_name,
+    CatalogEntry, EntryError, Maturity, check_id, check_implementation, check_labels, check_name,
     check_player_id, check_schema_version, check_text, check_unique, unique_keys,
 };
 use super::player::ScreenClass;
@@ -65,13 +65,14 @@ pub struct SkinImplementation {
     pub labels: BTreeMap<String, Vec<String>>,
 }
 
-impl Skin {
-    /// Checks the file on its own (the catalog checks its references).
-    ///
-    /// # Errors
-    ///
-    /// The first [`EntryError`] found.
-    pub fn validate(&self) -> Result<(), EntryError> {
+impl CatalogEntry for Skin {
+    const KIND: &'static str = "skin";
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn validate(&self) -> Result<(), EntryError> {
         check_schema_version(self.schema_version)?;
         check_id("id", &self.id)?;
         if self.id == STOCK_SKIN {
@@ -99,18 +100,14 @@ impl Skin {
                 });
             }
             for (index, implementation) in implementations.iter().enumerate() {
-                self.check_implementation(
-                    &format!("implementations.{player}[{index}]"),
-                    implementation,
-                )?;
-            }
-            for (index, implementation) in implementations.iter().enumerate() {
+                let field = format!("implementations.{player}[{index}]");
+                self.check_implementation(&field, implementation)?;
                 if implementations[..index]
                     .iter()
                     .any(|earlier| earlier.labels == implementation.labels)
                 {
                     return Err(EntryError::Rule {
-                        field: format!("implementations.{player}[{index}]"),
+                        field,
                         problem: "another implementation draws the same label set".to_owned(),
                     });
                 }
@@ -118,7 +115,9 @@ impl Skin {
         }
         check_text("maintainer", &self.maintainer)
     }
+}
 
+impl Skin {
     fn check_implementation(
         &self,
         field: &str,

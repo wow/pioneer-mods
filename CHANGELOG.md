@@ -15,8 +15,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   sides (and between features that relabel one slot), implementations that meet their requirements,
   label counts that match slot counts, and recipes for their player that carry its pins and pin
   their output. `patch_cli::catalog::load_catalog` reads it without trusting the files (unknown
-  fields, repeated keys and symbolic links are refused); CI also checks the pins and budget against
-  the engine's.
+  fields, repeated keys and symbolic links are refused) and holds it to the engine: every player is
+  a release the engine pins, with its pins and budget, and every recipe passes the engine's
+  firmware-free checks.
 - `patch-cli compose` and `xdj700::compose_recipes` (`compose_recipes_to`, `check_composition`,
   `CheckedComposition`, `check_composed`, `Composition`, `ComposedUpdate`, `ComposeError`): several
   schema-v2 recipes of one release built into one update with one label and one reported version, as

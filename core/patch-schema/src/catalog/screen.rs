@@ -2,8 +2,8 @@
 //! (`catalog/screens/<player>/<screen>.json`).
 
 use super::entry::{
-    EntryError, check_id, check_name, check_player_id, check_schema_version, check_text,
-    unique_keys,
+    CatalogEntry, EntryError, check_id, check_name, check_player_id, check_schema_version,
+    check_text, unique_keys,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -29,13 +29,18 @@ pub struct Slot {
     pub description: String,
 }
 
-impl Screen {
-    /// Checks the file on its own (the catalog checks its references).
-    ///
-    /// # Errors
-    ///
-    /// The first [`EntryError`] found.
-    pub fn validate(&self) -> Result<(), EntryError> {
+impl CatalogEntry for Screen {
+    const KIND: &'static str = "screen";
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn name(&self) -> String {
+        format!("screen {}/{}", self.player, self.id)
+    }
+
+    fn validate(&self) -> Result<(), EntryError> {
         check_schema_version(self.schema_version)?;
         check_id("id", &self.id)?;
         check_player_id("player", &self.player)?;

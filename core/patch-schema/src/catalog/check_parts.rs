@@ -57,8 +57,8 @@ impl Catalog {
                 check_label_count(&entry, slot_ref, labels.len(), count)?;
             }
             for implementation in implementations {
-                if let Some(skin) = implementation.draws_labels.as_deref() {
-                    self.check_label_skin(&entry, feature, skin)?;
+                for (screen, skin) in &implementation.draws_labels {
+                    self.check_label_skin(&entry, player_id, screen, skin)?;
                 }
                 check_recipe(&entry, player, &implementation.recipe, recipes)?;
             }
@@ -66,12 +66,14 @@ impl Catalog {
         Ok(())
     }
 
-    /// A feature whose recipe draws its labels in `skin`'s style: the skin exists, and is for the
-    /// screen of every labelled slot.
+    /// A feature implementation for `player` that draws the labels on `screen` in `skin`'s
+    /// style: the skin is built in (`stock`), or exists, is for that screen and has an
+    /// implementation for the player.
     fn check_label_skin(
         &self,
         entry: &str,
-        feature: &Feature,
+        player: &str,
+        screen: &str,
         skin: &str,
     ) -> Result<(), CatalogError> {
         if skin == STOCK_SKIN {
@@ -81,19 +83,20 @@ impl Catalog {
             entry: entry.to_owned(),
             what: skin_entry(skin),
         })?;
-        for slot_ref in feature.labels.keys() {
-            let (screen, _) = slot_ref.split_once('.').expect("validated");
-            if found.screen != screen {
-                return Err(CatalogError::Inconsistent {
-                    entry: entry.to_owned(),
-                    problem: format!(
-                        "it draws labels for {slot_ref} as skin {skin}, which is for screen {}",
-                        found.screen
-                    ),
-                });
-            }
-        }
-        Ok(())
+        let problem = if found.screen != screen {
+            format!(
+                "it draws the labels on screen {screen} as skin {skin}, which is for screen {}",
+                found.screen
+            )
+        } else if !found.implementations.contains_key(player) {
+            format!("it draws labels as skin {skin}, which has no implementation for {player}")
+        } else {
+            return Ok(());
+        };
+        Err(CatalogError::Inconsistent {
+            entry: entry.to_owned(),
+            problem,
+        })
     }
 
     pub(super) fn check_skin(
@@ -108,14 +111,10 @@ impl Catalog {
         };
         for (player_id, implementations) in &skin.implementations {
             let player = self.implementation_player(&entry, player_id)?;
-            let screen = player
-                .screens
-                .contains(&skin.screen)
-                .then(|| self.screen(player_id, &skin.screen))
-                .flatten()
-                .ok_or_else(|| {
-                    inconsistent(format!("player {player_id} has no screen {}", skin.screen))
-                })?;
+            // `check_screens` has made every screen file of a player one it lists.
+            let screen = self.screen(player_id, &skin.screen).ok_or_else(|| {
+                inconsistent(format!("player {player_id} has no screen {}", skin.screen))
+            })?;
             if player.screen_class != skin.requires.screen_class {
                 return Err(inconsistent(format!(
                     "player {player_id} has another screen class"

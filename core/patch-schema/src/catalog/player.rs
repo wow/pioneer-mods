@@ -2,8 +2,8 @@
 //! screens (`catalog/players/<id>.json`).
 
 use super::entry::{
-    EntryError, check_id, check_name, check_player_id, check_schema_version, check_sha256,
-    check_text, check_unique, unique_keys,
+    CatalogEntry, EntryError, check_id, check_name, check_player_id, check_schema_version,
+    check_sha256, check_text, check_unique, unique_keys,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -78,13 +78,14 @@ impl Capability {
     }
 }
 
-impl Player {
-    /// Checks the file on its own (the catalog checks its references).
-    ///
-    /// # Errors
-    ///
-    /// The first [`EntryError`] found.
-    pub fn validate(&self) -> Result<(), EntryError> {
+impl CatalogEntry for Player {
+    const KIND: &'static str = "player";
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn validate(&self) -> Result<(), EntryError> {
         check_schema_version(self.schema_version)?;
         check_player_id("id", &self.id)?;
         check_text("model", &self.model)?;
