@@ -13,9 +13,10 @@ pub struct Resolution {
     pub reported_version: String,
     /// The least settled implementation the profile accepts.
     pub maturity: Maturity,
-    /// One per player screen, in the player's order, then one per profile screen the player
-    /// lacks.
+    /// One per player screen, in the player's order.
     pub screens: Vec<ScreenResolution>,
+    /// The screens the profile names that the player lacks; their choices are ignored.
+    pub missing_screens: Vec<String>,
     /// One per profile feature, in the profile's order.
     pub features: Vec<FeatureResolution>,
     /// The recipes to compose, features first (profile order) then skins (screen order), each

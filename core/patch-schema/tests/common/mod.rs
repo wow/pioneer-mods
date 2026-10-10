@@ -8,7 +8,7 @@
 pub mod resolve;
 
 use patch_schema::RecipeV2;
-use patch_schema::catalog::{Catalog, CatalogError};
+use patch_schema::catalog::{Catalog, CatalogError, CheckedCatalog};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -156,6 +156,12 @@ impl Fixture {
 
     pub fn check(&self) -> Result<(), CatalogError> {
         self.catalog().check(&self.parsed_recipes())
+    }
+
+    pub fn checked(&self) -> CheckedCatalog {
+        self.catalog()
+            .into_checked(self.parsed_recipes())
+            .expect("a consistent catalog")
     }
 
     pub fn problem(&self) -> String {

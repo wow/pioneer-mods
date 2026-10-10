@@ -305,3 +305,31 @@ fn when_every_skin_could_draw_a_feature_the_reason_names_the_first_screen() {
          most of the chosen features"
     );
 }
+
+#[test]
+fn the_stock_style_note_names_every_screen_its_implementation_needs() {
+    // `wide`'s stock-style implementation draws on main and perform: the note names both.
+    let mut fixture = with_more_slots();
+    feature_on(
+        &mut fixture,
+        "wide",
+        json!({ "main.x": ["W"], "perform.pad2": ["W2"] }),
+        &[json!({ "main": "stock", "perform": "stock" }), json!({})],
+    );
+    skin_on(&mut fixture, "main-look", "main", json!([]), &[json!({})]);
+    skin_on(
+        &mut fixture,
+        "dark-pads",
+        "perform",
+        json!([]),
+        &[json!({})],
+    );
+    let skins = json!({ "main": "main-look", "perform": "dark-pads" });
+    let resolution = resolved(&fixture, profile(json!(["wide"]), skins));
+
+    assert_eq!(
+        off(&resolution, "wide"),
+        "skin main-look on main has no implementation for p-1.0 drawing its labels; it has an \
+         implementation drawing them in the stock style, for the stock skin on main and perform"
+    );
+}

@@ -3,17 +3,13 @@
 //! each), and the reasons for what it leaves off.
 
 use super::feature::FeatureImplementation;
-use super::resolve::{Skins, State, labelled_screens, subsets};
+use super::resolve::{Labels, Skins, State, labelled_screens};
 use super::skin::SkinImplementation;
 use std::collections::BTreeMap;
 
-/// Labels by slot name on one screen.
-type Labels = BTreeMap<String, Vec<String>>;
-
-/// A configuration that works: the kept skins (screens, in screen order), the features on with
-/// their implementations, why the others are off, and each kept skin's implementation.
+/// A configuration that works: the features on with their implementations, why the others are
+/// off, and each kept skin's implementation.
 pub(super) struct Configuration<'a> {
-    pub(super) kept: Vec<&'a str>,
     pub(super) picks: BTreeMap<&'a str, &'a FeatureImplementation>,
     pub(super) unfit: BTreeMap<&'a str, String>,
     pub(super) skin_picks: BTreeMap<&'a str, &'a SkinImplementation>,
@@ -70,12 +66,15 @@ impl<'a> State<'a> {
                         .all(|(screen, implementation)| self.draws(implementation, id, screen))
                 })
                 .collect();
+            // Each drawn feature's labels are among the implementation's, and picked features
+            // relabel different slots (two that share one conflict, so neither is picked): the
+            // implementation draws exactly theirs when it has as many slots as they give.
             let covers = kept.iter().zip(&choice).all(|(screen, implementation)| {
-                let mut covered = Labels::new();
-                for id in &drawn {
-                    covered.extend(self.labels_on(id, screen));
-                }
-                covered == implementation.labels
+                let given: usize = drawn
+                    .iter()
+                    .map(|id| self.labels_on(id, screen).map_or(0, Labels::len))
+                    .sum();
+                given == implementation.labels.len()
             });
             if covers
                 && best
@@ -109,7 +108,6 @@ impl<'a> State<'a> {
             unfit.insert(id, self.undrawn(id, screen));
         }
         Some(Configuration {
-            kept: kept.to_vec(),
             picks,
             unfit,
             skin_picks: kept.iter().copied().zip(choice).collect(),
@@ -118,22 +116,16 @@ impl<'a> State<'a> {
 
     /// Whether `implementation` draws every label feature `id` gives on `screen`.
     fn draws(&self, implementation: &SkinImplementation, id: &str, screen: &str) -> bool {
-        self.labels_on(id, screen)
-            .iter()
-            .all(|(slot, labels)| implementation.labels.get(slot) == Some(labels))
+        self.labels_on(id, screen).is_none_or(|labels| {
+            labels
+                .iter()
+                .all(|(slot, labels)| implementation.labels.get(slot) == Some(labels))
+        })
     }
 
-    /// The labels feature `id` gives on `screen`, by slot name.
-    fn labels_on(&self, id: &str, screen: &str) -> Labels {
-        let feature = self.catalog.feature(id).expect("available");
-        feature
-            .labels
-            .iter()
-            .filter_map(|(slot_ref, labels)| {
-                let (on, slot) = slot_ref.split_once('.')?;
-                (on == screen).then(|| (slot.to_owned(), labels.clone()))
-            })
-            .collect()
+    /// The labels feature `id` gives on `screen`, by slot name, if any.
+    fn labels_on(&self, id: &str, screen: &str) -> Option<&Labels> {
+        self.labels.get(id)?.get(screen)
     }
 
     /// Whether some accepted implementation of the skin chosen on `screen` draws the labels
@@ -157,47 +149,46 @@ impl<'a> State<'a> {
                 self.player.id
             )
         };
+        // An accepted implementation drawing this screen's labels in the stock style, and every
+        // screen it needs on the stock skin.
         let feature = self.catalog.feature(id).expect("available");
         let stock_style = feature.implementations[&self.player.id]
             .iter()
-            .any(|i| self.accepts(i.maturity) && i.draws_labels.contains_key(screen));
-        let hint = if stock_style {
+            .find(|i| self.accepts(i.maturity) && i.draws_labels.contains_key(screen));
+        let hint = stock_style.map_or_else(String::new, |implementation| {
+            let screens: Vec<&str> = implementation
+                .draws_labels
+                .keys()
+                .map(String::as_str)
+                .collect();
             format!(
                 "; it has an implementation drawing them in the stock style, for the stock skin \
-                 on {screen}"
+                 on {}",
+                screens.join(" and ")
             )
-        } else {
-            String::new()
-        };
+        });
         format!("skin {skin} on {screen} {what}{hint}")
     }
 
-    /// Why the skin chosen on `screen` is off when `best`, found among the sets of `size` of the
-    /// `candidates`, is kept: the rule that decided, when the skin could be kept alone.
+    /// Why the skin chosen on `screen` is off when the skins on `kept` are kept, with `best_on`
+    /// features on, and `with` features at best among the sets of the same size that keep it
+    /// (none working: `None`): the rule that decided, when the skin could be kept alone.
     pub(super) fn dropped(
         &self,
         screen: &'a str,
-        best: &Configuration<'a>,
-        candidates: &[&'a str],
-        size: usize,
+        kept: &[&'a str],
+        best_on: usize,
+        with: Option<usize>,
     ) -> String {
         let skin = self.chosen[screen];
         if self.configuration(&[screen]).is_some() {
-            let kept: Vec<String> = best
-                .kept
+            let kept: Vec<String> = kept
                 .iter()
                 .map(|s| format!("skin {} on {s}", self.chosen[s]))
                 .collect();
-            // The best configuration of the same size that keeps this skin, if any works.
-            let with = subsets(candidates, size)
-                .into_iter()
-                .filter(|set| set.contains(&screen))
-                .filter_map(|set| self.configuration(&set))
-                .map(|configuration| configuration.on())
-                .max();
             let why = match with {
                 None => "keeps more of the chosen skins",
-                Some(on) if on < best.on() => "keeps more of the chosen features",
+                Some(on) if on < best_on => "keeps more of the chosen features",
                 Some(_) => "keeps as many of the chosen features and comes first in screen order",
             };
             return format!(

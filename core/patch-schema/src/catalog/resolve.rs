@@ -21,39 +21,36 @@
 //! on does not depend on the order of screens or files. The search is small for real catalogs; one
 //! that would need more than [`MAX_CONFIGURATIONS`] is refused rather than searched slowly.
 
-use super::check::Catalog;
+use super::check::{Catalog, CheckedCatalog};
 use super::entry::Maturity;
 use super::feature::{Feature, FeatureImplementation};
 use super::player::Player;
 use super::profile::Profile;
 use super::resolution::{Resolution, ResolveError};
+use super::resolve_skins::Configuration;
 use super::skin::{STOCK_SKIN, SkinImplementation};
-use crate::v2::RecipeV2;
 use std::collections::BTreeMap;
 
 /// The most configurations (a set of kept skins and one implementation each) resolution tries.
 pub const MAX_CONFIGURATIONS: u64 = 1 << 16;
 
-/// Resolves `profile` against `catalog`, which must have passed [`Catalog::check`] with
-/// `recipes`.
+/// Resolves `profile` against a checked catalog. The release's label and reported-version rules
+/// are the engine's to apply (`patch-core`); a front end applies them first.
 ///
 /// # Errors
 ///
 /// [`ResolveError::Profile`] for an invalid profile, [`ResolveError::UnknownPlayer`] for a player
 /// the catalog lacks, [`ResolveError::TooManyConfigurations`] for a search too large. Anything
 /// narrower is switched off with its reason instead.
-pub fn resolve(
-    catalog: &Catalog,
-    recipes: &BTreeMap<String, RecipeV2>,
-    profile: &Profile,
-) -> Result<Resolution, ResolveError> {
+pub fn resolve(checked: &CheckedCatalog, profile: &Profile) -> Result<Resolution, ResolveError> {
     profile.validate().map_err(ResolveError::Profile)?;
+    let catalog = checked.catalog();
     let player = catalog
         .player(&profile.player)
         .ok_or_else(|| ResolveError::UnknownPlayer(profile.player.clone()))?;
     let mut state = State::new(catalog, player, profile);
     state.settle()?;
-    Ok(state.resolution(recipes))
+    Ok(state.resolution(checked.recipes()))
 }
 
 /// The skin each screen uses in a configuration, by screen; a screen not listed keeps `stock`.
@@ -74,7 +71,12 @@ pub(super) struct State<'a> {
     pub(super) unfit: BTreeMap<&'a str, String>,
     /// The implementation of each kept skin, by screen.
     pub(super) skin_picks: BTreeMap<&'a str, &'a SkinImplementation>,
+    /// The labels each chosen feature gives, by feature, screen and slot name.
+    pub(super) labels: BTreeMap<&'a str, BTreeMap<&'a str, Labels>>,
 }
+
+/// Labels by slot name on one screen.
+pub(super) type Labels = BTreeMap<String, Vec<String>>;
 
 impl<'a> State<'a> {
     fn new(catalog: &'a Catalog, player: &'a Player, profile: &'a Profile) -> Self {
@@ -88,7 +90,17 @@ impl<'a> State<'a> {
             picks: BTreeMap::new(),
             unfit: BTreeMap::new(),
             skin_picks: BTreeMap::new(),
+            labels: BTreeMap::new(),
         };
+        for feature in profile.features.iter().filter_map(|id| catalog.feature(id)) {
+            let by_screen = state.labels.entry(feature.id.as_str()).or_default();
+            for (slot_ref, labels) in &feature.labels {
+                if let Some((screen, slot)) = slot_ref.split_once('.') {
+                    let on_screen = by_screen.entry(screen).or_default();
+                    on_screen.insert(slot.to_owned(), labels.clone());
+                }
+            }
+        }
         for screen in &player.screens {
             let skin = profile
                 .screens
@@ -121,10 +133,7 @@ impl<'a> State<'a> {
         maturities.sort_unstable();
         maturities.dedup();
         let names: Vec<String> = maturities.iter().map(Maturity::to_string).collect();
-        let accepted = match self.profile.maturity {
-            Maturity::Stable => "stable only",
-            _ => "experimental and stable",
-        };
+        let accepted = self.profile.maturity.accepted();
         let (implementations, are) = if count == 1 {
             ("implementation", "is")
         } else {
@@ -219,20 +228,48 @@ impl<'a> State<'a> {
             return Err(ResolveError::TooManyConfigurations(configurations));
         }
         for size in (0..=candidates.len()).rev() {
-            let best = subsets(&candidates, size)
-                .into_iter()
-                .filter_map(|kept| self.configuration(&kept))
-                .reduce(|best, next| if next.on() > best.on() { next } else { best });
-            if let Some(best) = best {
-                for screen in candidates.iter().filter(|s| !best.kept.contains(s)) {
-                    let reason = self.dropped(screen, &best, &candidates, size);
-                    self.skins_off.insert(screen, reason);
+            let evaluated: Vec<(Vec<&'a str>, Option<Configuration<'a>>)> =
+                subsets(&candidates, size)
+                    .into_iter()
+                    .map(|kept| {
+                        let configuration = self.configuration(&kept);
+                        (kept, configuration)
+                    })
+                    .collect();
+            // The first configuration with the most features on, if any works at this size.
+            let mut best: Option<usize> = None;
+            for (index, (_, configuration)) in evaluated.iter().enumerate() {
+                let on = configuration.as_ref().map(Configuration::on);
+                let ahead =
+                    best.is_none_or(|b| on > evaluated[b].1.as_ref().map(Configuration::on));
+                if on.is_some() && ahead {
+                    best = Some(index);
                 }
-                self.picks = best.picks;
-                self.unfit = best.unfit;
-                self.skin_picks = best.skin_picks;
-                return Ok(());
             }
+            let Some(best) = best else {
+                continue;
+            };
+            let kept = evaluated[best].0.clone();
+            let best_on = evaluated[best].1.as_ref().map_or(0, Configuration::on);
+            for screen in candidates.iter().filter(|s| !kept.contains(s)) {
+                // The best configuration of this size that keeps this skin, if any works.
+                let with = evaluated
+                    .iter()
+                    .filter(|(set, _)| set.contains(screen))
+                    .filter_map(|(_, configuration)| configuration.as_ref().map(Configuration::on))
+                    .max();
+                let reason = self.dropped(screen, &kept, best_on, with);
+                self.skins_off.insert(screen, reason);
+            }
+            let best = evaluated
+                .into_iter()
+                .nth(best)
+                .and_then(|(_, c)| c)
+                .expect("found");
+            self.picks = best.picks;
+            self.unfit = best.unfit;
+            self.skin_picks = best.skin_picks;
+            return Ok(());
         }
         unreachable!("keeping no skin is always a configuration")
     }

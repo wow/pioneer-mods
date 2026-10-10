@@ -25,8 +25,9 @@ belong to a player in `players/` and hold at least one screen. Anything
 else in `catalog/` is refused, so a misnamed file cannot be skipped silently; only a `README.md`
 and a `.DS_Store` are skipped. A symbolic link in the catalog, or in a recipe path, is refused: it
 could point outside the tree. Every file has `"schema_version": 1` and names a `maintainer`.
-Unknown fields, and a key given twice in an object, are refused, and so is a control character
-(a line break, a tab) in any text shown to the owner.
+Unknown fields, and a key given twice in an object, are refused, and so is a control, format or
+line-separator character (a line break, a tab, a bidirectional override) in any text shown to the
+owner.
 
 Ids are lowercase letters, digits and `-` (a player id may also hold `.`: `xdj700-v1.15`, the
 release id recipes name), at most 64 bytes. Capability and slot names are lowercase segments of
@@ -173,8 +174,8 @@ version, and lower), as a build applies them. The choices are honoured as far as
 nothing is dropped silently:
 
 1. A skin or feature that is not in the catalog, has no implementation for the player, or none
-   at the maturity the profile accepts, is off. So is a skin for another screen, and a screen
-   the player lacks.
+   at the maturity the profile accepts, is off. So is a skin for another screen. A screen the
+   player lacks is listed apart, and the profile's choice for it is ignored.
 2. Chosen features that conflict are both off: the owner chooses one. This is decided once,
    whatever the skins.
 3. The chosen skins are kept as far as they can be. Of every set of them, largest first, and
@@ -191,11 +192,13 @@ depend on the order in which screens are listed; a tie between equally good conf
 the first in screen and file order. The search is small for real catalogs; one needing more than
 65,536 configurations is refused.
 
-The **tier** of the build is its least settled fragment's when it is one fragment under the
-recipe's own label and reported version (the very file its pins describe), and `experimental` at
-most otherwise: a combination, or another label or version, is a new update that no listed
-combination covers yet ([modular-builds.md](./modular-builds.md)). Only an invalid profile, a
-player the catalog lacks, or a label or version the release refuses is refused outright.
+The **tier** of the build is its least settled fragment's when it is one fragment under the recipe's
+own label and reported version (the very file its pins describe), and `experimental` at most
+otherwise: a combination, or another label or version, is a new update that no listed combination
+covers yet ([modular-builds.md](./modular-builds.md)). Only an invalid profile, a player the catalog
+lacks, a label or version the release refuses, or a search over more than 65,536 configurations is
+refused outright. Front ends call `patch_cli::catalog::resolve_profile`, which applies the release's
+label and version rules before the search.
 
 ## Checks
 

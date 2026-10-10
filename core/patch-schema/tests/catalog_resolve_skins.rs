@@ -224,10 +224,8 @@ fn a_search_too_large_is_refused() {
         json!({ "main": "main-look", "perform": "dark-pads" }),
     ))
     .expect("profile");
-    fixture.check().expect("a consistent catalog");
-
     assert_eq!(
-        resolve(&fixture.catalog(), &fixture.parsed_recipes(), &profile),
+        resolve(&fixture.checked(), &profile),
         Err(ResolveError::TooManyConfigurations(257 * 257))
     );
     const { assert!(257 * 257 > MAX_CONFIGURATIONS) };

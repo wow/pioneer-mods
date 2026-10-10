@@ -34,17 +34,13 @@ impl State<'_> {
                 status,
             });
         }
-        for (screen, skin) in &self.profile.screens {
-            if !self.chosen.contains_key(screen.as_str()) {
-                screens.push(ScreenResolution {
-                    screen: screen.clone(),
-                    chosen: skin.clone(),
-                    status: Status::Off {
-                        reason: format!("player {} has no screen {screen}", self.player.id),
-                    },
-                });
-            }
-        }
+        let missing_screens: Vec<String> = self
+            .profile
+            .screens
+            .keys()
+            .filter(|screen| !self.chosen.contains_key(screen.as_str()))
+            .cloned()
+            .collect();
         let features: Vec<FeatureResolution> = self
             .profile
             .features
@@ -106,6 +102,7 @@ impl State<'_> {
             reported_version: self.profile.reported_version.clone(),
             maturity: self.profile.maturity,
             screens,
+            missing_screens,
             features,
             fragments,
         }

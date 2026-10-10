@@ -13,8 +13,7 @@ pub fn profile(features: Value, screens: Value) -> Value {
 
 pub fn resolved(fixture: &Fixture, profile: Value) -> Resolution {
     let profile: Profile = serde_json::from_value(profile).expect("profile");
-    fixture.check().expect("a consistent catalog");
-    resolve(&fixture.catalog(), &fixture.parsed_recipes(), &profile).expect("resolves")
+    resolve(&fixture.checked(), &profile).expect("resolves")
 }
 
 pub fn on(recipe: &str) -> Status {

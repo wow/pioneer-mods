@@ -4,6 +4,8 @@
 mod common;
 
 use common::write_bytes;
+use patch_cli::catalog::resolve_profile;
+use patch_schema::catalog::Profile;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -66,6 +68,8 @@ fn a_feature_is_on_with_its_recipe_and_limits() {
         "fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json (experimental; feature \
          beat-loop-1-to-32)",
         "tier: experimental",
+        "note: the build is recipes/xdj700-v1.15/beat-loop-1-to-32.json's own output, under its \
+         own label and reported version",
     ] {
         assert!(out.contains(line), "{line}\n{out}");
     }
@@ -138,4 +142,34 @@ fn the_release_rules_for_the_label_and_reported_version_apply() {
         out.contains("; under another label or reported version than its own)"),
         "{out}"
     );
+    assert!(
+        out.contains("note: a build composes these fragments"),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_screen_the_player_lacks_is_listed_apart() {
+    let mut jog = profile(&[], "experimental");
+    jog["screens"] = json!({ "perform": "stock", "jog": "stock" });
+    let out = stdout(&run(&jog, &repo_root()));
+    assert!(
+        out.contains("screen jog: not on xdj700-v1.15; the profile's choice for it is ignored"),
+        "{out}"
+    );
+    assert!(!out.contains("skin stock off"), "{out}");
+}
+
+#[test]
+fn the_library_applies_the_release_rules_before_resolving() {
+    let catalog = patch_cli::catalog::load_catalog(&repo_root()).expect("committed catalog");
+    let mut not_higher = profile(&["beat-loop-16-plays-32"], "experimental");
+    not_higher["label"] = json!("Ver1.15");
+    let not_higher: Profile = serde_json::from_value(not_higher).expect("profile");
+    let error = resolve_profile(&catalog, &not_higher).expect_err("refused");
+    assert!(format!("{error:#}").contains("is not higher"), "{error:#}");
+
+    let fine: Profile = serde_json::from_value(profile(&["beat-loop-16-plays-32"], "experimental"))
+        .expect("profile");
+    assert!(resolve_profile(&catalog, &fine).is_ok());
 }

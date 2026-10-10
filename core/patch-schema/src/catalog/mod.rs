@@ -19,7 +19,7 @@ mod resolve_skins;
 mod screen;
 mod skin;
 
-pub use check::{Catalog, CatalogError};
+pub use check::{Catalog, CatalogError, CheckedCatalog};
 pub use entry::{
     CATALOG_SCHEMA_VERSION, CatalogEntry, EntryError, MAX_ID_LEN, MAX_LABEL_LEN, Maturity, is_id,
     is_name, is_player_id, split_slot_ref,

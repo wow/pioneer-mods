@@ -68,9 +68,10 @@ fn the_profile_maturity_and_unknown_names_switch_items_off() {
         [
             "skin dark-pads is for screen perform",
             "skin missing is not in the catalog",
-            "player p-1.0 has no screen browse",
         ]
     );
+    // A screen the player lacks is listed apart, whatever skin the profile chose for it.
+    assert_eq!(resolution.missing_screens, ["browse"]);
 }
 
 #[test]
@@ -172,12 +173,12 @@ fn only_a_lone_fragment_under_its_own_label_and_version_keeps_its_tier() {
 #[test]
 fn an_invalid_profile_or_an_unknown_player_is_refused() {
     let fixture = Fixture::new();
-    let (catalog, recipes) = (fixture.catalog(), fixture.parsed_recipes());
+    let checked = fixture.checked();
     let mut value = profile(json!([]), json!({}));
     value["player"] = json!("q-1.0");
     let unknown: Profile = serde_json::from_value(value).expect("profile");
     assert_eq!(
-        resolve(&catalog, &recipes, &unknown),
+        resolve(&checked, &unknown),
         Err(ResolveError::UnknownPlayer("q-1.0".to_owned()))
     );
 
@@ -185,7 +186,7 @@ fn an_invalid_profile_or_an_unknown_player_is_refused() {
     value["maturity"] = json!("dev");
     let invalid: Profile = serde_json::from_value(value).expect("profile");
     assert!(matches!(
-        resolve(&catalog, &recipes, &invalid),
+        resolve(&checked, &invalid),
         Err(ResolveError::Profile(_))
     ));
 }

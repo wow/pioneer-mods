@@ -14,10 +14,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   are both off, whatever the skins; then the chosen skins are kept as far as they can be, and of
   those configurations the one with the most features on is taken, each feature with its first
   implementation that fits the skins and each kept skin drawing exactly the labels of the features
-  kept on. The profile's label and reported version pass the release's rules
-  (`xdj700::check_label_and_version`, now public). Needs no firmware; `docs/catalog.md`, "Resolving
-  a profile". `draws_labels` accepts `stock` only for now, and catalog text may not hold control
-  characters.
+  kept on. `resolve` takes a `CheckedCatalog` (`Catalog::into_checked`);
+  `patch_cli::catalog::resolve_profile` applies the release's label and reported-version rules first
+  (`xdj700::check_label_and_version`, now public), and `load_catalog` returns the checked catalog.
+  Needs no firmware; `docs/catalog.md`, "Resolving a profile". `draws_labels` accepts `stock` only
+  for now, and catalog text may not hold control, format or line-separator characters.
 - `patch_schema::catalog` and `catalog/`: the formats of players, screens, features, skins and
   profiles (`docs/catalog.md`), and the committed XDJ-700 v1.15 catalog: the player with its pins,
   budget and capabilities, the `main` and `perform` screens, and the two BEAT LOOP features with

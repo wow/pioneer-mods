@@ -53,7 +53,10 @@ pub enum EntryError {
     #[error("{field} must not be empty")]
     Empty { field: String },
 
-    #[error("{field} holds a control character (a line break, a tab or another)")]
+    #[error(
+        "{field} holds a control, format or line-separator character (a line break, a tab, a \
+         bidirectional override or another)"
+    )]
     Control { field: String },
 
     #[error("{field} lists {value:?} twice")]
@@ -94,6 +97,16 @@ pub enum Maturity {
     Dev,
     Experimental,
     Stable,
+}
+
+impl Maturity {
+    /// What a profile with this setting accepts, in words.
+    pub fn accepted(self) -> &'static str {
+        match self {
+            Maturity::Stable => "stable only",
+            _ => "experimental and stable",
+        }
+    }
 }
 
 impl fmt::Display for Maturity {
@@ -177,17 +190,49 @@ pub(crate) fn check_slot_ref(field: &str, value: &str) -> Result<(), EntryError>
     })
 }
 
-/// Text shown to the owner: not empty, and no control character (a line break in a limit could
-/// pass for another line of a command's report).
+/// Text shown to the owner: not empty, and no control, format or line-separator character (a line
+/// break, or a bidirectional override, could make a limit pass for another line of a command's
+/// report).
 pub(crate) fn check_text(field: &str, value: &str) -> Result<(), EntryError> {
     checked(!value.trim().is_empty(), || EntryError::Empty {
         field: field.to_owned(),
     })?;
-    checked(!value.chars().any(char::is_control), || {
-        EntryError::Control {
-            field: field.to_owned(),
-        }
+    checked(!value.chars().any(is_unprintable), || EntryError::Control {
+        field: field.to_owned(),
     })
+}
+
+/// A control character (category Cc), a format character (Cf, such as the bidirectional
+/// overrides and zero-width characters) or a line or paragraph separator (Zl, Zp).
+fn is_unprintable(c: char) -> bool {
+    const FORMAT: [(u32, u32); 21] = [
+        (0x00AD, 0x00AD),
+        (0x0600, 0x0605),
+        (0x061C, 0x061C),
+        (0x06DD, 0x06DD),
+        (0x070F, 0x070F),
+        (0x0890, 0x0891),
+        (0x08E2, 0x08E2),
+        (0x180E, 0x180E),
+        (0x200B, 0x200F),
+        (0x2028, 0x202E),
+        (0x2060, 0x2064),
+        (0x2066, 0x206F),
+        (0xFEFF, 0xFEFF),
+        (0xFFF9, 0xFFFB),
+        (0x110BD, 0x110BD),
+        (0x110CD, 0x110CD),
+        (0x13430, 0x1343F),
+        (0x1BCA0, 0x1BCA3),
+        (0x1D173, 0x1D17A),
+        (0xE0001, 0xE0001),
+        (0xE0020, 0xE007F),
+    ];
+    let code = u32::from(c);
+    c.is_control()
+        || FORMAT
+            .iter()
+            .any(|&(low, high)| (low..=high).contains(&code))
 }
 
 pub(crate) fn check_sha256(field: &str, value: &str) -> Result<(), EntryError> {

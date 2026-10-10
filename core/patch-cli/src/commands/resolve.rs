@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
-use patch_cli::catalog::{load_catalog, read_profile};
-use patch_core::xdj700::{check_label_and_version, recipe_target};
-use patch_schema::catalog::{Maturity, Status, resolve as resolve_profile};
+use patch_cli::catalog::{load_catalog, read_profile, resolve_profile};
+use patch_schema::catalog::{Resolution, Status};
 use std::path::PathBuf;
 
 #[derive(clap::Args, Debug)]
@@ -19,26 +18,15 @@ pub struct ResolveArgs {
 /// Resolves a profile against the catalog and prints every choice, on or off with its reason, and
 /// the fragments a build composes. Needs no firmware and writes nothing.
 pub fn resolve(args: ResolveArgs) -> Result<()> {
-    let loaded = load_catalog(&args.root)?;
+    let catalog = load_catalog(&args.root)?;
     let profile = read_profile(&args.profile)?;
-    let refusing = || format!("refusing profile '{}'", args.profile.display());
-    let resolution =
-        resolve_profile(&loaded.catalog, &loaded.recipes, &profile).with_context(refusing)?;
-    // The release's rules for the label and reported version, as a build would apply them.
-    let target = recipe_target(&resolution.player).expect("the loader checked every player");
-    check_label_and_version(&profile.label, &profile.reported_version, target)
-        .with_context(refusing)?;
+    let resolution = resolve_profile(&catalog, &profile)
+        .with_context(|| format!("refusing profile '{}'", args.profile.display()))?;
 
     println!("player: {}", resolution.player);
     println!("label: {}", resolution.label);
     println!("reported_version: {}", resolution.reported_version);
-    println!(
-        "accepts: {}",
-        match resolution.maturity {
-            Maturity::Stable => "stable only",
-            _ => "experimental and stable",
-        }
-    );
+    println!("accepts: {}", resolution.maturity.accepted());
     for screen in &resolution.screens {
         let status = describe(&screen.status);
         match screen.status {
@@ -52,6 +40,12 @@ pub fn resolve(args: ResolveArgs) -> Result<()> {
             }
         }
         print_limits(&screen.status);
+    }
+    for screen in &resolution.missing_screens {
+        println!(
+            "screen {screen}: not on {}; the profile's choice for it is ignored",
+            resolution.player
+        );
     }
     for feature in &resolution.features {
         println!("feature {}: {}", feature.feature, describe(&feature.status));
@@ -75,14 +69,24 @@ pub fn resolve(args: ResolveArgs) -> Result<()> {
         None => println!("tier: none; nothing to build"),
         Some(tier) => {
             println!("tier: {tier}");
-            println!(
-                "note: a build composes these fragments under the profile's label and reported \
-                 version; a combination of several is a new update to rehearse both ways in \
-                 emulation before flashing (docs/modular-builds.md)"
-            );
+            println!("{}", note(&resolution));
         }
     }
     Ok(())
+}
+
+/// What a build of `resolution` is: the very file its one recipe pins, or a new update.
+fn note(resolution: &Resolution) -> String {
+    match resolution.fragments.as_slice() {
+        [lone] if lone.as_pinned => format!(
+            "note: the build is {}'s own output, under its own label and reported version",
+            lone.recipe
+        ),
+        _ => "note: a build composes these fragments under the profile's label and reported \
+              version, a new update to rehearse both ways in emulation before flashing \
+              (docs/modular-builds.md)"
+            .to_owned(),
+    }
 }
 
 fn describe(status: &Status) -> String {
