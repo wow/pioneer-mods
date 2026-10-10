@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub mod across;
+pub mod catalog;
 pub mod image;
 pub mod pattern;
 pub mod v2;

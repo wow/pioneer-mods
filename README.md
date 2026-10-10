@@ -62,8 +62,10 @@ This repository currently includes:
 The project is moving towards modular builds: the owner picks a player, a skin for each screen
 (main, PERFORM, and later others) and features, and the tool checks that they fit together and
 builds one verified update. The design, and how the current safety limits will be extended with
-evidence, are in the design draft [docs/modular-builds.md](./docs/modular-builds.md) (a proposal;
-nothing in it is implemented yet).
+evidence, are in the design draft [docs/modular-builds.md](./docs/modular-builds.md). Implemented
+so far: composing recipes into one verified update (`patch-cli compose`), and the catalog of
+players, screens, features and skins with its checks ([docs/catalog.md](./docs/catalog.md)).
+Choosing from the catalog, with a reason for everything switched off, is next.
 
 ## Quick start (developer)
 

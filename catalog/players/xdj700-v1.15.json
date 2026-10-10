@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "xdj700-v1.15",
+  "model": "XDJ-700",
+  "firmware": {
+    "file": "XDJ700.UPD",
+    "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
+    "application_sha256": "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939"
+  },
+  "screen_class": { "width": 800, "height": 480, "pixels": "rgb565" },
+  "budgets": { "compressed_main_growth_bytes": 262144 },
+  "capabilities": {
+    "beat_loop.button_count": {
+      "values": ["6"],
+      "evidence": "The PERFORM screen's six BEAT LOOP buttons (docs/xdj700-flashing.md, stage 5)."
+    },
+    "beat_loop.lengths": {
+      "values": ["1/2", "1", "2", "4", "8", "16", "32"],
+      "evidence": "The stock buttons set 1/2 to 16 beats; the player's length list also holds 32, which a button set on an owner's unit (docs/xdj700-flashing.md, stage 5, 2026-10-09)."
+    }
+  },
+  "screens": ["main", "perform"],
+  "maintainer": "wow"
+}

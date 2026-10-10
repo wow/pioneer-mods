@@ -43,6 +43,11 @@ what needs no firmware, and the maintainer runs the rest before an item is offer
 
 ## Concepts
 
+These concepts are implemented as the catalog's format, [catalog.md](./catalog.md). The sketches
+below are illustrative; the format differs in details: requirements are structured lists, each
+implementation carries its maturity, evidence and known limits, and a skin has one implementation
+per label set.
+
 ### Player (target)
 
 One file per model and firmware release:
@@ -179,7 +184,8 @@ firmware port:
    official file, and the stock no-op stick).
 
 Steps 2 to 4 for recipes are implemented as `patch-cli compose` ([recipes.md](./recipes.md),
-"Composing recipes"); the profile, resolution and skins are not yet.
+"Composing recipes"), and the catalog and profile formats in [catalog.md](./catalog.md);
+resolution and skins are not yet.
 
 A combination of fragments is a new update: its application yields a different compressed stream
 and needs its own test (flashing guide, section 5). So a **listed** combination is rehearsed as a

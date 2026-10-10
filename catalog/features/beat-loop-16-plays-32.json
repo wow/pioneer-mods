@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "beat-loop-16-plays-32",
+  "title": "BEAT LOOP 16 plays 32 beats",
+  "description": "The BEAT LOOP button labelled 16 sets a 32-beat loop; its label still reads 16.",
+  "requires": {
+    "capabilities": { "beat_loop.lengths": ["16", "32"] },
+    "slots": ["perform.beat_loop.pad"]
+  },
+  "conflicts": ["beat-loop-1-to-32"],
+  "implementations": {
+    "xdj700-v1.15": {
+      "recipe": "recipes/xdj700-v1.15/beat-loop-16-plays-32.json",
+      "maturity": "experimental",
+      "evidence": "Passed on an owner's unit, 2026-10-09 (docs/xdj700-flashing.md, stage 5).",
+      "limits": [
+        "While its 32-beat loop plays, no pad lights (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\")."
+      ]
+    }
+  },
+  "maintainer": "wow"
+}
