@@ -7,10 +7,6 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
-- `check_windows_across` accepts a replacement repeated exactly in another recipe (offset, bytes,
-  window and hash; the purpose may differ): it publishes nothing new, so a recipe can build on
-  another's change (the planned BEAT LOOP 1, 2, 4, 8, 16, 32 recipe repeats the stage-5 table
-  entry). Any other overlap is still refused.
 - Image edits in schema-v2 recipes (`image_edits`, `patch_schema::ImageEdit`): changes to a 16-bit
   RGB565 image stored in the decoded application that publish no stock pixel and no hash of one
   (anyone could check a guess at the pixels against it). An edit names the image (offset, width,
@@ -58,15 +54,16 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   window lies over table data, recorded under "Known exceptions" in `docs/recipes.md`.
   `docs/xdj700-flashing.md` adds stage 5 (the experiment) and stage 6 (restore).
 - `patch-cli precondition --input --recipe --committed-recipes [--check]`
-  (`xdj700::precondition_hashes`): prints the precondition hashes of a schema-v2 recipe, typically
-  a draft with placeholder hashes. Before the input is read, the recipe is checked and its windows
-  must be disjoint from those of the other committed recipes (`patch_schema::check_windows_across`,
-  shared with CI; the draft's own file is skipped, and the directory must hold another recipe for
-  the release); each window then passes the leak checks before its hash is computed
-  (`checked_window`, shared with applying a recipe), so no hash of a refused window is ever shown.
-  It writes nothing; `--check` fails unless every declared hash matches. The recipe reader, the
-  version dispatch and the v2 checks are shared with `patch` (`patch_cli::recipe`), and the recipe
-  walk with the tests (`patch_core::recipe_files`, which refuses symbolic links).
+  (`xdj700::precondition_hashes`): prints the precondition hashes of a schema-v2 recipe, typically a
+  draft with placeholder hashes. Before the input is read, the recipe is checked and its windows
+  must be disjoint from those of the other committed recipes, or repeat one of their replacements
+  exactly (`patch_schema::check_windows_across`, shared with CI; the draft's own file is skipped,
+  and the directory must hold another recipe for the release); each window then passes the leak
+  checks before its hash is computed (`checked_window`, shared with applying a recipe), so no hash
+  of a refused window is ever shown. It writes nothing; `--check` fails unless every declared hash
+  matches. The recipe reader, the version dispatch and the v2 checks are shared with `patch`
+  (`patch_cli::recipe`), and the recipe walk with the tests (`patch_core::recipe_files`, which
+  refuses symbolic links).
 - **Recipe schema v2** (`patch_schema::RecipeV2`, `docs/recipes.md`): same-length replacements in
   the decoded application of a pinned release. Each replacement has a precondition: the SHA-256 of
   the stock bytes `before` and `after` the span, with at least 32 bytes outside the span
@@ -258,6 +255,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
+- The cross-recipe window rule is relaxed for one case: `check_windows_across` accepts a
+  replacement repeated exactly in another recipe (offset, bytes, window and hash; the purpose may
+  differ), since it publishes nothing new, so a recipe can build on another's change (the planned
+  BEAT LOOP 1, 2, 4, 8, 16, 32 recipe repeats the stage-5 table entry). Any other overlap is still
+  refused, and the refusal names the exact-repeat alternative. `precondition --committed-recipes`
+  skips committed recipes with the draft's `recipe_id`, so a copy of the draft is not "another
+  recipe"; CI refuses two committed recipes with one `recipe_id`.
 - `docs/xdj700-flashing.md` section 5 carries the findings of a local emulation of the board
   (not part of this repository; not hardware) and becomes the authoritative statement of the
   rules for modifications, which `docs/recipes.md` and the `RECIPE_TARGETS` doc comment now

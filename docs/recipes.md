@@ -129,8 +129,9 @@ paste stock bytes into an issue or a commit, only their hash.
 
    Before it computes any hash, the command runs the recipe's own checks (release pins, version
    order, bounds, protected ranges), checks that its windows are disjoint from those of the other
-   committed recipes (the draft's own file is skipped, and the directory must hold another recipe
-   for the release), and then rebuilds the draft, running each window's leak checks before it
+   committed recipes or repeat one of their replacements exactly (the draft's own file, and any
+   recipe with its `recipe_id`, are skipped, and the directory must hold another recipe for the
+   release), and then rebuilds the draft, running each window's leak checks before it
    hashes the window. So it never prints the hash of a window those rules refuse, prints nothing
    unless the whole rebuild succeeds, and writes nothing. For each replacement it prints the
    window and its SHA-256, for each [image edit](#image-edits) the image (with no hash), and the
@@ -322,9 +323,10 @@ XDJ700_PROTECTED_SET=/path/to/xdj700-v1.15-protected-set.tsv \
 ## The committed recipes
 
 `recipes/<release>/` holds the project's recipes. CI checks that each one passes every check
-that needs no firmware and pins its output identities, and that their precondition windows are
-disjoint. The owner-input tests apply every one of them to the official file (which runs the
-window rules) and check those identities.
+that needs no firmware and pins its output identities, that their `recipe_id`s are distinct, and
+that their precondition windows are disjoint, except where one recipe repeats another's
+replacement exactly. The owner-input tests apply every one of them to the official file (which
+runs the window rules) and check those identities.
 
 | Recipe | What it does | Output |
 | --- | --- | --- |

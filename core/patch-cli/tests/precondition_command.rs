@@ -211,6 +211,20 @@ fn refuses_a_committed_directory_without_another_recipe_for_the_release() {
         "{stderr}"
     );
     assert!(result.stdout.is_empty());
+
+    // A directory holding only a copy of the draft (another file, the same recipe_id): the copy
+    // repeats every replacement exactly, but it is not another recipe.
+    let only_copy = tempfile::tempdir().expect("tempdir");
+    write_bytes(
+        &only_copy.path().join("copy.json"),
+        &serde_json::to_vec(&committed_recipe()).expect("serialize"),
+    );
+    assert_refused_with(
+        &committed_recipe(),
+        None,
+        only_copy.path(),
+        "it holds no other recipe for release xdj700-v1.15",
+    );
 }
 
 #[cfg(unix)]

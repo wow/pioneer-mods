@@ -38,6 +38,18 @@ fn every_committed_recipe_passes_the_firmware_free_checks() {
 }
 
 #[test]
+fn committed_recipe_ids_are_distinct() {
+    let recipes = committed_recipes();
+    let mut ids: Vec<&str> = recipes.iter().map(|(_, r)| r.recipe_id.as_str()).collect();
+    ids.sort_unstable();
+    let before = ids.len();
+    ids.dedup();
+
+    // `precondition` skips committed recipes with the draft's id, so ids must name one recipe.
+    assert_eq!(ids.len(), before, "two committed recipes share a recipe_id");
+}
+
+#[test]
 fn committed_precondition_windows_are_disjoint_across_recipes() {
     let recipes = committed_recipes();
 

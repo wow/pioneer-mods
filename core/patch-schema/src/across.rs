@@ -20,7 +20,8 @@ use thiserror::Error;
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error(
     "{first} and {second}: windows {first_window:#x?} and {second_window:#x?} overlap; windows of \
-     recipes for the same release must be disjoint"
+     recipes for the same release must be disjoint, unless one recipe repeats another's \
+     replacement exactly (offset, bytes_hex, before, after and hash)"
 )]
 pub struct WindowOverlap {
     /// `recipe_id replacements[index]` or `recipe_id image_edits[index]` of the window that starts

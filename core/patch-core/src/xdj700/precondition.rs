@@ -10,7 +10,8 @@
 //!
 //! These are heuristic guards against accidental leaks, not a proof: windows belong over code, not
 //! over strings or tables, and review is the backstop. They hold for one recipe; the windows of
-//! all committed recipes are checked to be disjoint by the `committed_recipes` test.
+//! all committed recipes are checked to be disjoint, unless a recipe repeats another's
+//! replacement exactly, by the `committed_recipes` test.
 //!
 //! [`precondition_hashes`] helps an author complete a draft recipe: it rebuilds the draft, hashing
 //! each window only after these checks, so it never shows the hash of a window the engine would
