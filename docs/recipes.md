@@ -379,12 +379,12 @@ cargo run --release -p patch-cli -- compose \
   --no-protected-set
 ```
 
-Before the input is read, every recipe passes its own checks (and the protected set), the label
-and reported version pass the recipe rules, precondition windows are disjoint across the recipes
-except for exact repeats, and edited images are disjoint unless they are the same edit. Then:
+Before the input is read, every recipe passes its own checks (and the protected set) and pins its
+output (`expected.application_sha256`), the label and reported version pass the recipe rules,
+precondition windows are disjoint across the recipes except for exact repeats, and edited images
+are disjoint unless they are the same edit. Then:
 
-1. Each recipe must pin its output (`expected.application_sha256`), and is applied alone and must
-   reproduce it.
+1. Each recipe is applied alone and must reproduce its pinned output.
 2. Every distinct replacement and image edit is rebuilt at once (a repeat or a same edit once),
    with every window checked on stock again.
 3. The composed application must equal, at every byte a recipe changes, that recipe's own output,

@@ -11,12 +11,22 @@ use std::process::{Command, Output};
 /// Runs `compose` with `recipes` and `extra`, writing to a fresh output path in `dir`. The input
 /// path does not exist: each refusal here must come before the input is read.
 fn run_compose(dir: &Path, recipes: &[PathBuf], extra: &[&str]) -> Output {
+    run_compose_as(dir, recipes, ["Ver1.16", "0.12"], extra)
+}
+
+/// [`run_compose`] under `label` and `reported_version`.
+fn run_compose_as(
+    dir: &Path,
+    recipes: &[PathBuf],
+    [label, reported_version]: [&str; 2],
+    extra: &[&str],
+) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_patch-cli"));
     command
         .arg("compose")
         .arg("--input")
         .arg(dir.join("missing.UPD"))
-        .args(["--label", "Ver1.16", "--report-version", "0.12"])
+        .args(["--label", label, "--report-version", reported_version])
         .arg("--output")
         .arg(dir.join("out.UPD"))
         .env_remove("XDJ700_PROTECTED_SET")
@@ -39,6 +49,21 @@ fn assert_refused(output: &Output, dir: &Path, message: &str) {
 
 fn committed(name: &str) -> PathBuf {
     recipes_dir().join("xdj700-v1.15").join(name)
+}
+
+/// The committed recipe `name`, changed by `change` and written to `file` in `dir`.
+fn changed(
+    dir: &Path,
+    name: &str,
+    file: &str,
+    change: impl FnOnce(&mut serde_json::Value),
+) -> PathBuf {
+    let raw = std::fs::read(committed(name)).expect("read committed recipe");
+    let mut recipe: serde_json::Value = serde_json::from_slice(&raw).expect("json");
+    change(&mut recipe);
+    let path = dir.join(file);
+    write_bytes(&path, &serde_json::to_vec(&recipe).expect("json"));
+    path
 }
 
 #[test]
@@ -69,7 +94,86 @@ fn refuses_an_invalid_recipe_before_reading_the_input() {
     );
 
     assert_refused(&result, dir.path(), "refusing to compose recipes");
+    // The refusal names the recipe.
+    assert!(
+        stderr(&result).contains("invalid.json"),
+        "{}",
+        stderr(&result)
+    );
     assert!(stderr(&result).contains("Ver1.15"), "{}", stderr(&result));
+}
+
+#[test]
+fn refuses_overlapping_recipes_before_reading_the_input() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // Stage 5's replacement one byte further on: its window overlaps, but it is not a repeat.
+    let shifted = changed(
+        dir.path(),
+        "beat-loop-16-plays-32.json",
+        "shifted.json",
+        |recipe| {
+            recipe["recipe_id"] = json!("shifted");
+            let offset = recipe["replacements"][0]["offset"]
+                .as_u64()
+                .expect("offset");
+            recipe["replacements"][0]["offset"] = json!(offset + 1);
+        },
+    );
+
+    let result = run_compose(
+        dir.path(),
+        &[committed("beat-loop-16-plays-32.json"), shifted],
+        &["--no-protected-set"],
+    );
+
+    assert_refused(&result, dir.path(), "overlap");
+}
+
+#[test]
+fn refuses_an_unpinned_recipe_before_reading_the_input() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let unpinned = changed(
+        dir.path(),
+        "version-marker-0.10.json",
+        "unpinned.json",
+        |recipe| {
+            recipe.as_object_mut().expect("object").remove("expected");
+        },
+    );
+
+    let result = run_compose(
+        dir.path(),
+        &[unpinned, committed("beat-loop-16-plays-32.json")],
+        &["--no-protected-set"],
+    );
+
+    assert_refused(&result, dir.path(), "must pin expected.application_sha256");
+}
+
+#[test]
+fn refuses_an_invalid_label_or_version_before_reading_the_input() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let recipes = [
+        committed("version-marker-0.10.json"),
+        committed("beat-loop-16-plays-32.json"),
+    ];
+
+    for ([label, version], message) in [
+        (
+            ["Ver1.15", "0.12"],
+            "is not higher than the release's own version",
+        ),
+        (["Ver1.16", "1.15"], "is not lower than the official"),
+    ] {
+        let result = run_compose_as(
+            dir.path(),
+            &recipes,
+            [label, version],
+            &["--no-protected-set"],
+        );
+
+        assert_refused(&result, dir.path(), message);
+    }
 }
 
 #[test]

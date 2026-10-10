@@ -4,7 +4,9 @@ use patch_cli::recipe::{
     CheckedRecipe, PROTECTED_SET_ENV, ProtectedSetSource, protected_set_line, read_recipe_versioned,
 };
 use patch_core::firmware_file_name;
-use patch_core::xdj700::{ComposeError, Composition, RecipeChecks, compose_recipes_to};
+use patch_core::xdj700::{
+    ComposeError, Composition, RecipeChecks, check_composition, compose_recipes_to,
+};
 use patch_schema::{RecipeV2, SCHEMA_VERSION_V2};
 use std::path::PathBuf;
 
@@ -60,7 +62,9 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
                 path.display()
             );
         }
-        checked.push(CheckedRecipe::load(path, &raw, refusing.clone())?);
+        // Each recipe's refusals name it.
+        let context = format!("{refusing}: recipe '{}'", path.display());
+        checked.push(CheckedRecipe::load(path, &raw, context)?);
     }
     let target = checked[0].target();
     if let Some(other) = checked.iter().find(|c| c.target().id != target.id) {
@@ -79,9 +83,6 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
     for recipe in &checked {
         protected_set = recipe.check_protected_set(&source)?;
     }
-    ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;
-    let input = checked[0].read_input(&args.input, "compose")?;
-
     let fragments: Vec<RecipeV2> = checked.iter().map(|c| c.recipe().clone()).collect();
     let composition = Composition {
         label: &args.label,
@@ -90,15 +91,19 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
     let checks = RecipeChecks {
         protected_set: protected_set.as_ref(),
     };
+    let refuse = |error: ComposeError| match error {
+        ComposeError::Fragment { index, source, .. } => {
+            checked[index].refusal(&args.input, "compose", source)
+        }
+        other => anyhow::Error::new(other).context(refusing.clone()),
+    };
+    // The label and version, the pins, and the windows and images across the recipes.
+    check_composition(&fragments, target, composition, checks).map_err(refuse)?;
+    ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;
+    let input = checked[0].read_input(&args.input, "compose")?;
+
     let composed =
-        compose_recipes_to(&fragments, target, composition, &input, checks).map_err(|error| {
-            match error {
-                ComposeError::Fragment { index, source, .. } => {
-                    checked[index].refusal(&args.input, "compose", source)
-                }
-                other => anyhow::Error::new(other).context(refusing.clone()),
-            }
-        })?;
+        compose_recipes_to(&fragments, target, composition, &input, checks).map_err(refuse)?;
     let rebuilt = &composed.rebuilt;
     write_output_atomically(&args.output, rebuilt.bytes(), Overwrite::Never)?;
 
@@ -106,9 +111,20 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
     println!("input_file: {}", firmware_file_name(&args.input));
     println!("input_sha256_hex: {}", target.release.upd_sha256);
     for (index, (recipe, alone)) in fragments.iter().zip(&composed.fragments).enumerate() {
+        let update_pinned = recipe
+            .expected
+            .as_ref()
+            .is_some_and(|e| e.upd_sha256.is_some());
         println!(
-            "recipe[{index}]: {} (alone: application {}, update {}, as pinned)",
-            recipe.recipe_id, alone.application_sha256, alone.upd_sha256
+            "recipe[{index}]: {} (alone: application {}, as pinned; update {}, {})",
+            recipe.recipe_id,
+            alone.application_sha256,
+            alone.upd_sha256,
+            if update_pinned {
+                "as pinned"
+            } else {
+                "not pinned"
+            }
         );
     }
     println!(

@@ -8,8 +8,8 @@ use common::recipe::{Fixture, replacement, stock_application};
 use patch_core::parse_upd;
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, ComposeError, ComposedUpdate, Composition, RecipeChecks,
-    RecipeError, VERSION_STRING_OFFSET, compose_recipes_to, decode_section, main_document,
-    precondition_hashes,
+    RecipeError, VERSION_STRING_OFFSET, check_composed, compose_recipes_to, decode_section,
+    main_document, precondition_hashes,
 };
 use patch_schema::{ExpectedV2, Glyph, ImageEdit, Pixel, PixelBox, RecipeV2};
 
@@ -258,5 +258,60 @@ fn the_composition_follows_the_label_and_version_rules() {
     assert_eq!(
         compose(&fixture, &[]).map(|_| ()),
         Err(ComposeError::NoFragments)
+    );
+}
+
+/// [`check_composed`] on an 8-byte zero "stock" whose last two bytes are the version string.
+fn check(outputs: &[(&str, &[u8])], composed: &[u8]) -> Result<(), ComposeError> {
+    check_composed(&[0; 8], outputs, composed, 6..8)
+}
+
+#[test]
+fn the_composed_application_must_equal_each_output_and_stock_elsewhere() {
+    let a = [0, 1, 0, 0, 0, 0, 0, 0];
+    let b = [0, 0, 0, 2, 0, 0, 0, 0];
+    let outputs = [("a", &a[..]), ("b", &b[..])];
+    let both = [0, 1, 0, 2, 0, 0, 0, 0];
+    let mismatch = |offset, expected: &str| {
+        Err(ComposeError::Mismatch {
+            offset,
+            expected: expected.to_owned(),
+        })
+    };
+
+    assert_eq!(check(&outputs, &both), Ok(()));
+    // The version string is the composition's own.
+    assert_eq!(check(&outputs, &[0, 1, 0, 2, 0, 0, 9, 9]), Ok(()));
+    // An exact repeat changes a byte the same way twice.
+    assert_eq!(check(&[("a", &a), ("again", &a)], &a), Ok(()));
+    // A byte b changes, missing or written otherwise.
+    assert_eq!(check(&outputs, &a), mismatch(3, "b's output"));
+    assert_eq!(
+        check(&outputs, &[0, 1, 0, 5, 0, 0, 0, 0]),
+        mismatch(3, "b's output")
+    );
+    // A byte no recipe changes.
+    assert_eq!(
+        check(&outputs, &[0, 1, 0, 2, 7, 0, 0, 0]),
+        mismatch(4, "stock")
+    );
+    assert_eq!(
+        check(&outputs, &both[..4]),
+        mismatch(4, "stock (the application's length)")
+    );
+}
+
+#[test]
+fn recipes_that_change_one_byte_differently_disagree() {
+    let a = [0, 1, 0, 0, 0, 0, 0, 0];
+    let other = [0, 3, 0, 0, 0, 0, 0, 0];
+
+    assert_eq!(
+        check(&[("a", &a), ("other", &other)], &a),
+        Err(ComposeError::Disagree {
+            offset: 1,
+            first: "a".to_owned(),
+            second: "other".to_owned(),
+        })
     );
 }

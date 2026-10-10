@@ -1,11 +1,11 @@
 //! Composes several schema-v2 recipes ("fragments") into one rebuild, with one label and one
 //! reported version (`docs/modular-builds.md`, "Building a profile").
 //!
-//! Before anything is rebuilt, each fragment passes [`check_recipe_v2`] and the caller's checks
-//! and pins its output application; the composition's label and reported version pass the same
-//! rules as a recipe's; precondition windows are disjoint across fragments except for exact
-//! repeats ([`check_windows_across`]), and edited images are disjoint unless they are the same
-//! edit. Then:
+//! Before the input is used ([`check_composition`], which needs no firmware), each fragment passes
+//! [`check_recipe_v2`] and the caller's checks and pins its output application; the composition's
+//! label and reported version pass the same rules as a recipe's; precondition windows are disjoint
+//! across fragments except for exact repeats ([`check_windows_across`]), and edited images are
+//! disjoint unless they are the same edit. Then:
 //!
 //! 1. each fragment is applied alone to the official update and must reproduce its own pinned
 //!    output ([`apply_recipe_v2_to`]);
@@ -68,7 +68,7 @@ pub fn compose_recipes(
 }
 
 /// Composes `fragments` for an explicit `target` (tests pass synthetic targets), in the order the
-/// module docs describe.
+/// module docs describe: first every [`check_composition`] check, then the input.
 ///
 /// # Errors
 ///
@@ -81,6 +81,69 @@ pub fn compose_recipes_to(
     input: &[u8],
     checks: RecipeChecks<'_>,
 ) -> Result<ComposedUpdate, ComposeError> {
+    let composed = composed_and_checked(fragments, target, composition, checks)?;
+    let mut identities = Vec::with_capacity(fragments.len());
+    let mut outputs = Vec::with_capacity(fragments.len());
+    for (index, fragment) in fragments.iter().enumerate() {
+        let rebuilt = apply_recipe_v2_to(fragment, target, input, checks)
+            .map_err(|source| fragment_error(index, fragment, source))?;
+        identities.push(OutputIdentities::of(&rebuilt));
+        outputs.push(decoded_application(rebuilt.bytes())?);
+    }
+    // Every part was checked within its fragment, and the parts are disjoint across fragments
+    // (exact repeats and same edits kept once), so the composed recipe holds the invariants
+    // `rebuild_recipe` relies on.
+    let (rebuilt, _) = rebuild_recipe(&composed, target, input, DeclaredHash::Compare)
+        .map_err(ComposeError::Composition)?;
+    let version = target
+        .release
+        .version_block
+        .expect("check_recipe_v2 requires a version block")
+        .text_range();
+    let named: Vec<(&str, &[u8])> = fragments
+        .iter()
+        .zip(&outputs)
+        .map(|(fragment, output)| (fragment.recipe_id.as_str(), output.as_slice()))
+        .collect();
+    check_composed(
+        &decoded_application(input)?,
+        &named,
+        &decoded_application(rebuilt.bytes())?,
+        version,
+    )?;
+    Ok(ComposedUpdate {
+        rebuilt,
+        fragments: identities,
+    })
+}
+
+/// The checks of a composition that need no firmware, so that a caller can run them before it
+/// reads the input: each fragment passes [`check_recipe_v2`] and `checks` and pins its output
+/// application; precondition windows are disjoint across fragments except for exact repeats
+/// ([`check_windows_across`]); edited images are disjoint unless they are the same edit; and the
+/// composition's label and reported version pass the same rules as a recipe's.
+/// [`compose_recipes_to`] runs them again first.
+///
+/// # Errors
+///
+/// [`ComposeError::NoFragments`], [`ComposeError::Fragment`], [`ComposeError::Unpinned`],
+/// [`ComposeError::Overlap`], [`ComposeError::ImageOverlap`] or [`ComposeError::Composition`].
+pub fn check_composition(
+    fragments: &[RecipeV2],
+    target: &RecipeTarget<'_>,
+    composition: Composition<'_>,
+    checks: RecipeChecks<'_>,
+) -> Result<(), ComposeError> {
+    composed_and_checked(fragments, target, composition, checks).map(|_| ())
+}
+
+/// The [`check_composition`] checks, then the composed recipe.
+fn composed_and_checked(
+    fragments: &[RecipeV2],
+    target: &RecipeTarget<'_>,
+    composition: Composition<'_>,
+    checks: RecipeChecks<'_>,
+) -> Result<RecipeV2, ComposeError> {
     let first = fragments.first().ok_or(ComposeError::NoFragments)?;
     for (index, fragment) in fragments.iter().enumerate() {
         let refused = |source| fragment_error(index, fragment, source);
@@ -105,36 +168,7 @@ pub fn compose_recipes_to(
         ..composed.clone()
     };
     check_recipe_v2(&header, target).map_err(ComposeError::Composition)?;
-
-    let mut identities = Vec::with_capacity(fragments.len());
-    let mut outputs = Vec::with_capacity(fragments.len());
-    for (index, fragment) in fragments.iter().enumerate() {
-        let rebuilt = apply_recipe_v2_to(fragment, target, input, checks)
-            .map_err(|source| fragment_error(index, fragment, source))?;
-        identities.push(OutputIdentities::of(&rebuilt));
-        outputs.push(decoded_application(rebuilt.bytes())?);
-    }
-    // Every part was checked within its fragment, and the parts are disjoint across fragments
-    // (exact repeats and same edits kept once), so the composed recipe holds the invariants
-    // `rebuild_recipe` relies on.
-    let (rebuilt, _) = rebuild_recipe(&composed, target, input, DeclaredHash::Compare)
-        .map_err(ComposeError::Composition)?;
-    let version = target
-        .release
-        .version_block
-        .expect("check_recipe_v2 requires a version block")
-        .text_range();
-    check_composed(
-        &decoded_application(input)?,
-        &outputs,
-        &decoded_application(rebuilt.bytes())?,
-        version,
-        fragments,
-    )?;
-    Ok(ComposedUpdate {
-        rebuilt,
-        fragments: identities,
-    })
+    Ok(composed)
 }
 
 fn fragment_error(index: usize, fragment: &RecipeV2, source: super::RecipeError) -> ComposeError {
@@ -217,18 +251,24 @@ fn decoded_application(bytes: &[u8]) -> Result<Vec<u8>, ComposeError> {
     Ok(decode_section(image.bytes(), APPLICATION_SECTION_OFFSET)?.into_decoded())
 }
 
-/// Checks that `composed` equals, at every byte a fragment changes, that fragment's own output,
-/// and `stock` everywhere else, outside `version`.
-fn check_composed(
+/// Checks that the decoded application `composed` equals, at every byte a fragment changes, that
+/// fragment's own decoded output, and `stock` everywhere else, outside `version` (the version
+/// string, which the composition sets). `outputs` pairs each fragment's name with its output.
+///
+/// # Errors
+///
+/// [`ComposeError::Disagree`] when two outputs change one byte differently, or
+/// [`ComposeError::Mismatch`] at the first byte (or length) `composed` gets wrong.
+pub fn check_composed(
     stock: &[u8],
-    outputs: &[Vec<u8>],
+    outputs: &[(&str, &[u8])],
     composed: &[u8],
     version: Range<usize>,
-    fragments: &[RecipeV2],
 ) -> Result<(), ComposeError> {
-    if composed.len() != stock.len() {
+    let lengths = std::iter::once(composed.len()).chain(outputs.iter().map(|(_, o)| o.len()));
+    if let Some(length) = lengths.filter(|&length| length != stock.len()).min() {
         return Err(ComposeError::Mismatch {
-            offset: composed.len().min(stock.len()),
+            offset: length.min(stock.len()),
             expected: "stock (the application's length)".to_owned(),
         });
     }
@@ -236,30 +276,30 @@ fn check_composed(
         if version.contains(&offset) {
             continue;
         }
-        let mut changed_by: Option<usize> = None;
-        for (index, output) in outputs.iter().enumerate() {
-            if output[offset] == stock_byte {
+        let mut changed_by: Option<(&str, u8)> = None;
+        for &(name, output) in outputs {
+            let byte = output[offset];
+            if byte == stock_byte {
                 continue;
             }
             match changed_by {
-                Some(first) if outputs[first][offset] != output[offset] => {
+                Some((first, first_byte)) if first_byte != byte => {
                     return Err(ComposeError::Disagree {
                         offset,
-                        first: fragments[first].recipe_id.clone(),
-                        second: fragments[index].recipe_id.clone(),
+                        first: first.to_owned(),
+                        second: name.to_owned(),
                     });
                 }
                 Some(_) => {}
-                None => changed_by = Some(index),
+                None => changed_by = Some((name, byte)),
             }
         }
-        let expected = changed_by.map_or(stock_byte, |index| outputs[index][offset]);
+        let expected = changed_by.map_or(stock_byte, |(_, byte)| byte);
         if composed_byte != expected {
             return Err(ComposeError::Mismatch {
                 offset,
-                expected: changed_by.map_or("stock".to_owned(), |index| {
-                    format!("{}'s output", fragments[index].recipe_id)
-                }),
+                expected: changed_by
+                    .map_or("stock".to_owned(), |(name, _)| format!("{name}'s output")),
             });
         }
     }
