@@ -12,14 +12,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   32 beats instead of 1/2, 1, 2, 4, 8 and 16, reporting `0.12`. One span with kept bytes (`--`)
   changes the first byte of the button table's first five entries, the sixth repeats the stage-5
   replacement exactly, and 36 image edits relabel each button's six images with the project's own
-  digits. In emulation neither the table nor the images were read at start-up, in update mode or
-  while installing in either direction, the pads read 1, 2, 4, 8, 16, 32 and selected those
-  lengths, and the four rehearsals passed. The owner-input tests pin the stage-7 file
-  (`259c75da…`), check that its application differs from stock only in the version string, the
-  six table bytes and the 36 label boxes, and run the guide's `patch` command for stages 5 and 7.
-  The window over the 3,000 bytes before the table is recorded under "Known exceptions" in
-  `docs/recipes.md`. `docs/xdj700-flashing.md` adds stage 7 (the experiment) and stage 8
-  (restore).
+  digits. In emulation no code read the table or the images at start-up, in update mode or while
+  installing in either direction, the pads read 1, 2, 4, 8, 16, 32 and selected those lengths, and
+  the four rehearsals passed. The owner-input tests pin the stage-7 file (`259c75da…`), check that
+  its application differs from stock only in the version string, the six table bytes and the 36
+  label boxes, and run the guide's `patch` command for stages 5 and 7. The window over the 3,000
+  bytes before the table is recorded under "Known exceptions" in `docs/recipes.md`.
+  `docs/xdj700-flashing.md` adds stage 7 (the experiment) and stage 8 (restore).
 - Kept bytes in schema-v2 replacements: `--` in `bytes_hex` keeps the stock byte at that place
   and does not publish it (`Replacement::pattern`, `Replacement::written_runs`), so changes a few
   bytes apart, such as the fields of one table, fit one span without publishing the stock bytes
