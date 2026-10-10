@@ -53,6 +53,13 @@ This repository currently includes:
   the recipe, committed-recipe and leak checks, so authors never compute a hash themselves and
   never see one for a window those rules refuse
 
+## Where this is going
+
+The project is moving towards modular builds: the owner picks a player, a skin for each screen
+(main, PERFORM, and later others) and features, and the tool checks that they fit together and
+builds one verified update. The design, and how the current safety limits will be extended with
+evidence, are in [docs/modular-builds.md](./docs/modular-builds.md).
+
 ## Quick start (developer)
 
 ```bash

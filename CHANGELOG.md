@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `docs/modular-builds.md`: the design for modular builds (a proposal, nothing implemented yet).
+  An owner picks a player, a skin per screen and features. Players, screens with named slots,
+  features with requires/conflicts/provides, per-screen skins with fallbacks, and the owner's
+  profile are data, composed into one verified rebuild. It defines verification by maturity tier
+  (emulator acceptance tests, rehearsals, hardware stages), the evidence gates for extending
+  today's limits (data read at start-up, the 256 KiB growth bound, code changes), rules for
+  community content, and a roadmap with the XDJ-1000MK2 v1.45 as the second player. The README
+  links it.
 - `recipes/xdj700-v1.15/beat-loop-1-to-32.json`, **experimental; rehearsed in emulation, not yet
   tested on hardware:** the PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and
   32 beats instead of 1/2, 1, 2, 4, 8 and 16, reporting `0.12`. One span with kept bytes (`--`)
