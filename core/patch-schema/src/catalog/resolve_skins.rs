@@ -3,7 +3,7 @@
 //! each), and the reasons for what it leaves off.
 
 use super::feature::FeatureImplementation;
-use super::resolve::{Skins, State, labelled_screens};
+use super::resolve::{Skins, State, labelled_screens, subsets};
 use super::skin::SkinImplementation;
 use std::collections::BTreeMap;
 
@@ -92,10 +92,18 @@ impl<'a> State<'a> {
             .filter(|id| !drawn.contains(id))
             .collect();
         for id in undrawn {
-            let (screen, _) = kept
+            // The kept screens that leave it out; the reason names one whose skin cannot draw it at
+            // all, when there is one, since that holds whichever implementation were chosen.
+            let leaving: Vec<&'a str> = kept
                 .iter()
                 .zip(&choice)
-                .find(|(screen, implementation)| !self.draws(implementation, id, screen))
+                .filter(|(screen, implementation)| !self.draws(implementation, id, screen))
+                .map(|(screen, _)| *screen)
+                .collect();
+            let screen = leaving
+                .iter()
+                .find(|screen| !self.drawable(id, screen))
+                .or(leaving.first())
                 .expect("a kept skin leaves it out");
             picks.remove(id);
             unfit.insert(id, self.undrawn(id, screen));
@@ -128,14 +136,18 @@ impl<'a> State<'a> {
             .collect()
     }
 
+    /// Whether some accepted implementation of the skin chosen on `screen` draws the labels
+    /// feature `id` gives there.
+    fn drawable(&self, id: &str, screen: &str) -> bool {
+        self.skin_implementations(screen)
+            .iter()
+            .any(|implementation| self.draws(implementation, id, screen))
+    }
+
     /// Why feature `id` is off when the skin kept on `screen` does not draw its labels.
     fn undrawn(&self, id: &str, screen: &str) -> String {
         let skin = self.chosen[screen];
-        let drawable = self
-            .skin_implementations(screen)
-            .iter()
-            .any(|implementation| self.draws(implementation, id, screen));
-        let what = if drawable {
+        let what = if self.drawable(id, screen) {
             "does not draw its labels in the implementation that keeps the most of the chosen \
              features"
                 .to_owned()
@@ -160,18 +172,37 @@ impl<'a> State<'a> {
         format!("skin {skin} on {screen} {what}{hint}")
     }
 
-    /// Why the skin chosen on `screen` is off when the skins on `kept` are kept.
-    pub(super) fn dropped(&self, screen: &'a str, kept: &[&'a str]) -> String {
+    /// Why the skin chosen on `screen` is off when `best`, found among the sets of `size` of the
+    /// `candidates`, is kept: the rule that decided, when the skin could be kept alone.
+    pub(super) fn dropped(
+        &self,
+        screen: &'a str,
+        best: &Configuration<'a>,
+        candidates: &[&'a str],
+        size: usize,
+    ) -> String {
         let skin = self.chosen[screen];
         if self.configuration(&[screen]).is_some() {
-            let others: Vec<String> = kept
+            let kept: Vec<String> = best
+                .kept
                 .iter()
                 .map(|s| format!("skin {} on {s}", self.chosen[s]))
                 .collect();
+            // The best configuration of the same size that keeps this skin, if any works.
+            let with = subsets(candidates, size)
+                .into_iter()
+                .filter(|set| set.contains(&screen))
+                .filter_map(|set| self.configuration(&set))
+                .map(|configuration| configuration.on())
+                .max();
+            let why = match with {
+                None => "keeps more of the chosen skins",
+                Some(on) if on < best.on() => "keeps more of the chosen features",
+                Some(_) => "keeps as many of the chosen features and comes first in screen order",
+            };
             return format!(
-                "the chosen skins cannot all be kept; keeping {} keeps more of the chosen \
-                 features",
-                others.join(" and ")
+                "the chosen skins cannot all be kept; keeping {} {why}",
+                kept.join(" and ")
             );
         }
         let alone: Skins<'a> = [(screen, skin)].into();

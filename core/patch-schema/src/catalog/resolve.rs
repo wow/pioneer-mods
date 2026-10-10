@@ -17,9 +17,9 @@
 //!    - each kept skin's implementation draws exactly the labels of the features kept on, and a
 //!      feature whose labels it does not draw is off.
 //!
-//! Keeping no skin is always a configuration, so there is always a result, whatever the order
-//! of screens or files. The search is small for real catalogs; one that would need more than
-//! [`MAX_CONFIGURATIONS`] is refused rather than searched slowly.
+//! Keeping no skin is always a configuration, so there is always a result; apart from ties, what is
+//! on does not depend on the order of screens or files. The search is small for real catalogs; one
+//! that would need more than [`MAX_CONFIGURATIONS`] is refused rather than searched slowly.
 
 use super::check::Catalog;
 use super::entry::Maturity;
@@ -225,7 +225,7 @@ impl<'a> State<'a> {
                 .reduce(|best, next| if next.on() > best.on() { next } else { best });
             if let Some(best) = best {
                 for screen in candidates.iter().filter(|s| !best.kept.contains(s)) {
-                    let reason = self.dropped(screen, &best.kept);
+                    let reason = self.dropped(screen, &best, &candidates, size);
                     self.skins_off.insert(screen, reason);
                 }
                 self.picks = best.picks;
@@ -303,7 +303,7 @@ pub(super) fn labelled_screens(feature: &Feature) -> impl Iterator<Item = &str> 
 }
 
 /// Every subset of `items` with `size` of them, in order.
-fn subsets<T: Copy>(items: &[T], size: usize) -> Vec<Vec<T>> {
+pub(super) fn subsets<T: Copy>(items: &[T], size: usize) -> Vec<Vec<T>> {
     if size == 0 {
         return vec![Vec::new()];
     }

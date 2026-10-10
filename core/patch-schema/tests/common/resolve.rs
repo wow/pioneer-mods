@@ -82,3 +82,59 @@ pub fn with_second_feature() -> Fixture {
         .insert("recipes/p/second.json".to_owned(), super::recipe("p-1.0"));
     fixture
 }
+
+/// A feature on `slots` with `labels`, one implementation per `draws` map, each its own recipe.
+pub fn feature_on(fixture: &mut Fixture, id: &str, labels: Value, draws: &[Value]) {
+    let mut feature = fixture.features[0].clone();
+    feature["id"] = json!(id);
+    feature["conflicts"] = json!([]);
+    let slots: Vec<&String> = labels.as_object().expect("labels").keys().collect();
+    feature["requires"]["slots"] = json!(slots);
+    feature["labels"] = labels;
+    let implementations: Vec<Value> = draws
+        .iter()
+        .enumerate()
+        .map(|(index, draws)| {
+            let recipe = format!("recipes/p/{id}-{index}.json");
+            fixture
+                .recipes
+                .insert(recipe.clone(), super::recipe("p-1.0"));
+            let mut implementation = super::implementation(&recipe);
+            implementation["draws_labels"] = draws.clone();
+            implementation
+        })
+        .collect();
+    feature["implementations"]["p-1.0"] = json!(implementations);
+    fixture.features.push(feature);
+}
+
+/// A skin `id` on `screen` requiring `slots`, with one implementation per label set.
+pub fn skin_on(fixture: &mut Fixture, id: &str, screen: &str, slots: Value, label_sets: &[Value]) {
+    let implementations: Vec<Value> = label_sets
+        .iter()
+        .enumerate()
+        .map(|(index, labels)| {
+            let recipe = format!("recipes/p/{id}-{index}.json");
+            fixture
+                .recipes
+                .insert(recipe.clone(), super::recipe("p-1.0"));
+            let mut implementation = super::implementation(&recipe);
+            implementation["labels"] = labels.clone();
+            implementation
+        })
+        .collect();
+    fixture.skins.retain(|skin| skin["screen"] != json!(screen));
+    fixture
+        .skins
+        .push(super::skin(id, screen, slots, json!(implementations)));
+}
+
+/// Slots `x` on main and `pad2` to `pad4` on perform, one element each.
+pub fn with_more_slots() -> Fixture {
+    let mut fixture = Fixture::new();
+    fixture.screens[0]["slots"]["x"] = json!({ "count": 1, "description": "x" });
+    for pad in ["pad2", "pad3", "pad4"] {
+        fixture.screens[1]["slots"][pad] = json!({ "count": 1, "description": pad });
+    }
+    fixture
+}

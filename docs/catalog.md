@@ -186,10 +186,10 @@ nothing is dropped silently:
    is off (with a note when it has a stock-style implementation); a skin left out keeps its
    screen on `stock`.
 
-Keeping no skin always works, so there is always a result, and what is on does not depend on the
-order in which screens are listed; a tie between equally good configurations goes to the first in
-screen and file order. The search is small for real catalogs; one needing more than 65,536
-configurations is refused.
+Keeping no skin always works, so there is always a result. Apart from ties, what is on does not
+depend on the order in which screens are listed; a tie between equally good configurations goes to
+the first in screen and file order. The search is small for real catalogs; one needing more than
+65,536 configurations is refused.
 
 The **tier** of the build is its least settled fragment's when it is one fragment under the
 recipe's own label and reported version (the very file its pins describe), and `experimental` at
