@@ -3,6 +3,7 @@
 
 use super::entry::{
     EntryError, check_id, check_name, check_player_id, check_schema_version, check_text,
+    unique_keys,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -15,7 +16,7 @@ pub struct Screen {
     pub id: String,
     pub player: String,
     pub title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unique_keys")]
     pub slots: BTreeMap<String, Slot>,
     pub maintainer: String,
 }

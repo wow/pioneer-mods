@@ -12,10 +12,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   budget and capabilities, the `main` and `perform` screens, and the two BEAT LOOP features with
   their implementations, maturity, evidence and known limits. Each file is checked on its own and
   the catalog as a whole (`Catalog::check`): unique ids, resolved references, conflicts on both
-  sides, implementations that meet their requirements, label counts that match slot counts, and
-  recipes for their player that carry its pins and pin their output.
-  `patch_cli::catalog::load_catalog` reads it without trusting the files; CI also checks the pins
-  and budget against the engine's.
+  sides (and between features that relabel one slot), implementations that meet their requirements,
+  label counts that match slot counts, and recipes for their player that carry its pins and pin
+  their output. `patch_cli::catalog::load_catalog` reads it without trusting the files (unknown
+  fields, repeated keys and symbolic links are refused); CI also checks the pins and budget against
+  the engine's.
 - `patch-cli compose` and `xdj700::compose_recipes` (`compose_recipes_to`, `check_composition`,
   `CheckedComposition`, `check_composed`, `Composition`, `ComposedUpdate`, `ComposeError`): several
   schema-v2 recipes of one release built into one update with one label and one reported version, as

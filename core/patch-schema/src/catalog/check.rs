@@ -1,12 +1,12 @@
 //! The catalog as a whole ([`Catalog::check`]): every file valid on its own, ids unique, every
-//! reference resolved, and every implementation consistent with its player and its recipe. Needs
-//! no firmware.
+//! reference resolved, and every implementation consistent with its player and its recipe
+//! (`check_parts.rs`). Needs no firmware.
 
 use super::entry::EntryError;
 use super::feature::Feature;
 use super::player::Player;
 use super::screen::Screen;
-use super::skin::{STOCK_SKIN, Skin};
+use super::skin::Skin;
 use crate::v2::RecipeV2;
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
@@ -24,12 +24,8 @@ pub struct Catalog {
 /// (`feature beat-loop-1-to-32`).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum CatalogError {
-    #[error("{entry}: {source}")]
-    Invalid {
-        entry: String,
-        #[source]
-        source: EntryError,
-    },
+    #[error("{entry}: {error}")]
+    Invalid { entry: String, error: EntryError },
 
     #[error("{kind} {id} is defined twice")]
     Duplicate { kind: &'static str, id: String },
@@ -61,9 +57,15 @@ impl Catalog {
     }
 
     /// Checks the catalog against itself and against `recipes`, the recipes its implementations
-    /// name, by path. Each implementation's player must exist and meet the feature's or skin's
-    /// requirements; label counts must match slot counts; and each recipe must be for that
-    /// player, carry its pins and pin its output (every fragment of a build must).
+    /// name, by path:
+    /// - every file passes its own `validate`, and ids are unique;
+    /// - every player's screens have files, and every screen's player lists it;
+    /// - conflicts are resolved and listed on both sides, and two features that relabel one slot
+    ///   conflict;
+    /// - each implementation's player exists and meets the feature's or skin's requirements, and
+    ///   label counts match slot counts;
+    /// - each recipe is for that player, carries its pins and pins its output (every fragment of
+    ///   a build must).
     ///
     /// # Errors
     ///
@@ -75,6 +77,7 @@ impl Catalog {
         for feature in &self.features {
             self.check_feature(feature, recipes)?;
         }
+        self.check_shared_labels()?;
         for skin in &self.skins {
             self.check_skin(skin, recipes)?;
         }
@@ -82,7 +85,7 @@ impl Catalog {
     }
 
     fn check_entries(&self) -> Result<(), CatalogError> {
-        let invalid = |entry: String| move |source| CatalogError::Invalid { entry, source };
+        let invalid = |entry: String| move |error| CatalogError::Invalid { entry, error };
         for player in &self.players {
             player
                 .validate()
@@ -161,134 +164,35 @@ impl Catalog {
         Ok(())
     }
 
-    fn check_feature(
-        &self,
-        feature: &Feature,
-        recipes: &BTreeMap<String, RecipeV2>,
-    ) -> Result<(), CatalogError> {
-        let entry = feature_entry(&feature.id);
-        let inconsistent = |problem: String| CatalogError::Inconsistent {
-            entry: entry.clone(),
-            problem,
-        };
-        for conflict in &feature.conflicts {
-            let other = self
-                .feature(conflict)
-                .ok_or_else(|| CatalogError::Missing {
-                    entry: entry.clone(),
-                    what: feature_entry(conflict),
-                })?;
-            if !other.conflicts.contains(&feature.id) {
-                return Err(inconsistent(format!(
-                    "it conflicts with {conflict}, which does not list it in its conflicts"
-                )));
-            }
-        }
-        for (player_id, implementation) in &feature.implementations {
-            let player = self.implementation_player(&entry, player_id)?;
-            let needs = |what: String| {
-                inconsistent(format!(
-                    "its implementation for {player_id} needs {what}, which {player_id} does not \
-                     have"
-                ))
-            };
-            for (name, values) in &feature.requires.capabilities {
-                let available = player.capabilities.get(name);
-                if !available.is_some_and(|capability| capability.includes(values)) {
-                    return Err(needs(format!("capability {name} with {values:?}")));
-                }
-            }
-            for slot_ref in &feature.requires.slots {
-                if self.slot_count(player, slot_ref).is_none() {
-                    return Err(needs(format!("slot {slot_ref}")));
-                }
-            }
-            for (slot_ref, labels) in &feature.labels {
-                let count = self.slot_count(player, slot_ref).expect("a required slot");
-                check_label_count(&entry, slot_ref, labels.len(), count)?;
-            }
-            if let Some(skin) = implementation.draws_labels.as_deref() {
-                self.check_label_skin(&entry, feature, skin)?;
-            }
-            check_recipe(&entry, player, &implementation.recipe, recipes)?;
-        }
-        Ok(())
-    }
-
-    /// A feature whose recipe draws its labels in `skin`'s style: the skin exists, and is for the
-    /// screen of every labelled slot.
-    fn check_label_skin(
-        &self,
-        entry: &str,
-        feature: &Feature,
-        skin: &str,
-    ) -> Result<(), CatalogError> {
-        if skin == STOCK_SKIN {
-            return Ok(());
-        }
-        let found = self.skin(skin).ok_or_else(|| CatalogError::Missing {
-            entry: entry.to_owned(),
-            what: skin_entry(skin),
-        })?;
-        for slot_ref in feature.labels.keys() {
-            let (screen, _) = slot_ref.split_once('.').expect("validated");
-            if found.screen != screen {
-                return Err(CatalogError::Inconsistent {
-                    entry: entry.to_owned(),
-                    problem: format!(
-                        "it draws labels for {slot_ref} as skin {skin}, which is for screen {}",
-                        found.screen
-                    ),
-                });
-            }
-        }
-        Ok(())
-    }
-
-    fn check_skin(
-        &self,
-        skin: &Skin,
-        recipes: &BTreeMap<String, RecipeV2>,
-    ) -> Result<(), CatalogError> {
-        let entry = skin_entry(&skin.id);
-        for (player_id, implementations) in &skin.implementations {
-            let player = self.implementation_player(&entry, player_id)?;
-            let screen = player
-                .screens
-                .contains(&skin.screen)
-                .then(|| self.screen(player_id, &skin.screen))
-                .flatten()
-                .ok_or_else(|| CatalogError::Inconsistent {
-                    entry: entry.clone(),
-                    problem: format!("player {player_id} has no screen {}", skin.screen),
-                })?;
-            if player.screen_class != skin.requires.screen_class {
-                return Err(CatalogError::Inconsistent {
-                    entry: entry.clone(),
-                    problem: format!("player {player_id} has another screen class"),
-                });
-            }
-            for slot in &skin.requires.slots {
-                if !screen.slots.contains_key(slot) {
+    /// Two features that give labels to one slot cannot both be chosen: they must conflict.
+    fn check_shared_labels(&self) -> Result<(), CatalogError> {
+        for (index, feature) in self.features.iter().enumerate() {
+            for other in &self.features[index + 1..] {
+                let shared = feature
+                    .labels
+                    .keys()
+                    .find(|slot| other.labels.contains_key(*slot));
+                if let Some(slot) = shared
+                    && !feature.conflicts.contains(&other.id)
+                {
                     return Err(CatalogError::Inconsistent {
-                        entry: entry.clone(),
-                        problem: format!("screen {player_id}/{} has no slot {slot}", skin.screen),
+                        entry: feature_entry(&feature.id),
+                        problem: format!(
+                            "it and {} both relabel {slot}; they must list each other in conflicts",
+                            other.id
+                        ),
                     });
                 }
             }
-            for implementation in implementations {
-                for (slot, labels) in &implementation.labels {
-                    let count = screen.slots[slot].count;
-                    let slot_ref = format!("{}.{slot}", skin.screen);
-                    check_label_count(&entry, &slot_ref, labels.len(), count)?;
-                }
-                check_recipe(&entry, player, &implementation.recipe, recipes)?;
-            }
         }
         Ok(())
     }
 
-    fn implementation_player(&self, entry: &str, id: &str) -> Result<&Player, CatalogError> {
+    pub(super) fn implementation_player(
+        &self,
+        entry: &str,
+        id: &str,
+    ) -> Result<&Player, CatalogError> {
         self.player(id).ok_or_else(|| CatalogError::Missing {
             entry: entry.to_owned(),
             what: player_entry(id),
@@ -296,7 +200,7 @@ impl Catalog {
     }
 
     /// The element count of `slot_ref` (`<screen>.<slot name>`) on `player`, if it has the slot.
-    fn slot_count(&self, player: &Player, slot_ref: &str) -> Option<u32> {
+    pub(super) fn slot_count(&self, player: &Player, slot_ref: &str) -> Option<u32> {
         let (screen, slot) = slot_ref.split_once('.')?;
         if !player.screens.iter().any(|listed| listed == screen) {
             return None;
@@ -305,76 +209,7 @@ impl Catalog {
     }
 }
 
-fn check_label_count(
-    entry: &str,
-    slot_ref: &str,
-    labels: usize,
-    count: u32,
-) -> Result<(), CatalogError> {
-    if u32::try_from(labels).is_ok_and(|labels| labels == count) {
-        Ok(())
-    } else {
-        Err(CatalogError::Inconsistent {
-            entry: entry.to_owned(),
-            problem: format!("{labels} labels for {slot_ref}, which has {count} elements"),
-        })
-    }
-}
-
-/// The recipe at `path` exists, is for `player`'s release with its pins, and pins its output.
-fn check_recipe(
-    entry: &str,
-    player: &Player,
-    path: &str,
-    recipes: &BTreeMap<String, RecipeV2>,
-) -> Result<(), CatalogError> {
-    let recipe = recipes.get(path).ok_or_else(|| CatalogError::Missing {
-        entry: entry.to_owned(),
-        what: format!("recipe {path}"),
-    })?;
-    let inconsistent = |problem: String| CatalogError::Inconsistent {
-        entry: entry.to_owned(),
-        problem: format!("recipe {path}: {problem}"),
-    };
-    let target = &recipe.target;
-    if target.release != player.id {
-        return Err(inconsistent(format!(
-            "it is for release {}, not {}",
-            target.release, player.id
-        )));
-    }
-    let pins = [
-        (
-            "upd_sha256",
-            &target.upd_sha256,
-            &player.firmware.upd_sha256,
-        ),
-        (
-            "application_sha256",
-            &target.application_sha256,
-            &player.firmware.application_sha256,
-        ),
-    ];
-    for (field, recipe_pin, player_pin) in pins {
-        if !recipe_pin.eq_ignore_ascii_case(player_pin) {
-            return Err(inconsistent(format!(
-                "target.{field} differs from player {}'s",
-                player.id
-            )));
-        }
-    }
-    let pinned = recipe.expected.as_ref();
-    if pinned.and_then(|e| e.application_sha256.as_ref()).is_none() {
-        return Err(inconsistent(
-            "it does not pin its output (expected.application_sha256); every fragment of a \
-             build must"
-                .to_owned(),
-        ));
-    }
-    Ok(())
-}
-
-fn player_entry(id: &str) -> String {
+pub(super) fn player_entry(id: &str) -> String {
     format!("player {id}")
 }
 
@@ -382,10 +217,10 @@ fn screen_entry(screen: &Screen) -> String {
     format!("screen {}/{}", screen.player, screen.id)
 }
 
-fn feature_entry(id: &str) -> String {
+pub(super) fn feature_entry(id: &str) -> String {
     format!("feature {id}")
 }
 
-fn skin_entry(id: &str) -> String {
+pub(super) fn skin_entry(id: &str) -> String {
     format!("skin {id}")
 }

@@ -3,7 +3,7 @@
 
 use super::entry::{
     EntryError, check_id, check_name, check_player_id, check_schema_version, check_sha256,
-    check_text, check_unique,
+    check_text, check_unique, unique_keys,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -19,7 +19,7 @@ pub struct Player {
     pub screen_class: ScreenClass,
     pub budgets: Budgets,
     /// Named facts about the stock firmware ([`Capability`]).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unique_keys")]
     pub capabilities: BTreeMap<String, Capability>,
     /// The screens catalogued for this player, each in `catalog/screens/<player>/<screen>.json`.
     pub screens: Vec<String>,

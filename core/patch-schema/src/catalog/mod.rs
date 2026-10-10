@@ -7,6 +7,7 @@
 //! recipe applies, and what a composed build contains, is for the engine in `patch-core`.
 
 mod check;
+mod check_parts;
 mod entry;
 mod feature;
 mod player;

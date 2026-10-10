@@ -13,8 +13,11 @@ use std::path::{Path, PathBuf};
 /// Largest catalog file read: entries are a few KB.
 pub const MAX_CATALOG_FILE_LEN: u64 = 256 * 1024;
 
-/// The directories `catalog/` may hold, besides a `README.md`.
+/// The directories `catalog/` may hold.
 const DIRS: [&str; 4] = ["players", "screens", "features", "skins"];
+
+/// Names skipped wherever they appear: notes for contributors, and the file Finder leaves.
+const SKIPPED: [&str; 2] = ["README.md", ".DS_Store"];
 
 /// A checked catalog and the recipes its implementations name, by path.
 #[derive(Debug, Clone)]
@@ -25,8 +28,10 @@ pub struct LoadedCatalog {
 
 /// Loads and checks `root/catalog`: `players/<id>.json`, `screens/<player>/<screen>.json`,
 /// `features/<id>.json` and `skins/<id>.json`, each file named after its id, and the recipes the
-/// implementations name (paths relative to `root`). A missing directory is empty; anything else
-/// in `catalog/` is refused, so a misnamed file cannot be skipped silently.
+/// implementations name (paths relative to `root`). `catalog/` must exist; a missing
+/// subdirectory is empty. Anything else (but a `README.md` or `.DS_Store`) is refused, so a
+/// misnamed file cannot be skipped silently, and so is a symbolic link anywhere under `root`
+/// that the walk or a recipe path meets: it could point outside the tree.
 ///
 /// # Errors
 ///
@@ -34,11 +39,14 @@ pub struct LoadedCatalog {
 /// valid schema-v2 recipe, or a [`CatalogError`](patch_schema::catalog::CatalogError).
 pub fn load_catalog(root: &Path) -> Result<LoadedCatalog> {
     let dir = root.join("catalog");
+    if !is_dir(&dir)? {
+        bail!("refusing catalog '{}': no such directory", dir.display());
+    }
     let mut catalog = Catalog::default();
     for name in entries(&dir)? {
-        if !(name == "README.md" || DIRS.contains(&name.as_str())) {
+        if !DIRS.contains(&name.as_str()) {
             bail!(
-                "refusing catalog '{}': unexpected entry '{name}'; it holds {} and a README.md",
+                "refusing catalog '{}': unexpected entry '{name}'; it holds {}",
                 dir.display(),
                 DIRS.join(", ")
             );
@@ -49,6 +57,13 @@ pub fn load_catalog(root: &Path) -> Result<LoadedCatalog> {
     }
     let screens = dir.join("screens");
     for player in entries(&screens)? {
+        if !is_dir(&screens.join(&player))? {
+            bail!(
+                "refusing catalog directory '{}': unexpected entry '{player}'; it holds a \
+                 directory per player",
+                screens.display()
+            );
+        }
         for path in json_files(&screens.join(&player))? {
             let screen = read_entry::<Screen>(&path)?;
             if screen.player != player {
@@ -126,7 +141,7 @@ fn read_recipes(root: &Path, catalog: &Catalog) -> Result<BTreeMap<String, Recip
     let features = catalog
         .features
         .iter()
-        .flat_map(|f| f.implementations.values().map(|i| &i.recipe));
+        .flat_map(|f| f.implementations.values().flatten().map(|i| &i.recipe));
     let skins = catalog
         .skins
         .iter()
@@ -137,6 +152,7 @@ fn read_recipes(root: &Path, catalog: &Catalog) -> Result<BTreeMap<String, Recip
             continue;
         }
         let file = root.join(path);
+        refuse_links(root, path)?;
         let (raw, schema_version) = read_recipe_versioned(&file)?;
         if schema_version != SCHEMA_VERSION_V2 {
             bail!(
@@ -155,34 +171,77 @@ fn read_recipes(root: &Path, catalog: &Catalog) -> Result<BTreeMap<String, Recip
     Ok(recipes)
 }
 
-/// The names in `dir`, sorted; none if it does not exist.
+/// Whether `path` is a directory: `false` if nothing is there; a symbolic link or anything else
+/// is refused.
+fn is_dir(path: &Path) -> Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("failed to read '{}'", path.display())),
+        Ok(metadata) if metadata.is_dir() => Ok(true),
+        Ok(metadata) if metadata.file_type().is_symlink() => bail!(
+            "refusing catalog path '{}': a symbolic link",
+            path.display()
+        ),
+        Ok(_) => bail!(
+            "refusing catalog path '{}': not a directory",
+            path.display()
+        ),
+    }
+}
+
+/// The names in `dir`, sorted, without the skipped ones; none if it does not exist. A symbolic
+/// link or a name that is not UTF-8 is refused.
 fn entries(dir: &Path) -> Result<Vec<String>> {
-    if !dir.exists() {
+    if !is_dir(dir)? {
         return Ok(Vec::new());
     }
     let read_failed = || format!("failed to read catalog directory '{}'", dir.display());
     let mut names = Vec::new();
     for entry in std::fs::read_dir(dir).with_context(read_failed)? {
-        let name = entry.with_context(read_failed)?.file_name();
+        let entry = entry.with_context(read_failed)?;
+        let name = entry.file_name();
         let Some(name) = name.to_str() else {
             bail!(
                 "refusing catalog directory '{}': a name is not UTF-8",
                 dir.display()
             );
         };
-        names.push(name.to_owned());
+        if entry.file_type().with_context(read_failed)?.is_symlink() {
+            bail!(
+                "refusing catalog directory '{}': '{name}' is a symbolic link",
+                dir.display()
+            );
+        }
+        if !SKIPPED.contains(&name) {
+            names.push(name.to_owned());
+        }
     }
     names.sort();
     Ok(names)
 }
 
-/// The `.json` files in `dir`, sorted; anything else but a `README.md` is refused.
+/// Refuses a symbolic link at any component of `path` (relative, validated) under `root`.
+fn refuse_links(root: &Path, path: &str) -> Result<()> {
+    let mut at = root.to_path_buf();
+    for component in path.split('/') {
+        at.push(component);
+        let metadata = std::fs::symlink_metadata(&at)
+            .with_context(|| format!("failed to read recipe '{}'", root.join(path).display()))?;
+        if metadata.file_type().is_symlink() {
+            bail!(
+                "refusing recipe '{}': '{}' is a symbolic link",
+                root.join(path).display(),
+                at.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The `.json` files in `dir`, sorted; anything else (but the skipped names) is refused.
 fn json_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for name in entries(dir)? {
-        if name == "README.md" {
-            continue;
-        }
         if !name.ends_with(".json") {
             bail!(
                 "refusing catalog directory '{}': unexpected entry '{name}'; it holds .json files",

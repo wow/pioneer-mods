@@ -137,3 +137,56 @@ fn a_missing_recipe_or_an_inconsistent_catalog_is_refused() {
         "{message}"
     );
 }
+
+#[test]
+fn notes_are_skipped_and_a_missing_catalog_or_an_invalid_recipe_is_refused() {
+    let root = copy();
+    let catalog = root.path().join("catalog");
+    write_bytes(&catalog.join("screens/README.md"), b"notes");
+    write_bytes(&catalog.join("features/.DS_Store"), b"");
+    load_catalog(root.path()).expect("README.md and .DS_Store are skipped");
+
+    let recipe = root
+        .path()
+        .join("recipes/xdj700-v1.15/beat-loop-1-to-32.json");
+    let text = std::fs::read_to_string(&recipe).expect("read");
+    write_bytes(
+        &recipe,
+        text.replace("\"label\": \"Ver1.16\"", "\"label\": \"1.16\"")
+            .as_bytes(),
+    );
+    let message = refusal(root.path());
+    assert!(message.contains("refusing recipe"), "{message}");
+
+    let empty = tempfile::tempdir().expect("tempdir");
+    assert!(refusal(empty.path()).contains("no such directory"));
+}
+
+#[cfg(unix)]
+#[test]
+fn symbolic_links_are_refused() {
+    use std::os::unix::fs::symlink;
+
+    // A catalog file linked to a file outside the tree.
+    let root = copy();
+    let outside = tempfile::tempdir().expect("tempdir");
+    let feature = root.path().join("catalog/features/beat-loop-1-to-32.json");
+    std::fs::rename(&feature, outside.path().join("f.json")).expect("move");
+    symlink(outside.path().join("f.json"), &feature).expect("link");
+    assert!(refusal(root.path()).contains("is a symbolic link"));
+
+    // A recipe directory linked elsewhere.
+    let root = copy();
+    let recipes = root.path().join("recipes/xdj700-v1.15");
+    let moved = outside.path().join("recipes");
+    std::fs::rename(&recipes, &moved).expect("move");
+    symlink(&moved, &recipes).expect("link");
+    assert!(refusal(root.path()).contains("is a symbolic link"));
+
+    // A dangling directory link is refused, not read as empty.
+    let root = copy();
+    let features = root.path().join("catalog/features");
+    std::fs::remove_dir_all(&features).expect("remove");
+    symlink(outside.path().join("missing"), &features).expect("link");
+    assert!(refusal(root.path()).contains("is a symbolic link"));
+}

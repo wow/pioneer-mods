@@ -2,6 +2,10 @@
 //! recipe paths, labels and text.
 
 use crate::is_valid_sha256_hex;
+use serde::de::{Deserialize, Deserializer, Error as _, MapAccess, Visitor};
+use std::collections::BTreeMap;
+use std::fmt;
+use std::marker::PhantomData;
 use thiserror::Error;
 
 /// The only `schema_version` catalog files accept.
@@ -220,4 +224,35 @@ pub(crate) fn check_implementation(
 
 fn checked(ok: bool, error: impl FnOnce() -> EntryError) -> Result<(), EntryError> {
     if ok { Ok(()) } else { Err(error()) }
+}
+
+/// Deserializes a JSON object into a map, refusing a key given twice (a plain map would keep the
+/// last value silently). Struct fields need no such guard: serde refuses a repeated field.
+pub(crate) fn unique_keys<'de, D, V>(deserializer: D) -> Result<BTreeMap<String, V>, D::Error>
+where
+    D: Deserializer<'de>,
+    V: Deserialize<'de>,
+{
+    struct Keys<V>(PhantomData<V>);
+
+    impl<'de, V: Deserialize<'de>> Visitor<'de> for Keys<V> {
+        type Value = BTreeMap<String, V>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("an object whose keys are distinct")
+        }
+
+        fn visit_map<A: MapAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
+            let mut map = BTreeMap::new();
+            while let Some((key, value)) = access.next_entry::<String, V>()? {
+                if map.contains_key(&key) {
+                    return Err(A::Error::custom(format_args!("key {key:?} given twice")));
+                }
+                map.insert(key, value);
+            }
+            Ok(map)
+        }
+    }
+
+    deserializer.deserialize_map(Keys(PhantomData))
 }

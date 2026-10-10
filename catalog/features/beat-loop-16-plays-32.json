@@ -9,14 +9,16 @@
   },
   "conflicts": ["beat-loop-1-to-32"],
   "implementations": {
-    "xdj700-v1.15": {
-      "recipe": "recipes/xdj700-v1.15/beat-loop-16-plays-32.json",
-      "maturity": "experimental",
-      "evidence": "Passed on an owner's unit, 2026-10-09 (docs/xdj700-flashing.md, stage 5).",
-      "limits": [
-        "While its 32-beat loop plays, no pad lights (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\")."
-      ]
-    }
+    "xdj700-v1.15": [
+      {
+        "recipe": "recipes/xdj700-v1.15/beat-loop-16-plays-32.json",
+        "maturity": "experimental",
+        "evidence": "Passed on an owner's unit, 2026-10-09 (docs/xdj700-flashing.md, stage 5).",
+        "limits": [
+          "While its 32-beat loop plays, no pad lights (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\")."
+        ]
+      }
+    ]
   },
   "maintainer": "wow"
 }

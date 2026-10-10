@@ -3,6 +3,7 @@
 
 use super::entry::{
     EntryError, Maturity, check_id, check_player_id, check_schema_version, check_unique,
+    unique_keys,
 };
 use crate::bare_version_number;
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ pub struct Profile {
     pub schema_version: u32,
     pub player: String,
     /// The skin for each screen, by screen id; a screen not listed keeps the `stock` skin.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unique_keys")]
     pub screens: BTreeMap<String, String>,
     #[serde(default)]
     pub features: Vec<String>,

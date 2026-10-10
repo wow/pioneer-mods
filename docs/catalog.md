@@ -20,8 +20,10 @@ catalog/
 ```
 
 Every file is named after its `id`, and a screen lies under its player's directory. Anything
-else in `catalog/` (but a `README.md`) is refused, so a misnamed file cannot be skipped silently.
-Every file has `"schema_version": 1` and names a `maintainer`. Unknown fields are refused.
+else in `catalog/` is refused, so a misnamed file cannot be skipped silently; only a `README.md`
+and a `.DS_Store` are skipped. A symbolic link in the catalog, or in a recipe path, is refused: it
+could point outside the tree. Every file has `"schema_version": 1` and names a `maintainer`.
+Unknown fields, and a key given twice in an object, are refused.
 
 Ids are lowercase letters, digits and `-` (a player id may also hold `.`: `xdj700-v1.15`, the
 release id recipes name), at most 64 bytes. Capability and slot names are lowercase segments of
@@ -40,9 +42,8 @@ letters, digits and `_` joined by `.` (`beat_loop.pad`). A slot is referred to a
   growth (checked against it).
 - `capabilities`: named facts about the stock firmware. Each gives the `values` established for
   it, or why it is `unavailable` ("absent on this model"), and its `evidence`. Values list what the
-  evidence shows, not everything the firmware may hold: the XDJ-700's length list holds more
-  lengths than the seven `beat_loop.lengths` names, but only those are established for the BEAT
-  LOOP buttons.
+  evidence shows, not necessarily everything the firmware holds: `beat_loop.lengths` names the six
+  stock button lengths and 32, the one other length a button has been shown to set.
 - `screens`: the screens catalogued for it, each with its own file.
 
 ## Screen
@@ -63,8 +64,11 @@ a screen accepts come with the screen catalogue (design roadmap, step 3).
   This is about meaning, not bytes: `beat-loop-1-to-32` and `beat-loop-16-plays-32` share a
   replacement, which composition would apply once, but define different button sets.
 - `labels`: the text the feature gives each slot it relabels, one label per element (1 to 16
-  printable ASCII characters). Every relabelled slot is in `requires.slots`.
-- `implementations`, by player id:
+  printable ASCII characters). Every relabelled slot is in `requires.slots`, and two features that
+  relabel one slot must conflict.
+- `implementations`, by player id, a list: one per way of drawing the labels (`draws_labels`), so
+  a feature can have one implementation that draws them in the stock style and one that leaves
+  them to the chosen skin. Each has:
   - `recipe`: a path under `recipes/`. The recipe must be for that player, carry its pins, and pin
     its output (`expected.application_sha256`), since every fragment of a build is checked
     against its own output.
@@ -73,8 +77,9 @@ a screen accepts come with the screen catalogue (design roadmap, step 3).
     unit and stays `experimental` while its lit-pad limit stands.
   - `limits`: known limits the builder shows with the feature.
   - `draws_labels`: set when the recipe draws the feature's labels itself, in the style of a skin
-    (`stock`). Labels belong to skins; today's stage-7 recipe draws its labels in the stock style,
-    so the PERFORM screen must keep the stock skin with it.
+    (`stock`), so the labelled screen must use that skin; unset, the recipe changes behaviour only
+    and a skin implementation draws the labels. Labels belong to skins; today's stage-7 recipe
+    draws its labels in the stock style, so the PERFORM screen keeps the stock skin with it.
 
 The implementation must meet the feature's requirements on its player: the capabilities with
 their values, and the slots, with as many elements as there are labels.
@@ -140,7 +145,7 @@ reported version follow the recipe rules; the engine checks them against the rel
 Each file is checked on its own, then the catalog as a whole, with no firmware:
 
 - ids unique; every player's screens have files, and every screen's player lists it;
-- conflicts resolved and listed on both sides;
+- conflicts resolved and listed on both sides; features that relabel one slot conflict;
 - every implementation's player exists and meets the requirements; label counts match slot
   counts; a skin named in `draws_labels` exists and is for the labelled screen;
 - every recipe named exists, is a valid schema-v2 recipe for its player, carries the player's pins

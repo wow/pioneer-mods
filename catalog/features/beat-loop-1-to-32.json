@@ -15,15 +15,17 @@
     "perform.beat_loop.pad": ["1", "2", "4", "8", "16", "32"]
   },
   "implementations": {
-    "xdj700-v1.15": {
-      "recipe": "recipes/xdj700-v1.15/beat-loop-1-to-32.json",
-      "maturity": "experimental",
-      "evidence": "Rehearsed in emulation, both ways; not yet tested on hardware (docs/xdj700-flashing.md, stage 7).",
-      "limits": [
-        "The lit pad follows the stock lengths: the pad to the right of the touched one lights, and the 32 pad lights none (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\")."
-      ],
-      "draws_labels": "stock"
-    }
+    "xdj700-v1.15": [
+      {
+        "recipe": "recipes/xdj700-v1.15/beat-loop-1-to-32.json",
+        "maturity": "experimental",
+        "evidence": "Rehearsed in emulation, both ways; not yet tested on hardware (docs/xdj700-flashing.md, stage 7).",
+        "limits": [
+          "The lit pad follows the stock lengths: the pad to the right of the touched one lights, and the 32 pad lights none (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\")."
+        ],
+        "draws_labels": "stock"
+      }
+    ]
   },
   "maintainer": "wow"
 }

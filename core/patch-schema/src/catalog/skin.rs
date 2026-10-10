@@ -4,7 +4,7 @@
 
 use super::entry::{
     EntryError, Maturity, check_id, check_implementation, check_labels, check_name,
-    check_player_id, check_schema_version, check_text, check_unique,
+    check_player_id, check_schema_version, check_text, check_unique, unique_keys,
 };
 use super::player::ScreenClass;
 use serde::{Deserialize, Serialize};
@@ -26,6 +26,7 @@ pub struct Skin {
     pub art: Art,
     /// The implementations for each player id: one per label set the skin draws, since each
     /// (skin, label set) pair has its own output pin.
+    #[serde(deserialize_with = "unique_keys")]
     pub implementations: BTreeMap<String, Vec<SkinImplementation>>,
     pub maintainer: String,
 }
@@ -60,7 +61,7 @@ pub struct SkinImplementation {
     #[serde(default)]
     pub limits: Vec<String>,
     /// The labels it draws, by slot name on its screen; none for the stock labels.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unique_keys")]
     pub labels: BTreeMap<String, Vec<String>>,
 }
 

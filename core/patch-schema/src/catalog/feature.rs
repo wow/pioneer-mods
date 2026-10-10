@@ -3,7 +3,7 @@
 
 use super::entry::{
     EntryError, Maturity, check_id, check_implementation, check_labels, check_name,
-    check_player_id, check_schema_version, check_slot_ref, check_text, check_unique,
+    check_player_id, check_schema_version, check_slot_ref, check_text, check_unique, unique_keys,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -23,10 +23,12 @@ pub struct Feature {
     pub conflicts: Vec<String>,
     /// The text this feature gives each slot it relabels (`perform.beat_loop.pad`), one label per
     /// element. A skin draws them; see [`FeatureImplementation::draws_labels`].
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unique_keys")]
     pub labels: BTreeMap<String, Vec<String>>,
-    /// One implementation per player id.
-    pub implementations: BTreeMap<String, FeatureImplementation>,
+    /// The implementations for each player id: one per way of drawing the feature's labels
+    /// ([`FeatureImplementation::draws_labels`]).
+    #[serde(deserialize_with = "unique_keys")]
+    pub implementations: BTreeMap<String, Vec<FeatureImplementation>>,
     pub maintainer: String,
 }
 
@@ -36,7 +38,7 @@ pub struct Feature {
 pub struct Requires {
     /// Capabilities that must be available, each holding the listed values (none: only
     /// available).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unique_keys")]
     pub capabilities: BTreeMap<String, Vec<String>>,
     /// Slots that must exist, as `<screen>.<slot name>`.
     #[serde(default)]
@@ -55,7 +57,8 @@ pub struct FeatureImplementation {
     #[serde(default)]
     pub limits: Vec<String>,
     /// Set when the recipe draws the feature's labels itself, in the style of this skin
-    /// (`stock`): the labelled screens must then use that skin.
+    /// (`stock`): the labelled screens must then use that skin. Unset, the recipe leaves its
+    /// labels to the chosen skin (a skin implementation drawing that label set).
     #[serde(default)]
     pub draws_labels: Option<String>,
 }
@@ -110,25 +113,51 @@ impl Feature {
                 field: "implementations".to_owned(),
             });
         }
-        for (player, implementation) in &self.implementations {
-            let field = format!("implementations.{player}");
+        for (player, implementations) in &self.implementations {
             check_player_id("implementations", player)?;
-            check_implementation(
-                &field,
-                &implementation.recipe,
-                &implementation.evidence,
-                &implementation.limits,
-            )?;
-            if let Some(skin) = &implementation.draws_labels {
-                check_id(&format!("{field}.draws_labels"), skin)?;
-                if self.labels.is_empty() {
+            if implementations.is_empty() {
+                return Err(EntryError::Empty {
+                    field: format!("implementations.{player}"),
+                });
+            }
+            for (index, implementation) in implementations.iter().enumerate() {
+                let field = format!("implementations.{player}[{index}]");
+                self.check_implementation(&field, implementation)?;
+                let draws = &implementation.draws_labels;
+                if implementations[..index]
+                    .iter()
+                    .any(|earlier| &earlier.draws_labels == draws)
+                {
                     return Err(EntryError::Rule {
-                        field: format!("{field}.draws_labels"),
-                        problem: "the feature gives no labels to draw".to_owned(),
+                        field,
+                        problem: "another implementation draws the labels the same way".to_owned(),
                     });
                 }
             }
         }
         check_text("maintainer", &self.maintainer)
+    }
+
+    fn check_implementation(
+        &self,
+        field: &str,
+        implementation: &FeatureImplementation,
+    ) -> Result<(), EntryError> {
+        check_implementation(
+            field,
+            &implementation.recipe,
+            &implementation.evidence,
+            &implementation.limits,
+        )?;
+        if let Some(skin) = &implementation.draws_labels {
+            check_id(&format!("{field}.draws_labels"), skin)?;
+            if self.labels.is_empty() {
+                return Err(EntryError::Rule {
+                    field: format!("{field}.draws_labels"),
+                    problem: "the feature gives no labels to draw".to_owned(),
+                });
+            }
+        }
+        Ok(())
     }
 }
