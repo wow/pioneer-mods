@@ -150,6 +150,11 @@ fn only_a_lone_fragment_under_its_own_label_and_version_keeps_its_tier() {
     assert!(resolution.fragments[0].as_pinned);
     assert_eq!(resolution.tier(), Some(Maturity::Stable));
 
+    // Another label: a new update.
+    let mut relabelled = stable.clone();
+    relabelled["label"] = json!("Ver1.17");
+    assert!(!resolved(&fixture, relabelled).fragments[0].as_pinned);
+
     // Another reported version: a new update.
     stable["reported_version"] = json!("0.13");
     let mut resolution = resolved(&fixture, stable);
@@ -183,4 +188,20 @@ fn an_invalid_profile_or_an_unknown_player_is_refused() {
         resolve(&catalog, &recipes, &invalid),
         Err(ResolveError::Profile(_))
     ));
+}
+
+#[test]
+fn a_conflict_with_a_feature_already_off_switches_nothing_off() {
+    // `labelled` is experimental only, so a stable profile leaves it off: `plain` stays on.
+    let mut fixture = Fixture::new();
+    fixture.features[0]["implementations"]["p-1.0"][0]["maturity"] = json!("stable");
+    let mut stable = profile(json!(["plain", "labelled"]), json!({}));
+    stable["maturity"] = json!("stable");
+    let resolution = resolved(&fixture, stable);
+
+    assert!(matches!(status(&resolution, "plain"), Status::On { .. }));
+    assert_eq!(
+        off(&resolution, "labelled"),
+        "its implementations for p-1.0 are experimental; the profile accepts stable only"
+    );
 }

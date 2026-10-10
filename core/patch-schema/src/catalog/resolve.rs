@@ -7,17 +7,19 @@
 //!    none at the maturity the profile accepts, is off. So is a skin for another screen.
 //! 2. Chosen features that conflict are both off: the owner chooses one. This is decided once,
 //!    among the features step 1 leaves, whatever the skins.
-//! 3. Then, in rounds from scratch until no skin goes off:
-//!    - each feature takes its first implementation that fits the screens' skins: it draws the
-//!      labels of a screen that keeps the `stock` skin, in the stock style, and leaves those of
-//!      a screen with another skin to that skin;
-//!    - each chosen skin takes the implementation drawing the labels of the most features that
-//!      leave theirs to it (exactly those labels; the first such implementation on a tie), and
-//!      the features it does not draw are off. A skin with no such implementation, not even
-//!      one without labels, is off, its screen keeps `stock`, and the round starts again.
+//! 3. The chosen skins are kept as far as they can be. Of every set of them, largest first, and
+//!    every choice of one implementation per kept skin (`resolve_skins.rs`), resolution takes
+//!    the configuration in which the most features are on (the first in screen and file order
+//!    on a tie), where:
+//!    - each feature takes its first implementation that fits the skins: it draws the labels of
+//!      a screen that keeps `stock`, in the stock style, and leaves those of a screen with a
+//!      kept skin to that skin;
+//!    - each kept skin's implementation draws exactly the labels of the features kept on, and a
+//!      feature whose labels it does not draw is off.
 //!
-//! An explicit skin choice is kept whenever it can be, and only a skin is ever switched off
-//! between rounds, so the rounds end; features are picked afresh each round.
+//! Keeping no skin is always a configuration, so there is always a result, whatever the order
+//! of screens or files. The search is small for real catalogs; one that would need more than
+//! [`MAX_CONFIGURATIONS`] is refused rather than searched slowly.
 
 use super::check::Catalog;
 use super::entry::Maturity;
@@ -29,13 +31,17 @@ use super::skin::{STOCK_SKIN, SkinImplementation};
 use crate::v2::RecipeV2;
 use std::collections::BTreeMap;
 
+/// The most configurations (a set of kept skins and one implementation each) resolution tries.
+pub const MAX_CONFIGURATIONS: u64 = 1 << 16;
+
 /// Resolves `profile` against `catalog`, which must have passed [`Catalog::check`] with
 /// `recipes`.
 ///
 /// # Errors
 ///
 /// [`ResolveError::Profile`] for an invalid profile, [`ResolveError::UnknownPlayer`] for a player
-/// the catalog lacks. Anything narrower is switched off with its reason instead.
+/// the catalog lacks, [`ResolveError::TooManyConfigurations`] for a search too large. Anything
+/// narrower is switched off with its reason instead.
 pub fn resolve(
     catalog: &Catalog,
     recipes: &BTreeMap<String, RecipeV2>,
@@ -46,12 +52,12 @@ pub fn resolve(
         .player(&profile.player)
         .ok_or_else(|| ResolveError::UnknownPlayer(profile.player.clone()))?;
     let mut state = State::new(catalog, player, profile);
-    while state.round() {}
+    state.settle()?;
     Ok(state.resolution(recipes))
 }
 
-/// Labels by slot name on one screen.
-pub(super) type Labels = BTreeMap<String, Vec<String>>;
+/// The skin each screen uses in a configuration, by screen; a screen not listed keeps `stock`.
+pub(super) type Skins<'a> = BTreeMap<&'a str, &'a str>;
 
 pub(super) struct State<'a> {
     pub(super) catalog: &'a Catalog,
@@ -63,10 +69,10 @@ pub(super) struct State<'a> {
     pub(super) skins_off: BTreeMap<&'a str, String>,
     /// Features off whatever the skins (steps 1 and 2).
     pub(super) features_off: BTreeMap<&'a str, String>,
-    /// The last round's implementation of each feature that is on, and why the others are off.
+    /// The implementation of each feature that is on, and why the others are off.
     pub(super) picks: BTreeMap<&'a str, &'a FeatureImplementation>,
     pub(super) unfit: BTreeMap<&'a str, String>,
-    /// The last round's implementation of each non-stock skin, by screen.
+    /// The implementation of each kept skin, by screen.
     pub(super) skin_picks: BTreeMap<&'a str, &'a SkinImplementation>,
 }
 
@@ -196,81 +202,54 @@ impl<'a> State<'a> {
         self.features_off.extend(off);
     }
 
-    /// The skin `screen` uses: the chosen one, unless it is off.
-    pub(super) fn effective(&self, screen: &str) -> &'a str {
-        match self.chosen.get(screen) {
-            Some(skin) if !self.skins_off.contains_key(screen) => skin,
-            _ => STOCK_SKIN,
+    /// Step 3: the configuration that keeps the most chosen skins, then the most features.
+    fn settle(&mut self) -> Result<(), ResolveError> {
+        let candidates: Vec<&'a str> = self
+            .player
+            .screens
+            .iter()
+            .map(String::as_str)
+            .filter(|s| self.chosen[s] != STOCK_SKIN && !self.skins_off.contains_key(s))
+            .collect();
+        let configurations = candidates.iter().fold(1_u64, |count, screen| {
+            let implementations = self.skin_implementations(screen).len() as u64;
+            count.saturating_mul(implementations + 1)
+        });
+        if configurations > MAX_CONFIGURATIONS {
+            return Err(ResolveError::TooManyConfigurations(configurations));
         }
-    }
-
-    /// One round from scratch; whether it switched a skin off (and another round is needed).
-    fn round(&mut self) -> bool {
-        self.picks.clear();
-        self.unfit.clear();
-        self.skin_picks.clear();
-        for id in &self.profile.features {
-            if self.features_off.contains_key(id.as_str()) {
-                continue;
-            }
-            let feature = self.catalog.feature(id).expect("available");
-            match self.pick(feature) {
-                Ok(implementation) => {
-                    self.picks.insert(id, implementation);
-                }
-                Err(reason) => {
-                    self.unfit.insert(id, reason);
-                }
-            }
-        }
-        // A feature a skin does not draw no longer gives labels on its other screens: settle.
-        loop {
-            let mut changed = false;
-            for screen in self.player.screens.iter().map(String::as_str) {
-                let skin = self.effective(screen);
-                if skin == STOCK_SKIN {
-                    continue;
-                }
-                let ready = self.leaving_labels(screen);
-                let Some((implementation, drawn)) = self.best_drawing(skin, screen, &ready) else {
-                    let reason = if ready.is_empty() {
-                        format!(
-                            "skin {skin} has no implementation for {} without a feature's labels",
-                            self.player.id
-                        )
-                    } else {
-                        format!(
-                            "skin {skin} has no implementation for {} drawing the labels of \
-                             some of the chosen features, or none",
-                            self.player.id
-                        )
-                    };
+        for size in (0..=candidates.len()).rev() {
+            let best = subsets(&candidates, size)
+                .into_iter()
+                .filter_map(|kept| self.configuration(&kept))
+                .reduce(|best, next| if next.on() > best.on() { next } else { best });
+            if let Some(best) = best {
+                for screen in candidates.iter().filter(|s| !best.kept.contains(s)) {
+                    let reason = self.dropped(screen, &best.kept);
                     self.skins_off.insert(screen, reason);
-                    return true;
-                };
-                self.skin_picks.insert(screen, implementation);
-                for id in ready.into_iter().filter(|id| !drawn.contains(id)) {
-                    let reason = self.undrawn(id, screen, skin);
-                    self.picks.remove(id);
-                    self.unfit.insert(id, reason);
-                    changed = true;
                 }
-            }
-            if !changed {
-                return false;
+                self.picks = best.picks;
+                self.unfit = best.unfit;
+                self.skin_picks = best.skin_picks;
+                return Ok(());
             }
         }
+        unreachable!("keeping no skin is always a configuration")
     }
 
-    /// The first implementation of `feature` at an accepted maturity that fits the skins.
-    fn pick(&self, feature: &'a Feature) -> Result<&'a FeatureImplementation, String> {
+    /// The first implementation of `feature` at an accepted maturity that fits `skins`.
+    pub(super) fn pick(
+        &self,
+        feature: &'a Feature,
+        skins: &Skins<'a>,
+    ) -> Result<&'a FeatureImplementation, String> {
         let accepted: Vec<&'a FeatureImplementation> = feature.implementations[&self.player.id]
             .iter()
             .filter(|i| self.accepts(i.maturity))
             .collect();
         let mut reasons = Vec::new();
         for implementation in accepted {
-            match self.fits(feature, implementation) {
+            match self.fits(feature, implementation, skins) {
                 Ok(()) => return Ok(implementation),
                 Err(reason) => reasons.push(reason),
             }
@@ -290,9 +269,10 @@ impl<'a> State<'a> {
         &self,
         feature: &Feature,
         implementation: &FeatureImplementation,
+        skins: &Skins<'a>,
     ) -> Result<(), String> {
         for screen in labelled_screens(feature) {
-            let skin = self.effective(screen);
+            let skin = skins.get(screen).copied().unwrap_or(STOCK_SKIN);
             let draws = implementation.draws_labels.contains_key(screen);
             if draws && skin != STOCK_SKIN {
                 return Err(format!(
@@ -320,4 +300,19 @@ pub(super) fn labelled_screens(feature: &Feature) -> impl Iterator<Item = &str> 
         .collect();
     screens.dedup();
     screens.into_iter()
+}
+
+/// Every subset of `items` with `size` of them, in order.
+fn subsets<T: Copy>(items: &[T], size: usize) -> Vec<Vec<T>> {
+    if size == 0 {
+        return vec![Vec::new()];
+    }
+    let mut all = Vec::new();
+    for (index, &item) in items.iter().enumerate() {
+        for mut rest in subsets(&items[index + 1..], size - 1) {
+            rest.insert(0, item);
+            all.push(rest);
+        }
+    }
+    all
 }

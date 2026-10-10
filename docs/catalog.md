@@ -177,20 +177,25 @@ nothing is dropped silently:
    the player lacks.
 2. Chosen features that conflict are both off: the owner chooses one. This is decided once,
    whatever the skins.
-3. Then, in rounds until no skin goes off, each feature takes its first implementation that fits
-   the screens' skins: it draws the labels of a screen that keeps `stock`, in the stock style,
-   and leaves those of a screen with another skin to that skin. Each chosen skin takes the
-   implementation drawing exactly the labels of the most features that leave theirs to it, and
-   the features it does not draw are off (with a note when they have a stock-style
-   implementation). A skin with no such implementation, not even one without labels, is off: its
-   screen keeps `stock`, and the features are picked again.
+3. The chosen skins are kept as far as they can be. Of every set of them, largest first, and
+   every choice of one implementation per kept skin, resolution takes the configuration in which
+   the most features are on, where each feature takes its first implementation that fits the
+   skins (it draws the labels of a screen that keeps `stock`, in the stock style, and leaves
+   those of a screen with a kept skin to that skin), and each kept skin's implementation draws
+   exactly the labels of the features kept on. A feature whose labels a kept skin does not draw
+   is off (with a note when it has a stock-style implementation); a skin left out keeps its
+   screen on `stock`.
 
-An explicit skin choice is kept whenever it can be. The **tier** of the build is its least
-settled fragment's when it is one fragment under the recipe's own label and reported version
-(the very file its pins describe), and `experimental` at most otherwise: a combination, or
-another label or version, is a new update that no listed combination covers yet
-([modular-builds.md](./modular-builds.md)). Only an invalid profile, a player the catalog lacks,
-or a label or version the release refuses is refused outright.
+Keeping no skin always works, so there is always a result, and what is on does not depend on the
+order in which screens are listed; a tie between equally good configurations goes to the first in
+screen and file order. The search is small for real catalogs; one needing more than 65,536
+configurations is refused.
+
+The **tier** of the build is its least settled fragment's when it is one fragment under the
+recipe's own label and reported version (the very file its pins describe), and `experimental` at
+most otherwise: a combination, or another label or version, is a new update that no listed
+combination covers yet ([modular-builds.md](./modular-builds.md)). Only an invalid profile, a
+player the catalog lacks, or a label or version the release refuses is refused outright.
 
 ## Checks
 

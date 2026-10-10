@@ -90,4 +90,13 @@ pub enum ResolveError {
 
     #[error("player {0} is not in the catalog")]
     UnknownPlayer(String),
+
+    /// The chosen skins and their implementations would need more configurations than
+    /// [`MAX_CONFIGURATIONS`](super::MAX_CONFIGURATIONS) to search.
+    #[error(
+        "the chosen skins have {0} configurations to search, more than {max}; choose fewer \
+         skins",
+        max = super::MAX_CONFIGURATIONS
+    )]
+    TooManyConfigurations(u64),
 }
