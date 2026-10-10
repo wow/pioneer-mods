@@ -304,9 +304,12 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
   needs no firmware. The checks that need the official file, the protected set (kept outside the
   repository) or the emulator (preconditions, output pins, the protected set, start-up reads,
   rehearsals and acceptance tests) are run by the maintainer before an item is offered.
-- Code keeps the repository's licence; art carries an open art licence (to be decided by the
-  maintainer); contributors declare that art is their own and contains no extracted vendor
-  images.
+- Code keeps the repository's licence (MIT), and so do the glyph masks inside recipes. Skin art
+  is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/): contributors
+  declare that it is their own and contains no extracted vendor images, and each skin credits its
+  authors.
+  Transforms of a player's own images are computed on the owner's computer and never published,
+  so the repository holds none of their pixels.
 - No firmware, keys or built updates are accepted.
 - Each player, screen, feature and skin names a maintainer.
 
@@ -319,15 +322,23 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
 4. First per-screen skins (PERFORM, main), from original art or owner-local transforms.
 5. Code fragments, starting with the lit-pad rule.
 6. The XDJ-1000MK2 v1.45 as the second player.
-7. A builder that runs in the browser on the owner's computer, and signed releases of the
-   catalogue.
+7. A builder that runs in the browser on the owner's computer (the official update never leaves
+   it), and signed releases of the catalogue.
 8. Custom skins with positions, screen by screen as limit 1 is lifted; larger or new images once
    limit 4 is.
+
+## Decisions
+
+- **Art licence** (2026-10-11): community skin art is licensed under CC BY-SA 4.0
+  ([Community content](#community-content)). Others may reuse and adapt a skin, crediting its
+  authors; adaptations they share carry the same licence.
+- **Builder** (2026-10-11): the builder runs in the browser, on the owner's computer. The
+  official update is read locally and never uploaded; the build runs in the page, with the same
+  engine compiled to WebAssembly. No desktop app is planned. `patch-cli` stays the reference
+  front end, the one the tests and owner suites drive.
 
 ## Open questions
 
 - Where the XDJ-700 derives the "selected button" value from the loop length (for the lit-pad
   fix).
 - Whether the XDJ-1000MK2's image archive and layout records match the XDJ-700's.
-- The art licence for community skins.
-- Whether the builder runs in the browser, as a desktop app, or both.

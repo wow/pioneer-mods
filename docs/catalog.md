@@ -124,7 +124,8 @@ file. No skin is committed yet; the format:
 }
 ```
 
-- `art`: `original` (drawn by the skin's authors, who declare it their own) or `transform`
+- `art`: `original` (drawn by the skin's authors, who declare it their own; licensed under
+  CC BY-SA 4.0, [modular-builds.md](./modular-builds.md#community-content)) or `transform`
   (computed from the player's own images on the owner's computer; no pixel is published).
 - `implementations`: per player, one per label set the skin draws (none: the stock labels), since
   each (skin, label set) pair has its own output pin. Two implementations may not draw the same
@@ -264,4 +265,5 @@ and is checked by `patch` and `compose`.
 
 These come with the steps of the design that need them: `provides` (a feature's capabilities for
 others), `acceptance` (named emulator tests, step 2), a screen's layout data and evidence (step
-3), and skin fallbacks. A file using them is refused until then.
+3), and skin fallbacks. A file using them is refused until then. A skin's authors and its art
+licence notice get their place in the format with the first committed art (step 4).

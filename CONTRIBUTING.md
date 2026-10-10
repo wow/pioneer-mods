@@ -11,6 +11,11 @@ This project is unofficial and experimental. Please read [README.md](./README.md
 3. Keep changes focused and easy to review.
 4. Add or update tests for behavior changes.
 5. Update documentation when behavior, compatibility, or release process changes.
+6. **Code** is contributed under the repository's MIT licence ([LICENSE](./LICENSE)). **Art**
+   (skins) is contributed under
+   [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/): declare that it is your own
+   work and holds no image extracted from vendor firmware, and name its authors
+   ([docs/modular-builds.md](./docs/modular-builds.md#community-content)).
 
 ## Development flow
 

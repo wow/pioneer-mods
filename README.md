@@ -220,7 +220,8 @@ called "the reference implementation".
 
 ## Project governance docs
 
-- [LICENSE](./LICENSE)
+- [LICENSE](./LICENSE) (code, MIT); skin art is licensed under CC BY-SA 4.0
+  ([community content](./docs/modular-builds.md#community-content))
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 - [SECURITY.md](./SECURITY.md)
