@@ -6,6 +6,7 @@ mod common;
 use common::recipe::{Fixture, replacement, stock_application};
 use patch_core::xdj700::RecipeError;
 use patch_schema::Replacement;
+use std::ops::Range;
 
 /// A replacement of `bytes_hex` at `offset`, with the helper's window for a span of that length.
 fn kept(offset: usize, bytes_hex: &str) -> Replacement {
@@ -17,10 +18,18 @@ fn kept(offset: usize, bytes_hex: &str) -> Replacement {
 }
 
 /// `bytes_hex` for the stock bytes at `range`, written explicitly.
-fn stock_hex(range: std::ops::Range<usize>) -> String {
+fn stock_hex(range: Range<usize>) -> String {
     stock_application()[range]
         .iter()
         .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// `bytes_hex` that changes every stock byte at `range` (each inverted).
+fn changed_hex(range: Range<usize>) -> String {
+    stock_application()[range]
+        .iter()
+        .map(|byte| format!("{:02x}", !byte))
         .collect()
 }
 
@@ -53,7 +62,7 @@ fn counts_only_written_bytes_against_the_leak_rule() {
             index: 0,
             unchanged: 20,
             longest_run: 20,
-            len: 22
+            written: 22
         })
     );
     // ...kept, they are not published.
@@ -76,7 +85,7 @@ fn a_written_stock_byte_still_counts_and_edges_must_change() {
             index: 0,
             unchanged: 3,
             longest_run: 3,
-            len: 5
+            written: 5
         })
     );
     let two = format!(
@@ -95,5 +104,52 @@ fn a_written_stock_byte_still_counts_and_edges_must_change() {
     assert_eq!(
         fixture.apply(&fixture.recipe(vec![kept(0x900, &edge)])),
         Err(RecipeError::UnchangedSpanEdge { index: 0 })
+    );
+}
+
+/// The half rule counts the bytes a span writes, not its length: three of five written bytes
+/// equal stock, more than half of five but not of the seven bytes the span covers.
+#[test]
+fn the_half_rule_counts_written_bytes_not_the_span() {
+    let fixture = Fixture::new();
+    let span = format!("aa{}----bb", stock_hex(0x901..0x904));
+
+    assert_eq!(
+        fixture.apply(&fixture.recipe(vec![kept(0x900, &span)])),
+        Err(RecipeError::UnchangedSpanBytes {
+            index: 0,
+            unchanged: 3,
+            longest_run: 3,
+            written: 5
+        })
+    );
+}
+
+/// A kept byte ends a run of written stock bytes. The span writes `aa`, 62 stock bytes with one
+/// kept byte among them, then 61 changed bytes: 62 of 124 written bytes equal stock, exactly
+/// half. Split 31 and 31 around the kept byte it is accepted; split 32 and 30 it is not.
+#[test]
+fn a_kept_byte_ends_a_run_of_written_stock_bytes() {
+    let fixture = Fixture::new();
+    let span = |first: usize| {
+        let kept_at = 0x901 + first;
+        format!(
+            "aa{}--{}{}",
+            stock_hex(0x901..kept_at),
+            stock_hex(kept_at + 1..0x940),
+            changed_hex(0x940..0x97d)
+        )
+    };
+    let apply = |first| fixture.apply(&fixture.recipe(vec![kept(0x900, &span(first))]));
+
+    assert!(apply(31).is_ok(), "31 and 31");
+    assert_eq!(
+        apply(32),
+        Err(RecipeError::UnchangedSpanBytes {
+            index: 0,
+            unchanged: 62,
+            longest_run: 32,
+            written: 124
+        })
     );
 }

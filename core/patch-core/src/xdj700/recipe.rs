@@ -259,30 +259,17 @@ pub(super) fn rebuild_recipe(
                 images.push(image_range(index, edit, decoded.len())?);
             }
             // The version string, then every run of written bytes, then every edited image row.
-            let mut changed = Vec::with_capacity(recipe.replacements.len() + 1);
-            changed.push(block.text_range());
+            let mut changed = vec![block.text_range()];
             for replacement in &recipe.replacements {
                 // Inside its precondition window, which is inside the application. Only written
-                // bytes are declared, so the bounded diff also checks that kept (`--`) bytes stay
+                // runs are declared, so the bounded diff also checks that kept (`--`) bytes stay
                 // stock.
                 let start = usize::try_from(replacement.offset).expect("inside the window");
-                let pattern = replacement.pattern().expect("validated pattern");
-                let mut run: Option<usize> = None;
-                for (at, byte) in (start..).zip(&pattern) {
-                    match (byte, run) {
-                        (Some(byte), _) => {
-                            decoded[at] = *byte;
-                            run.get_or_insert(at);
-                        }
-                        (None, Some(from)) => {
-                            changed.push(from..at);
-                            run = None;
-                        }
-                        (None, None) => {}
-                    }
+                for (at, bytes) in replacement.written_runs().expect("validated pattern") {
+                    let run = start + at..start + at + bytes.len();
+                    decoded[run.clone()].copy_from_slice(&bytes);
+                    changed.push(run);
                 }
-                // The last byte is written (`validate`), so a run is open here.
-                changed.push(run.expect("written last byte")..start + pattern.len());
             }
             // Images are clear of the replacements' windows and of each other (`validate`), so
             // each still holds its stock pixels here.

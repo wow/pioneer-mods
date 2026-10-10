@@ -15,13 +15,14 @@
 //! or tables, and review is the backstop.
 //! Only the project's own replacement bytes are written; a `--` in `bytes_hex` keeps the stock
 //! byte at that place without publishing it, so changes a few bytes apart (fields of a table) fit
-//! one span. Image edits ([`crate::image`]) change
-//! RGB565 images without publishing any stock pixel or any hash of one; a recipe with image edits
-//! must pin its output instead (`expected.application_sha256`). The static checks here need no
-//! firmware; the release-specific rules (protected ranges, label and reported-version order,
-//! preconditions) are enforced by the engine in `patch-core`.
+//! one span ([`crate::pattern`]). Image edits ([`crate::image`]) change RGB565 images without
+//! publishing any stock pixel or any hash of one; a recipe with image edits must pin its output
+//! instead (`expected.application_sha256`). The static checks here need no firmware; the
+//! release-specific rules (protected ranges, label and reported-version order, preconditions) are
+//! enforced by the engine in `patch-core`.
 
 use crate::image::{ImageEdit, ImageEditError};
+use crate::pattern::check_kept;
 use crate::windows::WindowOwner;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -83,7 +84,7 @@ pub struct Replacement {
     pub offset: u64,
     /// The replacement bytes, as lowercase or uppercase hex; its length is the span length. A `--`
     /// in place of a byte keeps the stock byte there (it is not published); the first and last
-    /// bytes must be written.
+    /// bytes must be written, and fewer than [`MIN_PRECONDITION_LEN`] in a row may be kept.
     pub bytes_hex: String,
     /// What the stock application must hold around the span before anything is replaced.
     pub precondition: Precondition,
@@ -113,13 +114,6 @@ impl Replacement {
     /// Whether the span is empty (never true for a validated recipe).
     pub fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    /// The span byte by byte: `Some(byte)` to write, `None` where `bytes_hex` holds `--` and the
-    /// stock byte is kept. `None` unless `bytes_hex` is non-empty, has an even length, holds hex
-    /// digit pairs or `--`, and writes its first and last bytes.
-    pub fn pattern(&self) -> Option<Vec<Option<u8>>> {
-        decode_pattern(&self.bytes_hex)
     }
 
     /// The precondition window `offset - before .. offset + len + after`, or `None` if it would
@@ -160,10 +154,20 @@ pub enum RecipeV2Error {
     #[error("reported_version {0:?} is not of the form X.YY")]
     InvalidReportedVersion(String),
     #[error(
-        "replacements[{index}].bytes_hex must be pairs of hex digits, or `--` to keep a stock \
-         byte, and write its first and last bytes"
+        "replacements[{index}].bytes_hex must be pairs of hex digits, or `--` to keep a stock byte"
     )]
     InvalidReplacementBytes { index: usize },
+    #[error(
+        "replacements[{index}].bytes_hex must write its first and last bytes (a kept stock byte \
+         at an edge belongs outside the span, in its window)"
+    )]
+    KeptSpanEdge { index: usize },
+    #[error(
+        "replacements[{index}].bytes_hex keeps {len} stock bytes in a row; fewer than \
+         {MIN_PRECONDITION_LEN} may be kept in a row, so split a longer stretch between two \
+         replacements"
+    )]
+    LongKeptRun { index: usize, len: usize },
     #[error("replacements[{index}].purpose must not be empty")]
     EmptyPurpose { index: usize },
     #[error("replacements[{index}] starts before the end of replacements[{previous}]")]
@@ -231,9 +235,10 @@ impl RecipeV2 {
                 &format!("replacements[{index}].precondition.sha256"),
                 &precondition.sha256,
             )?;
-            if replacement.pattern().is_none() {
-                return Err(RecipeV2Error::InvalidReplacementBytes { index });
-            }
+            let pattern = replacement
+                .pattern()
+                .ok_or(RecipeV2Error::InvalidReplacementBytes { index })?;
+            check_kept(index, &pattern)?;
             if replacement.purpose.trim().is_empty() {
                 return Err(RecipeV2Error::EmptyPurpose { index });
             }
@@ -354,23 +359,4 @@ pub fn bare_version_number(version: &str) -> Option<u16> {
 
 fn is_bare_version(value: &str) -> bool {
     bare_version_number(value).is_some()
-}
-
-fn decode_pattern(hex: &str) -> Option<Vec<Option<u8>>> {
-    if hex.is_empty() || !hex.len().is_multiple_of(2) {
-        return None;
-    }
-    let pattern: Vec<Option<u8>> = hex
-        .as_bytes()
-        .chunks(2)
-        .map(|pair| {
-            if pair == b"--" {
-                return Some(None);
-            }
-            let digit = |byte: u8| (byte as char).to_digit(16);
-            Some(Some((digit(pair[0])? * 16 + digit(pair[1])?) as u8))
-        })
-        .collect::<Option<_>>()?;
-    let written = |byte: Option<&Option<u8>>| byte.is_some_and(Option::is_some);
-    (written(pattern.first()) && written(pattern.last())).then_some(pattern)
 }

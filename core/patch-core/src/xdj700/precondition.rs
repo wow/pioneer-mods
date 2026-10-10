@@ -154,7 +154,7 @@ fn check_leaks(
             index,
             unchanged,
             longest_run,
-            len: written,
+            written,
         });
     }
     let outside: Vec<u8> = stock[window.start..span.start]

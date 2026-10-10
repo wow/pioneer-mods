@@ -32,8 +32,10 @@ pub struct LabelledWindow {
     /// A replacement's precondition window (the bytes its hash covers), or an edited image (the
     /// bytes the edit reads; no hash covers them).
     pub window: Range<u64>,
-    /// The bytes a replacement writes, inside its window; `None` for an image edit, which may
-    /// change any row of its image (`ImageEdit::changed_rows` says which).
+    /// A replacement's span, `offset .. offset + len`, inside its window: the bytes it writes and
+    /// any stock bytes it keeps between them (`--`), so a protected range that overlaps only kept
+    /// bytes overlaps the span too. `None` for an image edit, which may change any row of its
+    /// image (`ImageEdit::changed_rows` says which).
     pub span: Option<Range<u64>>,
 }
 
