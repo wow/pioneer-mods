@@ -1,0 +1,169 @@
+# The catalog: players, screens, features and skins
+
+The catalog is the data a modular build is chosen from: which players the project supports, their
+screens, the features that change behaviour and the skins that change a screen's look, each with
+one implementation (a schema-v2 recipe) per player. It implements the concepts of the design,
+[modular-builds.md](./modular-builds.md); recipes are described in [recipes.md](./recipes.md).
+
+**Status.** The schemas, the committed XDJ-700 v1.15 catalog and the checks that need no firmware
+are implemented. Choosing from it (a profile resolved into fragments, with a reason for every
+switched-off item) is next; composing fragments is already `patch-cli compose`.
+
+## Layout
+
+```text
+catalog/
+  players/<player>.json             one model and firmware release
+  screens/<player>/<screen>.json    one screen of that player, and its slots
+  features/<feature>.json           a behaviour change, with an implementation per player
+  skins/<skin>.json                 a look for one screen, with implementations per player
+```
+
+Every file is named after its `id`, and a screen lies under its player's directory, which must
+belong to a player in `players/` and hold at least one screen. Anything
+else in `catalog/` is refused, so a misnamed file cannot be skipped silently; only a `README.md`
+and a `.DS_Store` are skipped. A symbolic link in the catalog, or in a recipe path, is refused: it
+could point outside the tree. Every file has `"schema_version": 1` and names a `maintainer`.
+Unknown fields, and a key given twice in an object, are refused.
+
+Ids are lowercase letters, digits and `-` (a player id may also hold `.`: `xdj700-v1.15`, the
+release id recipes name), at most 64 bytes. Capability and slot names are lowercase segments of
+letters, digits and `_` joined by `.` (`beat_loop.pad`). A slot is referred to as
+`<screen>.<slot name>` (`perform.beat_loop.pad`).
+
+## Player
+
+[`catalog/players/xdj700-v1.15.json`](../catalog/players/xdj700-v1.15.json):
+
+- `model`, and `firmware`: the update's file name and its pins (`upd_sha256`,
+  `application_sha256`), the same as its recipes' `target`. A test checks them against the
+  engine's own pins.
+- `screen_class`: `width`, `height` and `pixels` (`rgb565`), what a skin is drawn for.
+- `budgets.compressed_main_growth_bytes`: the engine's bound on the compressed MAIN image's
+  growth (checked against it).
+- `capabilities`: named facts about the stock firmware. Each gives the `values` established for
+  it, or why it is `unavailable` ("absent on this model"), and its `evidence`. Values list what the
+  evidence shows, not necessarily everything the firmware holds: `beat_loop.lengths` names the six
+  stock button lengths and 32, the one other length a button has been shown to set.
+- `screens`: the screens catalogued for it, each with its own file.
+
+## Screen
+
+[`catalog/screens/xdj700-v1.15/perform.json`](../catalog/screens/xdj700-v1.15/perform.json): an
+`id` the same for every player that has the screen (`main`, `perform`), its `player`, a `title`,
+and its `slots`: named places a skin can fill or a feature can use, each with a `count` (six BEAT
+LOOP buttons) and a `description`. Layout data and the emulator evidence that decides which edits
+a screen accepts come with the screen catalogue (design roadmap, step 3).
+
+## Feature
+
+[`catalog/features/beat-loop-1-to-32.json`](../catalog/features/beat-loop-1-to-32.json):
+
+- `requires`: `capabilities`, each holding the listed values (an empty list: only available), and
+  `slots`. A feature is declared against these names, never against a player.
+- `conflicts`: features that mean something else for the same controls, listed on both sides.
+  This is about meaning, not bytes: `beat-loop-1-to-32` and `beat-loop-16-plays-32` share a
+  replacement, which composition would apply once, but define different button sets.
+- `labels`: the text the feature gives each slot it relabels, one label per element (1 to 16
+  printable ASCII characters). Every relabelled slot is in `requires.slots`, and two features that
+  relabel one slot must conflict.
+- `implementations`, by player id, a list: one per way of drawing the labels (`draws_labels`), so
+  a feature can have one implementation that draws them in the stock style and one that leaves
+  them to the chosen skin. Each has:
+  - `recipe`: a path under `recipes/`. The recipe must be for that player, carry its pins, and pin
+    its output (`expected.application_sha256`), since every fragment of a build is checked
+    against its own output.
+  - `maturity`: `stable`, `experimental` or `dev`, and its `evidence`. A passed hardware stage is
+    needed for `stable`, but the maintainer decides: `beat-loop-16-plays-32` passed on an owner's
+    unit and stays `experimental` while its lit-pad limit stands.
+  - `limits`: known limits the builder shows with the feature.
+  - `draws_labels`: the screens whose labels the recipe draws itself, each in the style of a skin
+    (`{"perform": "stock"}`), so each such screen must use that skin. A labelled screen not listed
+    is left to the chosen skin, which must have an implementation drawing that label set (the
+    built-in `stock` skin has none: its labels are drawn by features). Labels belong to skins;
+    today's stage-7 recipe draws its labels in the stock style, so the PERFORM screen keeps the
+    stock skin with it.
+
+The implementation must meet the feature's requirements on its player: the capabilities with
+their values, and the slots, with as many elements as there are labels.
+
+## Skin
+
+A skin is a look for one `screen`. It is named for what it looks like, never after another
+product, and carries no logos. The skin `stock` (the player's own look) is built in and has no
+file. No skin is committed yet; the format:
+
+```json
+{
+  "schema_version": 1,
+  "id": "dark-pads",
+  "title": "Dark pads",
+  "screen": "perform",
+  "requires": {
+    "screen_class": { "width": 800, "height": 480, "pixels": "rgb565" },
+    "slots": ["beat_loop.pad"]
+  },
+  "art": "original",
+  "implementations": {
+    "xdj700-v1.15": [
+      { "recipe": "recipes/…", "maturity": "dev", "evidence": "…" },
+      {
+        "recipe": "recipes/…", "maturity": "dev", "evidence": "…",
+        "labels": { "beat_loop.pad": ["1", "2", "4", "8", "16", "32"] }
+      }
+    ]
+  },
+  "maintainer": "…"
+}
+```
+
+- `art`: `original` (drawn by the skin's authors, who declare it their own) or `transform`
+  (computed from the player's own images on the owner's computer; no pixel is published).
+- `implementations`: per player, one per label set the skin draws (none: the stock labels), since
+  each (skin, label set) pair has its own output pin. Two implementations may not draw the same
+  label set. The player must have the screen, the required slots and the screen class.
+
+## Profile
+
+The owner's choices, kept apart from the catalog so that they survive a firmware port:
+
+```json
+{
+  "schema_version": 1,
+  "player": "xdj700-v1.15",
+  "screens": { "perform": "stock" },
+  "features": ["beat-loop-1-to-32"],
+  "label": "Ver1.16",
+  "reported_version": "0.12",
+  "maturity": "experimental"
+}
+```
+
+A screen not listed keeps the `stock` skin. `maturity` is the least settled implementation the
+owner accepts: `stable` (the default) or `experimental`; `dev` is never offered. The label and
+reported version follow the recipe rules; the engine checks them against the release.
+
+## Checks
+
+Each file is checked on its own, then the catalog as a whole, with no firmware:
+
+- ids unique; every player's screens have files, and every screen's player lists it;
+- conflicts resolved and listed on both sides; features that relabel one slot conflict;
+- every implementation's player exists and meets the requirements; label counts match slot
+  counts; a skin named in `draws_labels` is built in, or exists, is for that screen and has an
+  implementation for the player;
+- every recipe named exists, is a valid schema-v2 recipe for its player, carries the player's pins
+  and pins its output.
+
+The loader (`patch_cli::catalog::load_catalog`) then holds the catalog to the engine: every
+player is a release the engine pins, with the same pins and budget, and every recipe passes the
+engine's firmware-free checks for its release. So what loads is what the engine accepts, short of
+the firmware itself. CI loads the committed catalog (`core/patch-cli/tests/committed_catalog.rs`).
+Whether a recipe applies to the official file, and what a composed build holds, needs the file
+and is checked by `patch` and `compose`.
+
+## Not yet in the format
+
+These come with the steps of the design that need them: `provides` (a feature's capabilities for
+others), `acceptance` (named emulator tests, step 2), a screen's layout data and evidence (step
+3), and skin fallbacks. A file using them is refused until then.

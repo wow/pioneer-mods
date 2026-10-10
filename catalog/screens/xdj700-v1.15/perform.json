@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "perform",
+  "player": "xdj700-v1.15",
+  "title": "PERFORM screen",
+  "slots": {
+    "beat_loop.pad": {
+      "count": 6,
+      "description": "The six BEAT LOOP buttons, left to right."
+    }
+  },
+  "maintainer": "wow"
+}

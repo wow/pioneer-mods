@@ -43,6 +43,11 @@ what needs no firmware, and the maintainer runs the rest before an item is offer
 
 ## Concepts
 
+These concepts are implemented as the catalog's format, [catalog.md](./catalog.md). The sketches
+below are illustrative; the format differs in details: requirements are structured lists, each
+implementation carries its maturity, evidence and known limits, and a skin has one implementation
+per label set.
+
 ### Player (target)
 
 One file per model and firmware release:
@@ -179,7 +184,8 @@ firmware port:
    official file, and the stock no-op stick).
 
 Steps 2 to 4 for recipes are implemented as `patch-cli compose` ([recipes.md](./recipes.md),
-"Composing recipes"); the profile, resolution and skins are not yet.
+"Composing recipes"), and the catalog and profile formats in [catalog.md](./catalog.md);
+resolution and skins are not yet.
 
 A combination of fragments is a new update: its application yields a different compressed stream
 and needs its own test (flashing guide, section 5). So a **listed** combination is rehearsed as a
@@ -200,8 +206,9 @@ is available the builder rehearses it both ways before writing it.
   read at start-up. The probes used on 2026-10-10 (call logs, the pad-state array, screen-region
   measurements) become these tests. Stage 7 shows why: its lengths were right, but a test of the
   lit pad would have caught that the lighting follows the stock lengths.
-- **Maturity tiers:** `stable` (passed on hardware), `experimental` (emulator only), `dev` (not
-  offered). The builder offers `stable` by default.
+- **Maturity tiers:** `stable` (passed a hardware stage, and the maintainer offers it by
+  default), `experimental` (emulator rehearsals at least; a hardware pass alone does not make an
+  implementation `stable`), `dev` (not offered). The builder offers `stable` by default.
 - **Hardware stages:** new fragments go through the flashing guide's staged tests on the owner's
   units (XDJ-700 and XDJ-1000MK2), with the official file as the way back.
 

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "beat-loop-1-to-32",
+  "title": "BEAT LOOP 1, 2, 4, 8, 16, 32",
+  "description": "The six BEAT LOOP buttons set 1, 2, 4, 8, 16 and 32 beats, and their labels read so.",
+  "requires": {
+    "capabilities": {
+      "beat_loop.button_count": ["6"],
+      "beat_loop.lengths": ["1", "2", "4", "8", "16", "32"]
+    },
+    "slots": ["perform.beat_loop.pad"]
+  },
+  "conflicts": ["beat-loop-16-plays-32"],
+  "labels": {
+    "perform.beat_loop.pad": ["1", "2", "4", "8", "16", "32"]
+  },
+  "implementations": {
+    "xdj700-v1.15": [
+      {
+        "recipe": "recipes/xdj700-v1.15/beat-loop-1-to-32.json",
+        "maturity": "experimental",
+        "evidence": "Rehearsed in emulation, both ways; not yet tested on hardware (docs/xdj700-flashing.md, stage 7).",
+        "limits": [
+          "The lit pad follows the stock lengths: the pad to the right of the touched one lights, and the 32 pad lights none (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\")."
+        ],
+        "draws_labels": { "perform": "stock" }
+      }
+    ]
+  },
+  "maintainer": "wow"
+}

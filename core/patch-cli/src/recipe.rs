@@ -31,7 +31,13 @@ pub fn read_recipe(path: &Path) -> Result<Vec<u8>> {
 /// Reads `path` only if it is a regular file of at most `cap` bytes, checked before reading and
 /// again after, so a file that grows while it is read is refused too. `what` names the file in a
 /// read error, `refused` in a refusal, and `limit` what the cap stands for.
-fn read_capped(path: &Path, cap: u64, what: &str, refused: &str, limit: &str) -> Result<Vec<u8>> {
+pub(crate) fn read_capped(
+    path: &Path,
+    cap: u64,
+    what: &str,
+    refused: &str,
+    limit: &str,
+) -> Result<Vec<u8>> {
     let read_failed = || format!("failed to read {what} '{}'", path.display());
     let file = open_regular_file(path).with_context(read_failed)?;
     let len = file.metadata().with_context(read_failed)?.len();
