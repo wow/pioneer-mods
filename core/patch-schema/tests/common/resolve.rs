@@ -20,6 +20,7 @@ pub fn on(recipe: &str) -> Status {
     Status::On {
         recipe: recipe.to_owned(),
         maturity: Maturity::Experimental,
+        evidence: "rehearsed".to_owned(),
         limits: Vec::new(),
     }
 }

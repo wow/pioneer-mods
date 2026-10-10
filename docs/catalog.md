@@ -151,7 +151,8 @@ reported version follow the recipe rules; the engine checks them against the rel
 
 `patch-cli resolve --profile <file>` (run from the repository root, or with `--root`) loads the
 catalog, resolves the profile and prints every choice, on or off with its reason, and the
-fragments a build composes. It needs no firmware and writes nothing:
+fragments a build composes; an item that is on comes with its evidence and limits. It needs no
+firmware and writes nothing:
 
 ```text
 player: xdj700-v1.15
@@ -161,11 +162,12 @@ accepts: experimental and stable
 screen main: stock
 screen perform: stock
 feature beat-loop-1-to-32: on (experimental, recipes/xdj700-v1.15/beat-loop-1-to-32.json)
+  evidence: Rehearsed in emulation, both ways; not yet tested on hardware (…)
   limit: The lit pad follows the stock lengths: …
 fragments: 1
 fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json (experimental; feature beat-loop-1-to-32)
 tier: experimental
-note: a build composes these fragments under the profile's label and reported version; …
+note: the build is recipes/xdj700-v1.15/beat-loop-1-to-32.json's own output, under its own …
 ```
 
 The profile's label and reported version must pass the release's rules (higher than its own
@@ -224,7 +226,10 @@ recipe's own pinned file: the owner-input tests build the stage-5 and stage-7 fi
 
 The note at the end of the resolution says what the build is. Anything but a recipe's own pinned
 file is a new update: rehearse it both ways in emulation before flashing, and follow the
-[flashing guide](./xdj700-flashing.md). Flashing is the owner's decision.
+[flashing guide](./xdj700-flashing.md). Flashing is the owner's decision. After the output's
+identity, `restore:` gives the restore plan: the official update, accepted over the build because
+the build reports a lower version, and the stock no-op stick as the backup (flashing guide,
+section 3, step 5).
 
 ## Checks
 

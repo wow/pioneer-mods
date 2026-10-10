@@ -69,6 +69,7 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
         recipes,
         names,
         refusing,
+        verb: "compose",
         input: &args.input,
         output: &args.output,
         label: &args.label,
@@ -91,6 +92,8 @@ pub(super) struct ComposeJob<'a> {
     pub(super) names: Vec<String>,
     /// Why a refusal happened, for example "refusing to compose recipes for 'XDJ700.UPD'".
     pub(super) refusing: String,
+    /// The command, for the input's refusals ("refusing to compose '…/XDJ700.UPD'").
+    pub(super) verb: &'static str,
     pub(super) input: &'a Path,
     pub(super) output: &'a Path,
     pub(super) label: &'a str,
@@ -107,6 +110,7 @@ pub(super) fn compose_checked(job: ComposeJob<'_>) -> Result<()> {
         recipes: checked,
         names,
         refusing,
+        verb,
         input: input_path,
         output,
         label,
@@ -143,7 +147,7 @@ pub(super) fn compose_checked(job: ComposeJob<'_>) -> Result<()> {
     // Every refusal names the recipes it is about.
     let refuse = |error: ComposeError| match error {
         ComposeError::Fragment { index, source, .. } => {
-            checked[index].refusal(input_path, "compose", source)
+            checked[index].refusal(input_path, verb, source)
         }
         other => {
             let named: Vec<&str> = other
@@ -163,7 +167,7 @@ pub(super) fn compose_checked(job: ComposeJob<'_>) -> Result<()> {
     // version.
     let composition = check_composition(&fragments, target, composition, checks).map_err(refuse)?;
     ensure_safe_output_path(input_path, output, Overwrite::Never)?;
-    let input = checked[0].read_input(input_path, "compose")?;
+    let input = checked[0].read_input(input_path, verb)?;
 
     let composed = composition.compose(&input).map_err(refuse)?;
     let rebuilt = &composed.rebuilt;

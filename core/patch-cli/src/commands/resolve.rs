@@ -26,7 +26,8 @@ pub fn resolve(args: ResolveArgs) -> Result<()> {
     Ok(())
 }
 
-/// Prints every choice of `resolution`, on or off with its reason, its fragments and its tier.
+/// Prints every choice of `resolution`, on (with its evidence and limits) or off with its reason,
+/// its fragments and its tier.
 pub(super) fn print_resolution(resolution: &Resolution) {
     println!("player: {}", resolution.player);
     println!("label: {}", resolution.label);
@@ -44,7 +45,7 @@ pub(super) fn print_resolution(resolution: &Resolution) {
                 println!("screen {}: skin {} {status}", screen.screen, screen.chosen)
             }
         }
-        print_limits(&screen.status);
+        print_backing(&screen.status);
     }
     for screen in &resolution.missing_screens {
         println!(
@@ -54,7 +55,7 @@ pub(super) fn print_resolution(resolution: &Resolution) {
     }
     for feature in &resolution.features {
         println!("feature {}: {}", feature.feature, describe(&feature.status));
-        print_limits(&feature.status);
+        print_backing(&feature.status);
     }
     println!("fragments: {}", resolution.fragments.len());
     for (index, fragment) in resolution.fragments.iter().enumerate() {
@@ -105,8 +106,13 @@ fn describe(status: &Status) -> String {
     }
 }
 
-fn print_limits(status: &Status) {
-    if let Status::On { limits, .. } = status {
+/// What backs an item that is on: the evidence for its maturity, and its known limits.
+fn print_backing(status: &Status) {
+    if let Status::On {
+        evidence, limits, ..
+    } = status
+    {
+        println!("  evidence: {evidence}");
         for limit in limits {
             println!("  limit: {limit}");
         }

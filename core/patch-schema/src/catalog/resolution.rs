@@ -40,10 +40,12 @@ pub struct FeatureResolution {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
-    /// On, built by this recipe; `limits` are the implementation's known limits.
+    /// On, built by this recipe; `evidence` backs the implementation's maturity, and `limits`
+    /// are its known limits.
     On {
         recipe: String,
         maturity: Maturity,
+        evidence: String,
         limits: Vec<String>,
     },
     /// The built-in `stock` skin: the screen keeps the player's own look, with no recipe.

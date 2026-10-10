@@ -51,7 +51,7 @@ fn stderr(output: &Output) -> String {
 }
 
 #[test]
-fn a_feature_is_on_with_its_recipe_and_limits() {
+fn a_feature_is_on_with_its_recipe_evidence_and_limits() {
     let out = stdout(&run(
         &profile(&["beat-loop-1-to-32"], "experimental"),
         &repo_root(),
@@ -63,6 +63,7 @@ fn a_feature_is_on_with_its_recipe_and_limits() {
         "screen main: stock",
         "screen perform: stock",
         "feature beat-loop-1-to-32: on (experimental, recipes/xdj700-v1.15/beat-loop-1-to-32.json)",
+        "  evidence: Rehearsed in emulation, both ways; not yet tested on hardware",
         "  limit: The lit pad follows the stock lengths",
         "fragments: 1",
         "fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json (experimental; feature \

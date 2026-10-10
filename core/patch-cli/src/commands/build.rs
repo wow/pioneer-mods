@@ -36,7 +36,8 @@ pub struct BuildArgs {
 
 /// Resolves a profile against the catalog and composes its fragments under the profile's label
 /// and reported version into one verified update (`docs/catalog.md`, "Building a profile").
-/// Everything that needs no firmware is checked before the input is read.
+/// Everything that needs no firmware is checked before the input is read. Reports the
+/// resolution (each item on with its evidence), the output's identity and the restore plan.
 pub fn build(args: BuildArgs) -> Result<()> {
     let catalog = load_catalog(&args.root)?;
     let profile = read_profile(&args.profile)?;
@@ -66,11 +67,23 @@ pub fn build(args: BuildArgs) -> Result<()> {
         recipes,
         names,
         refusing,
+        verb: "build",
         input: &args.input,
         output: &args.output,
         label: &resolution.label,
         reported_version: &resolution.reported_version,
         protected_set: args.protected_set.as_deref(),
         no_protected_set: args.no_protected_set,
-    })
+    })?;
+    // The resolution's player is in the catalog; resolution refuses one it lacks.
+    let player = catalog.catalog().player(&resolution.player);
+    let file = player.map_or("its file", |player| player.firmware.file.as_str());
+    println!(
+        "restore: the official update ({file}, the input) brings back the stock application: the \
+         build reports {}, lower than the official release, so the unit accepts the official \
+         file over it; keep the stock no-op stick as the backup (docs/xdj700-flashing.md, \
+         section 3, step 5)",
+        resolution.reported_version
+    );
+    Ok(())
 }
