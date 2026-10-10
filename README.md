@@ -37,9 +37,12 @@ This repository currently includes:
 - `rebuild` command: writes a verified no-op rebuild of the official v1.15 update (stock
   application re-encoded) under a declared version label
 - Recipe schema v2: same-length changes to the decoded application of a pinned release, with
-  hash preconditions over at least 32 stock bytes around each span (recipes hold hashes, and
-  stock bytes only in short unchanged gaps inside a span), a protected header and version block,
-  and a bounded diff, written as a complete, verified update by `patch`. Image edits relabel
+  hash preconditions over at least 32 stock bytes around each span, a protected header and
+  version block, and a bounded diff, written as a complete, verified update by `patch`. Recipes
+  hold hashes, not stock bytes: `--` in a span keeps a stock byte without publishing it, and a
+  written byte may equal stock only for at most half of a span, fewer than 32 in a row.
+  Precondition windows of all committed recipes are disjoint, except where one recipe repeats
+  another's replacement exactly, so a recipe can build on another's change. Image edits relabel
   buttons and other RGB565 images without publishing vendor pixels: the recipe carries only
   coordinates and its own glyph mask.
   "Verified" means checked against the input and the recipe, not safe to flash. The start-up
@@ -90,6 +93,15 @@ never commit firmware):
 PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD \
   cargo test -p patch-core --test official_firmware -- --ignored
 ```
+
+The committed recipes (details in [docs/recipes.md](./docs/recipes.md), stages in the
+[flashing guide](./docs/xdj700-flashing.md)):
+
+| Recipe | What it does | Status |
+| --- | --- | --- |
+| `xdj700-v1.15/version-marker-0.10.json` | Only the reported version, `0.10` | Stage 3, passed on an owner's unit |
+| `xdj700-v1.15/beat-loop-16-plays-32.json` | The BEAT LOOP button labelled 16 sets a 32-beat loop | Stage 5, passed on an owner's unit |
+| `xdj700-v1.15/beat-loop-1-to-32.json` | The BEAT LOOP pads read and set 1, 2, 4, 8, 16 and 32 beats; the lit pad is the one to the right (known limit) | Stage 7, rehearsed in emulation only |
 
 Apply a schema-v2 recipe (see [docs/recipes.md](./docs/recipes.md)), for example the committed
 version marker, which reproduces the hardware-tested stage-3 file:
