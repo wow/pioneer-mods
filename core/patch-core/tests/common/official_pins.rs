@@ -83,3 +83,21 @@ pub const STAGE5_MAIN_SHA256: &str =
 pub const STAGE5_UPD_LEN: usize = 17_368_527;
 pub const STAGE5_UPD_SHA256: &str =
     "144f4b557127a7eec2d5d2f5fadee0e6585f05a83af321097876a0edca345e12";
+
+/// Stage 7: BEAT LOOP 1, 2, 4, 8, 16, 32, built with `patch` from the committed recipe below. Its
+/// application reports `0.12` and differs from stock in the version string, the first byte of
+/// each entry of the BEAT LOOP button table (the sixth as in stage 5), and the label boxes of the
+/// six buttons' 36 images; labelled `Ver1.16`.
+pub const STAGE7_RECIPE: &str = "xdj700-v1.15/beat-loop-1-to-32.json";
+pub const STAGE7_REPORTED_VERSION: &str = "0.12";
+/// The decoded offset of the BEAT LOOP button table: six 4-byte entries, the last of which is
+/// stage 5's span.
+pub const BEAT_LOOP_TABLE_OFFSET: usize = 0xd6220;
+pub const STAGE7_APPLICATION_SHA256: &str =
+    "e3581ea660afc7c1317dcd79f7076d089a1da41c6750df5342623fb2362c0593";
+pub const STAGE7_MAIN_LEN: usize = 7_250_308;
+pub const STAGE7_MAIN_SHA256: &str =
+    "f3951bef380ee59c070e613c2876297b85d9e1c9e29be6aa3db72647d1ae8ee4";
+pub const STAGE7_UPD_LEN: usize = 17_367_457;
+pub const STAGE7_UPD_SHA256: &str =
+    "259c75daa04356d2be433ea731ed38b20fbc8cdea12e4fe14fe1dda353befa58";

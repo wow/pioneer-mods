@@ -19,7 +19,8 @@ use common::{
 use official_pins::{
     NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES, STAGE3_APPLICATION_SHA256, STAGE3_LABEL,
     STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STAGE5_RECIPE, STAGE5_UPD_LEN,
-    STAGE5_UPD_SHA256, STOCK_APPLICATION_SHA256, UPD_ENV,
+    STAGE5_UPD_SHA256, STAGE7_RECIPE, STAGE7_UPD_LEN, STAGE7_UPD_SHA256, STOCK_APPLICATION_SHA256,
+    UPD_ENV,
 };
 use patch_core::{parse_upd, sha256_hex, xdj700};
 use std::path::{Path, PathBuf};
@@ -234,53 +235,49 @@ fn patch_with_the_version_marker_recipe_writes_the_stage3_file() {
     assert_wrote(&result, &output, STAGE3_UPD_LEN, STAGE3_UPD_SHA256);
 }
 
-/// `patch` with the committed beat-loop recipe writes the stage-5 file, run as the flashing guide
-/// gives it: from the repository root, with the recipe's relative path.
+/// `patch` with each committed beat-loop recipe writes its stage file (5 and 7), run as the
+/// flashing guide gives it: from the repository root, with the recipe's relative path.
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
-fn patch_with_the_beat_loop_recipe_writes_the_stage5_file() {
+fn patch_with_the_beat_loop_recipes_writes_the_stage5_and_stage7_files() {
     let input = std::fs::canonicalize(official_input()).expect("input path");
     let dir = tempfile::tempdir().expect("tempdir");
-    let output = dir.path().join("XDJ700.UPD");
     let root = recipes_dir().join("..");
-    let recipe = Path::new("recipes").join(STAGE5_RECIPE);
-
-    let result = run_patch_command_with_args_in_dir(
-        &input,
-        &recipe,
-        &output,
-        &["--no-protected-set"],
-        Some(&root),
-    );
-
-    assert_wrote(&result, &output, STAGE5_UPD_LEN, STAGE5_UPD_SHA256);
-    assert!(
-        text(&result.stdout).contains("protected_set: skipped (--no-protected-set)"),
-        "{}",
-        text(&result.stdout)
-    );
-    assert!(text(&result.stderr).contains("warning: --no-protected-set"));
-
-    // With a protected set clear of the recipe (synthetic: the application's first byte), the
-    // output is the same and the report names the set.
+    // A protected set clear of the recipes (synthetic: the application's first byte).
     let set = dir.path().join("set.tsv");
     std::fs::write(&set, "release xdj700-v1.15\n08000000 08000000 1\n").expect("write set");
-    let with_set = dir.path().join("with-set.UPD");
     let set_arg = set.to_str().expect("UTF-8 path");
-    let result = run_patch_command_with_args_in_dir(
-        &input,
-        &recipe,
-        &with_set,
-        &["--protected-set", set_arg],
-        Some(&root),
-    );
+    let stages = [
+        (5, STAGE5_RECIPE, STAGE5_UPD_LEN, STAGE5_UPD_SHA256),
+        (7, STAGE7_RECIPE, STAGE7_UPD_LEN, STAGE7_UPD_SHA256),
+    ];
 
-    assert_wrote(&result, &with_set, STAGE5_UPD_LEN, STAGE5_UPD_SHA256);
-    assert!(
-        text(&result.stdout).contains("protected_set: 1 range; no span, precondition window or"),
-        "{}",
-        text(&result.stdout)
-    );
+    for (stage, recipe, len, sha256) in stages {
+        let recipe = Path::new("recipes").join(recipe);
+        let output = dir.path().join(format!("stage{stage}.UPD"));
+        let skip = ["--no-protected-set"];
+        let result =
+            run_patch_command_with_args_in_dir(&input, &recipe, &output, &skip, Some(&root));
+
+        assert_wrote(&result, &output, len, sha256);
+        let stdout = text(&result.stdout);
+        assert!(
+            stdout.contains("protected_set: skipped (--no-protected-set)"),
+            "{stdout}"
+        );
+        assert!(text(&result.stderr).contains("warning: --no-protected-set"));
+
+        // With the set, the output is the same and the report names the set.
+        let with_set = dir.path().join(format!("stage{stage}-with-set.UPD"));
+        let args = ["--protected-set", set_arg];
+        let result =
+            run_patch_command_with_args_in_dir(&input, &recipe, &with_set, &args, Some(&root));
+
+        assert_wrote(&result, &with_set, len, sha256);
+        let stdout = text(&result.stdout);
+        let named = "protected_set: 1 range; no span, precondition window or";
+        assert!(stdout.contains(named), "{stdout}");
+    }
 }
 
 /// The stock application of the official file, and the offset of a 2-byte span in the code after

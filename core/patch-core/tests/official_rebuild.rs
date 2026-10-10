@@ -21,12 +21,14 @@ mod official_pins;
 mod recipe_files;
 
 use official_pins::{
-    NOOP_MAIN_LEN, NOOP_MAIN_SHA256, NOOP_UPD_LEN, NOOP_UPD_SHA256, STAGE_FILES,
-    STAGE3_APPLICATION_SHA256, STAGE3_LABEL, STAGE3_MAIN_LEN, STAGE3_MAIN_SHA256, STAGE3_RECIPE,
-    STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256, STAGE5_APPLICATION_SHA256,
-    STAGE5_MAIN_LEN, STAGE5_MAIN_SHA256, STAGE5_RECIPE, STAGE5_REPORTED_VERSION,
-    STAGE5_TABLE_ENTRY_OFFSET, STAGE5_UPD_LEN, STAGE5_UPD_SHA256, STOCK_APPLICATION_SHA256,
-    UPD_ENV, UPD_SHA256,
+    BEAT_LOOP_TABLE_OFFSET, NOOP_MAIN_LEN, NOOP_MAIN_SHA256, NOOP_UPD_LEN, NOOP_UPD_SHA256,
+    STAGE_FILES, STAGE3_APPLICATION_SHA256, STAGE3_LABEL, STAGE3_MAIN_LEN, STAGE3_MAIN_SHA256,
+    STAGE3_RECIPE, STAGE3_REPORTED_VERSION, STAGE3_UPD_LEN, STAGE3_UPD_SHA256,
+    STAGE5_APPLICATION_SHA256, STAGE5_MAIN_LEN, STAGE5_MAIN_SHA256, STAGE5_RECIPE,
+    STAGE5_REPORTED_VERSION, STAGE5_TABLE_ENTRY_OFFSET, STAGE5_UPD_LEN, STAGE5_UPD_SHA256,
+    STAGE7_APPLICATION_SHA256, STAGE7_MAIN_LEN, STAGE7_MAIN_SHA256, STAGE7_RECIPE,
+    STAGE7_REPORTED_VERSION, STAGE7_UPD_LEN, STAGE7_UPD_SHA256, STOCK_APPLICATION_SHA256, UPD_ENV,
+    UPD_SHA256,
 };
 use patch_core::xdj700::{
     APPLICATION_SECTION_OFFSET, OFFICIAL_V115, RecipeChecks, decode_application,
@@ -216,15 +218,19 @@ fn a_modified_application_reporting_1_16_is_refused() {
 }
 
 /// Every committed recipe applies to the official file and produces its pinned identities (the
-/// engine checks `expected`). The version marker reproduces the hardware-tested stage-3 file, and
-/// the beat-loop experiment the stage-5 file, whose application differs from stock in exactly
-/// three bytes: two in the version string (`1.15` to `0.11`) and the last entry of the BEAT LOOP
-/// button table. Compares offsets only; prints no bytes.
+/// engine checks `expected`). The version marker reproduces the hardware-tested stage-3 file, the
+/// beat-loop experiment the stage-5 file, and BEAT LOOP 1, 2, 4, 8, 16, 32 the stage-7 file. The
+/// stage-5 application differs from stock in exactly three bytes: two in the version string (`1.15`
+/// to `0.11`) and the last entry of the BEAT LOOP button table. The stage-7 application differs in
+/// the version string, the first byte of each of the table's six entries, and inside the label
+/// boxes (erase and glyph) of each of its 36 images. Compares offsets only; prints no bytes.
 #[test]
 #[ignore = "needs owner-supplied firmware; see module docs"]
 fn every_committed_recipe_applies_and_reproduces_its_stage_file() {
     let official = official_upd();
-    let (mut reproduced_stage3, mut reproduced_stage5) = (false, false);
+    let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
+    let version = xdj700::VERSION_STRING_OFFSET;
+    let mut reproduced = [false; 3];
 
     for (path, recipe) in committed_recipes() {
         let name = path.display();
@@ -241,7 +247,7 @@ fn every_committed_recipe_applies_and_reproduces_its_stage_file() {
                 rebuilt.application_reported_version(),
                 Some(STAGE3_REPORTED_VERSION)
             );
-            reproduced_stage3 = true;
+            reproduced[0] = true;
         }
         if path.ends_with(STAGE5_RECIPE) {
             assert_eq!(rebuilt.application_sha256(), STAGE5_APPLICATION_SHA256);
@@ -253,26 +259,82 @@ fn every_committed_recipe_applies_and_reproduces_its_stage_file() {
                 rebuilt.application_reported_version(),
                 Some(STAGE5_REPORTED_VERSION)
             );
-            let stock = decode_application(&parse_upd(&official).expect("parse")).expect("decode");
-            let output =
-                decode_application(&parse_upd(rebuilt.bytes()).expect("parse")).expect("decode");
-            assert_eq!(output.decoded().len(), stock.decoded().len());
-            let changed: Vec<usize> = (stock.decoded().iter().zip(output.decoded()))
-                .enumerate()
-                .filter(|(_, (stock, output))| stock != output)
-                .map(|(offset, _)| offset)
-                .collect();
-            let version = xdj700::VERSION_STRING_OFFSET;
             assert_eq!(
-                changed,
+                changed_offsets(stock.decoded(), rebuilt.bytes()),
                 [version, version + 3, STAGE5_TABLE_ENTRY_OFFSET],
                 "{name}: only the version string and the table entry change"
             );
-            reproduced_stage5 = true;
+            reproduced[1] = true;
+        }
+        if path.ends_with(STAGE7_RECIPE) {
+            assert_eq!(rebuilt.application_sha256(), STAGE7_APPLICATION_SHA256);
+            assert_eq!(rebuilt.main_image_len(), STAGE7_MAIN_LEN);
+            assert_eq!(rebuilt.main_image_sha256(), STAGE7_MAIN_SHA256);
+            assert_eq!(rebuilt.bytes().len(), STAGE7_UPD_LEN);
+            assert_eq!(rebuilt.sha256(), STAGE7_UPD_SHA256);
+            assert_eq!(
+                rebuilt.application_reported_version(),
+                Some(STAGE7_REPORTED_VERSION)
+            );
+            let (labels, rest): (Vec<usize>, Vec<usize>) =
+                changed_offsets(stock.decoded(), rebuilt.bytes())
+                    .into_iter()
+                    .partition(|&offset| label_box_holding(&recipe, offset).is_some());
+            let table = (0..6).map(|entry| BEAT_LOOP_TABLE_OFFSET + 4 * entry);
+            assert_eq!(
+                rest,
+                [version, version + 3]
+                    .into_iter()
+                    .chain(table)
+                    .collect::<Vec<_>>(),
+                "{name}: outside the label boxes only the version string and the table change"
+            );
+            let mut relabelled: Vec<usize> = labels
+                .iter()
+                .filter_map(|&offset| label_box_holding(&recipe, offset))
+                .collect();
+            relabelled.dedup();
+            assert_eq!(
+                relabelled,
+                (0..36).collect::<Vec<_>>(),
+                "{name}: every image"
+            );
+            reproduced[2] = true;
         }
     }
-    assert!(reproduced_stage3, "the version marker is committed");
-    assert!(reproduced_stage5, "the beat-loop experiment is committed");
+    assert_eq!(
+        reproduced, [true; 3],
+        "the version marker, stage 5 and stage 7 are committed"
+    );
+}
+
+/// The offsets at which the decoded application of the update `rebuilt` differs from `stock`.
+fn changed_offsets(stock: &[u8], rebuilt: &[u8]) -> Vec<usize> {
+    let output = decode_application(&parse_upd(rebuilt).expect("parse")).expect("decode");
+    assert_eq!(output.decoded().len(), stock.len());
+    (stock.iter().zip(output.decoded()))
+        .enumerate()
+        .filter(|(_, (stock, output))| stock != output)
+        .map(|(offset, _)| offset)
+        .collect()
+}
+
+/// The index of the image edit of `recipe` whose erase box or glyph box holds the pixel at
+/// decoded `offset`, if any.
+fn label_box_holding(recipe: &patch_schema::RecipeV2, offset: usize) -> Option<usize> {
+    recipe.image_edits.iter().position(|edit| {
+        let Some(at) = (offset as u64).checked_sub(edit.offset) else {
+            return false;
+        };
+        let pixel = at / 2;
+        let (x, y) = (pixel % u64::from(edit.width), pixel / u64::from(edit.width));
+        let boxes = [edit.erase.as_ref(), Some(&edit.glyph.at)];
+        y < u64::from(edit.height)
+            && boxes.into_iter().flatten().any(|pixels| {
+                u32::try_from(x).is_ok_and(|x| pixels.columns().contains(&x))
+                    && u32::try_from(y).is_ok_and(|y| pixels.rows().contains(&y))
+            })
+    })
 }
 
 /// On the real application, a precondition window over zero padding is refused although its hash
