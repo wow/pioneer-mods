@@ -100,7 +100,7 @@ The committed recipes (details in [docs/recipes.md](./docs/recipes.md), stages i
 | Recipe | What it does | Status |
 | --- | --- | --- |
 | `xdj700-v1.15/version-marker-0.10.json` | Only the reported version, `0.10` | Stage 3, passed on an owner's unit |
-| `xdj700-v1.15/beat-loop-16-plays-32.json` | The BEAT LOOP button labelled 16 sets a 32-beat loop (no pad lights while it plays) | Stage 5, passed on an owner's unit |
+| `xdj700-v1.15/beat-loop-16-plays-32.json` | The BEAT LOOP button labelled 16 sets a 32-beat loop (in emulation, no pad lights while it plays) | Stage 5, passed on an owner's unit |
 | `xdj700-v1.15/beat-loop-1-to-32.json` | The BEAT LOOP pads read and set 1, 2, 4, 8, 16 and 32 beats; the lit pad is the one to the right (known limit) | Stage 7, rehearsed in emulation only |
 
 Apply a schema-v2 recipe (see [docs/recipes.md](./docs/recipes.md)), for example the committed
