@@ -45,16 +45,16 @@ updater installs. Read [xdj700-flashing.md](./xdj700-flashing.md) before you fla
 | `reported_version` | The version the modified application reports, `X.YY`. It must be **lower** than the release's own version, so that the official update restores stock. |
 | `replacements` | Same-length replacements in the decoded application, in ascending order and not overlapping. May be empty. |
 | `precondition` | The stock bytes around the span, `before` it and `after` it (`before + after` at least 32, the window at most 4096 bytes), identified by their SHA-256. The window moves with `offset`, so a mistyped offset fails the check. See [Precondition windows](#precondition-windows). |
-| `bytes_hex` | The project's own replacement bytes. Their length is the span length. The first and last must differ from stock, and at most half may equal it, fewer than 32 in a row: split the span around unchanged bytes. |
+| `bytes_hex` | The project's own replacement bytes. Their length is the span length. `--` in place of a byte keeps the stock byte there without publishing it, for changes a few bytes apart, such as fields of one table: fewer than 32 in a row may be kept. The first and last bytes must be written and differ from stock, and of the written bytes at most half may equal stock, fewer than 32 in a row: keep them with `--` or split the span around them. |
 | `purpose` | Required. A reviewer must be able to tell what each span changes. |
 | `expected` | The output's identities: `application_sha256` (the decoded application) and `upd_sha256` (the update). Optional for a recipe without image edits; a recipe with [image edits](#image-edits) must pin `application_sha256` (a draft uses a placeholder and copies the value `precondition` prints). Every committed recipe pins both. |
 
 ## Precondition windows
 
-A recipe holds hashes of stock bytes, not the bytes themselves, except where a span keeps stock
-bytes between nearby edits. A hash over a few unknown bytes can be inverted by brute force (four
-bytes take minutes), which would publish them. Over 32 or more unknown bytes that is impractical,
-unless the bytes are predictable or other hashes overlap them. So:
+A recipe holds hashes of stock bytes, not the bytes themselves, except for written bytes in a
+span that equal stock (see the span rule below). A hash over a few unknown bytes can be inverted
+by brute force (four bytes take minutes), which would publish them. Over 32 or more unknown bytes
+that is impractical, unless the bytes are predictable or other hashes overlap them. So:
 
 - Windows of one recipe may not overlap (overlapping windows share all but a few bytes, and each
   hash would reveal the difference). CI checks that the windows of **all committed recipes** of a
@@ -69,9 +69,13 @@ unless the bytes are predictable or other hashes overlap them. So:
   bytes do not count: they may follow from the replacement (a flipped bit, a changed condition).
 - Among the bytes outside the span, the four most common values may fill at most half (this
   refuses padding, fill, and two-valued or 16-bit data).
-- A span changes its first and last bytes and keeps at most half of its stock bytes, fewer than
-  32 in a row, because `bytes_hex` publishes them. Split a longer unchanged stretch into two
-  spans, where it can be window bytes instead.
+- A span changes its first and last bytes, and of the bytes it writes at most half may equal
+  stock, fewer than 32 in a row, because `bytes_hex` publishes them. A kept byte (`--`) is not
+  published and does not count, and it ends such a run. Mark unchanged bytes inside a span with
+  `--`, fewer than 32 in a row, or split a longer unchanged stretch into two spans, where it can
+  be window bytes instead. Kept bytes are still covered by the window's hash, but like the span's
+  other bytes they do not count towards the 32 window bytes outside the span, and a protected
+  range that overlaps them overlaps the span.
 - A precondition mismatch does not print the window's actual hash, which might be one of the
   windows these rules refuse.
 
@@ -212,9 +216,10 @@ The rules:
 ## What the engine checks
 
 Before the input is read (`check_recipe_v2`):
-1. The recipe's static checks: fields, hex, order, no overlapping spans, precondition windows of
-   at most 4096 bytes, with at least 32 outside the span, that start inside the application and
-   do not overlap each other, and an `expected.application_sha256` for a recipe with image edits.
+1. The recipe's static checks: fields, hex, kept bytes (`--`) neither at a span's edge nor 32 or
+   more in a row, order, no overlapping spans, precondition windows of at most 4096 bytes, with
+   at least 32 outside the span, that start inside the application and do not overlap each
+   other, and an `expected.application_sha256` for a recipe with image edits.
 2. The release is known, and the recipe repeats its id and pins exactly.
 3. The label is higher, and the reported version lower, than the release's own version.
 4. Every precondition window ends inside the application (its length is pinned).
@@ -234,10 +239,11 @@ Then, on the official file:
 1. The input is pinned by length (checked before reading) and by SHA-256.
 2. On the stock application, before anything is replaced, each precondition window matches its
    SHA-256 and passes the [window rules](#precondition-windows), and each span changes its first
-   and last bytes and keeps at most half of its stock bytes, fewer than 32 in a row.
-3. The modified application differs from stock **only** in the declared spans, the edited image
-   rows and the version string (a byte-by-byte check that the rebuild entry point runs for every
-   edit).
+   and last bytes and, of the bytes it writes, at most half equal stock, fewer than 32 in a row.
+   Kept bytes (`--`) stay stock: only written bytes are declared, so the next check covers them.
+3. The modified application differs from stock **only** in the written bytes of the spans, the
+   edited image rows and the version string (a byte-by-byte check that the rebuild entry point
+   runs for every edit).
 4. The rebuild runs its full verification, including the release rule: a modified application
    must report a lower version.
 5. The output matches `expected`, when declared (always, for a recipe with image edits).

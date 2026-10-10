@@ -258,16 +258,18 @@ pub(super) fn rebuild_recipe(
             for (index, edit) in recipe.image_edits.iter().enumerate() {
                 images.push(image_range(index, edit, decoded.len())?);
             }
-            // The version string, then every replaced span, then every edited image row.
-            let mut changed = Vec::with_capacity(recipe.replacements.len() + 1);
-            changed.push(block.text_range());
+            // The version string, then every run of written bytes, then every edited image row.
+            let mut changed = vec![block.text_range()];
             for replacement in &recipe.replacements {
-                // Inside its precondition window, which is inside the application.
+                // Inside its precondition window, which is inside the application. Only written
+                // runs are declared, so the bounded diff also checks that kept (`--`) bytes stay
+                // stock.
                 let start = usize::try_from(replacement.offset).expect("inside the window");
-                let bytes = replacement.bytes().expect("validated hex");
-                let span = start..start + bytes.len();
-                decoded[span.clone()].copy_from_slice(&bytes);
-                changed.push(span);
+                for (at, bytes) in replacement.written_runs().expect("validated pattern") {
+                    let run = start + at..start + at + bytes.len();
+                    decoded[run.clone()].copy_from_slice(&bytes);
+                    changed.push(run);
+                }
             }
             // Images are clear of the replacements' windows and of each other (`validate`), so
             // each still holds its stock pixels here.

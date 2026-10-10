@@ -1,6 +1,6 @@
 //! Schema-v2 leak checks on synthetic releases: a recipe must not reveal stock bytes through a
 //! window's hash (the bytes around the span must not be predictable) or through `bytes_hex` (a
-//! span changes its edges and keeps few stock bytes).
+//! span changes its edges and writes few stock bytes).
 
 mod common;
 
@@ -88,43 +88,47 @@ fn refuses_a_span_whose_first_or_last_byte_is_unchanged() {
     }
 }
 
-/// A span of `len` changed bytes at `0x900`, except the `kept` runs, `(start, len)` within the
-/// span, which equal stock, with a window of 32 bytes before it.
-fn keeping(len: usize, kept: &[(usize, usize)]) -> Replacement {
+/// A span of `len` changed bytes at `0x900`, except the `unchanged` runs, `(start, len)` within
+/// the span, which are written as their stock bytes, with a window of 32 bytes before it.
+fn with_stock(len: usize, unchanged: &[(usize, usize)]) -> Replacement {
     let stock = stock_application();
     let span = 0x900..0x900 + len;
     let mut bytes: Vec<u8> = stock[span.clone()].iter().map(|byte| !byte).collect();
-    for &(start, run) in kept {
+    for &(start, run) in unchanged {
         let stock_run = span.start + start..span.start + start + run;
         bytes[start..start + run].copy_from_slice(&stock[stock_run]);
     }
     windowed(span.start, &bytes, 32, 0)
 }
 
-fn kept_too_many(unchanged: usize, longest_run: usize, len: usize) -> Result<Vec<u8>, RecipeError> {
+fn too_many_unchanged(
+    unchanged: usize,
+    longest_run: usize,
+    written: usize,
+) -> Result<Vec<u8>, RecipeError> {
     Err(RecipeError::UnchangedSpanBytes {
         index: 0,
         unchanged,
         longest_run,
-        len,
+        written,
     })
 }
 
 #[test]
 fn at_most_half_of_a_span_may_equal_stock() {
     let fixture = Fixture::new();
-    let apply = |kept: &[_]| fixture.apply(&fixture.recipe(vec![keeping(32, kept)]));
+    let apply = |unchanged: &[_]| fixture.apply(&fixture.recipe(vec![with_stock(32, unchanged)]));
 
     assert!(apply(&[(1, 16)]).is_ok(), "16 of 32");
-    assert_eq!(apply(&[(1, 17)]), kept_too_many(17, 17, 32));
-    assert_eq!(apply(&[(1, 9), (11, 9)]), kept_too_many(18, 9, 32));
+    assert_eq!(apply(&[(1, 17)]), too_many_unchanged(17, 17, 32));
+    assert_eq!(apply(&[(1, 9), (11, 9)]), too_many_unchanged(18, 9, 32));
 }
 
 #[test]
 fn unchanged_runs_inside_a_span_are_shorter_than_a_window() {
     let fixture = Fixture::new();
-    let apply = |kept: &[_]| fixture.apply(&fixture.recipe(vec![keeping(70, kept)]));
+    let apply = |unchanged: &[_]| fixture.apply(&fixture.recipe(vec![with_stock(70, unchanged)]));
 
     assert!(apply(&[(1, 31)]).is_ok(), "31 in a row");
-    assert_eq!(apply(&[(1, 32)]), kept_too_many(32, 32, 70));
+    assert_eq!(apply(&[(1, 32)]), too_many_unchanged(32, 32, 70));
 }

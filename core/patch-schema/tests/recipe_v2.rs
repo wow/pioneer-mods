@@ -54,7 +54,10 @@ fn a_well_formed_recipe_validates() {
     let recipe = recipe();
 
     assert_eq!(recipe.validate(), Ok(()));
-    assert_eq!(recipe.replacements[0].bytes(), Some(vec![0xde, 0xad]));
+    assert_eq!(
+        recipe.replacements[0].pattern(),
+        Some(vec![Some(0xde), Some(0xad)])
+    );
     assert_eq!(recipe.replacements[0].len(), 2);
     let probe: SchemaVersionProbe = serde_json::from_value(recipe_json()).expect("probe");
     assert_eq!(probe.schema_version, 2);
@@ -136,6 +139,74 @@ fn identity_and_version_fields_are_checked() {
         mutate(&mut recipe);
         assert_eq!(recipe.validate(), Err(error));
     }
+}
+
+#[test]
+fn kept_bytes_are_parsed_and_edges_must_be_written() {
+    let mut recipe = recipe();
+    recipe.replacements = vec![replacement(0x800, "de--AD")];
+    assert_eq!(recipe.validate(), Ok(()));
+    assert_eq!(
+        recipe.replacements[0].pattern(),
+        Some(vec![Some(0xde), None, Some(0xad)])
+    );
+    for bytes_hex in ["--ad", "de--", "--", "----"] {
+        recipe.replacements = vec![replacement(0x800, bytes_hex)];
+        assert_eq!(
+            recipe.validate(),
+            Err(RecipeV2Error::KeptSpanEdge { index: 0 }),
+            "{bytes_hex:?}"
+        );
+    }
+    // Parsing alone does not judge where kept bytes are.
+    assert_eq!(
+        replacement(0x800, "--ad").pattern(),
+        Some(vec![None, Some(0xad)])
+    );
+    for bytes_hex in ["de-d", "d--e", "de-"] {
+        recipe.replacements = vec![replacement(0x800, bytes_hex)];
+        assert_eq!(
+            recipe.validate(),
+            Err(RecipeV2Error::InvalidReplacementBytes { index: 0 }),
+            "{bytes_hex:?}"
+        );
+        assert_eq!(recipe.replacements[0].pattern(), None, "{bytes_hex:?}");
+    }
+}
+
+#[test]
+fn fewer_than_min_precondition_len_bytes_in_a_row_may_be_kept() {
+    let kept = |len: usize| format!("aa{}bb{}cc", "--".repeat(3), "--".repeat(len));
+    let mut recipe = recipe();
+    let limit = MIN_PRECONDITION_LEN as usize;
+
+    recipe.replacements = vec![replacement(0x800, &kept(limit - 1))];
+    assert_eq!(recipe.validate(), Ok(()));
+    recipe.replacements = vec![replacement(0x800, &kept(limit))];
+    assert_eq!(
+        recipe.validate(),
+        Err(RecipeV2Error::LongKeptRun {
+            index: 0,
+            len: limit
+        })
+    );
+}
+
+#[test]
+fn written_runs_are_split_by_kept_bytes() {
+    assert_eq!(
+        replacement(0x800, "aa--BBcc----dd").written_runs(),
+        Some(vec![
+            (0, vec![0xaa]),
+            (2, vec![0xbb, 0xcc]),
+            (6, vec![0xdd])
+        ])
+    );
+    assert_eq!(
+        replacement(0x800, "ab").written_runs(),
+        Some(vec![(0, vec![0xab])])
+    );
+    assert_eq!(replacement(0x800, "zz").written_runs(), None);
 }
 
 #[test]

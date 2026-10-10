@@ -4,12 +4,13 @@
 //! from recipe to recipe would share all but a few bytes, and each hash would reveal the
 //! difference. Identical windows are refused too, unless their replacements are identical: each
 //! recipe's rules assume that the bytes around its span are published nowhere, and that its own
-//! span alone decides which stock bytes `bytes_hex` keeps, so another recipe's span inside the same
-//! window breaks both. A replacement repeated exactly (offset, bytes, window and hash; the purpose
-//! may differ) publishes nothing the first did not, so a recipe may build on another's change. An
-//! edited image must also be clear of other recipes' precondition windows, whose hash would cover
-//! its pixels. Images of different recipes may overlap: no hash of an image is published, and each
-//! recipe is applied on its own to the official file, so two edits of one image never meet.
+//! span alone decides which stock bytes `bytes_hex` writes out, so another recipe's span inside
+//! the same window breaks both. A replacement repeated exactly (offset, bytes, window and hash;
+//! the purpose may differ) publishes nothing the first did not, so a recipe may build on another's
+//! change. An edited image must also be clear of other recipes' precondition windows, whose hash
+//! would cover its pixels. Images of different recipes may overlap: no hash of an image is
+//! published, and each recipe is applied on its own to the official file, so two edits of one
+//! image never meet.
 
 use crate::v2::{RecipeV2, Replacement};
 use crate::windows::WindowOwner;

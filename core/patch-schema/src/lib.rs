@@ -3,6 +3,7 @@ use thiserror::Error;
 
 pub mod across;
 pub mod image;
+pub mod pattern;
 pub mod v2;
 pub mod windows;
 

@@ -98,15 +98,16 @@ pub enum RecipeError {
     UnchangedSpanEdge { index: usize },
 
     #[error(
-        "replacements[{index}]: {unchanged} of the span's {len} bytes equal stock, {longest_run} \
-         in a row, and bytes_hex would publish them; at most half may, fewer than \
-         {MIN_PRECONDITION_LEN} in a row, so split the span around unchanged bytes"
+        "replacements[{index}]: {unchanged} of the {written} bytes the span writes equal stock, \
+         {longest_run} in a row, and bytes_hex would publish them; at most half may, fewer than \
+         {MIN_PRECONDITION_LEN} in a row, so keep them with `--` or split the span around them"
     )]
     UnchangedSpanBytes {
         index: usize,
         unchanged: usize,
         longest_run: usize,
-        len: usize,
+        /// The bytes the span writes; kept bytes (`--`) do not count.
+        written: usize,
     },
 
     /// The window's actual hash is not reported: this check cannot see other recipes' windows,

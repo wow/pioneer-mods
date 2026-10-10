@@ -64,7 +64,7 @@ fn touching_windows_and_windows_of_other_releases_are_accepted() {
 }
 
 /// The same window with another change: each recipe's span would sit among the other's
-/// "unpublished" window bytes, and their kept stock bytes would add up. Another hash (a
+/// "unpublished" window bytes, and the stock bytes each writes out would add up. Another hash (a
 /// placeholder, or a mistyped one) is another change too.
 #[test]
 fn identical_windows_of_different_replacements_are_refused() {

@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- Kept bytes in schema-v2 replacements: `--` in `bytes_hex` keeps the stock byte at that place
+  and does not publish it (`Replacement::pattern`, `Replacement::written_runs`), so changes a few
+  bytes apart, such as the fields of one table, fit one span without publishing the stock bytes
+  between them. A span must write its first and last bytes (`RecipeV2Error::KeptSpanEdge`) and
+  keep fewer than 32 bytes in a row (`RecipeV2Error::LongKeptRun`). Kept bytes stay inside the
+  precondition window and its hash, and only the written runs are declared, so the bounded diff
+  checks that kept bytes stay stock.
 - Image edits in schema-v2 recipes (`image_edits`, `patch_schema::ImageEdit`): changes to a 16-bit
   RGB565 image stored in the decoded application that publish no stock pixel and no hash of one
   (anyone could check a guess at the pixels against it). An edit names the image (offset, width,
@@ -255,6 +262,10 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
+- **Breaking:** the leak rule on a span's bytes counts only the bytes it writes: at most half of
+  them may equal stock, fewer than 32 in a row, and a kept byte (`--`) ends such a run. Spans
+  without `--` are judged as before. The field `RecipeError::UnchangedSpanBytes::len` is renamed
+  `written` and holds the number of written bytes, not the span length.
 - The cross-recipe window rule is relaxed for one case: `check_windows_across` accepts a
   replacement repeated exactly in another recipe (offset, bytes, window and hash; the purpose may
   differ), since it publishes nothing new, so a recipe can build on another's change (the planned
@@ -313,6 +324,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   - validates optional `expected_output_sha256` and uses portable length checks.
 
 ### Removed
+- **Breaking:** `patch_schema::Replacement::bytes`; use `Replacement::pattern` (byte by byte, with
+  kept bytes as `None`) or `Replacement::written_runs`.
 - Redundant `rustfmt.toml` and `clippy.toml` files (settings matched tool defaults or duplicated
   existing workspace metadata).
 

@@ -4,9 +4,10 @@
 //! A window's hash covers the span's stock bytes too, but those may follow from the replacement (a
 //! flipped bit, a changed condition), so only the bytes outside the span count: `validate` checks
 //! that there are at least [`MIN_PRECONDITION_LEN`] of them, and here they must not be dominated
-//! by a few byte values. A span must change its first and last bytes, and may keep at most half
-//! of its stock bytes, fewer than [`MIN_PRECONDITION_LEN`] in a row: `bytes_hex` publishes them,
-//! and a longer unchanged stretch belongs between two spans, where it can be window bytes instead.
+//! by a few byte values. A span must change its first and last bytes, and of the bytes it writes at
+//! most half may equal stock, fewer than [`MIN_PRECONDITION_LEN`] in a row: `bytes_hex` publishes
+//! them, and a longer unchanged stretch belongs between two spans, where it can be window bytes
+//! instead. A kept byte (`--`) is not published, so it does not count.
 //!
 //! These are heuristic guards against accidental leaks, not a proof: windows belong over code, not
 //! over strings or tables, and review is the backstop. They hold for one recipe; the windows of
@@ -117,35 +118,43 @@ pub(super) fn window(
     )
 }
 
-/// On the stock application: the span's first and last bytes change, at most half of its bytes
-/// equal stock and fewer than [`MIN_PRECONDITION_LEN`] in a row, and the window bytes outside the
-/// span are not dominated by a few values.
+/// On the stock application: the span's first and last bytes change, of the bytes it writes at
+/// most half equal stock and fewer than [`MIN_PRECONDITION_LEN`] in a row (a kept byte ends a
+/// run), and the window bytes outside the span are not dominated by a few values.
 fn check_leaks(
     index: usize,
     replacement: &Replacement,
     stock: &[u8],
     window: Range<usize>,
 ) -> Result<(), RecipeError> {
-    let bytes = replacement.bytes().expect("validated hex");
+    let pattern = replacement.pattern().expect("validated pattern");
     // Inside the window, which `window` has bounds-checked.
     let span_start = usize::try_from(replacement.offset).expect("inside the window");
-    let span = span_start..span_start + bytes.len();
+    let span = span_start..span_start + pattern.len();
     let stock_span = &stock[span.clone()];
-    if stock_span.first() == bytes.first() || stock_span.last() == bytes.last() {
+    // `validate` requires the first and last bytes to be written.
+    if stock_span.first().copied() == pattern[0]
+        || stock_span.last().copied() == pattern[pattern.len() - 1]
+    {
         return Err(RecipeError::UnchangedSpanEdge { index });
     }
-    let (mut unchanged, mut run, mut longest_run) = (0, 0, 0);
-    for (stock_byte, byte) in stock_span.iter().zip(&bytes) {
-        run = if stock_byte == byte { run + 1 } else { 0 };
+    let (mut written, mut unchanged, mut run, mut longest_run) = (0, 0, 0, 0);
+    for (&stock_byte, byte) in stock_span.iter().zip(&pattern) {
+        written += usize::from(byte.is_some());
+        run = if *byte == Some(stock_byte) {
+            run + 1
+        } else {
+            0
+        };
         unchanged += usize::from(run > 0);
         longest_run = longest_run.max(run);
     }
-    if unchanged * 2 > bytes.len() || longest_run >= MIN_PRECONDITION_LEN as usize {
+    if unchanged * 2 > written || longest_run >= MIN_PRECONDITION_LEN as usize {
         return Err(RecipeError::UnchangedSpanBytes {
             index,
             unchanged,
             longest_run,
-            len: bytes.len(),
+            written,
         });
     }
     let outside: Vec<u8> = stock[window.start..span.start]
