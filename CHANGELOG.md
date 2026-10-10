@@ -282,8 +282,10 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   is the one to the right of the touched pad, and the 32 pad lights none, because the firmware
   picks the lit pad from the loop length in code (found in emulation, 2026-10-10). In the
   flashing guide (stage 7 row and checks, section 4, section 5), the recipes table and the
-  recipe's description; the recipe's output is unchanged. The README now lists the committed
-  recipes with their status and describes kept bytes and the exact-repeat rule.
+  recipe's description; the recipe's output is unchanged. The same rule means that at stage 5 no
+  pad lights while the 32-beat loop plays (confirmed in emulation); noted for stage 5 too, output
+  unchanged. The README now lists the committed recipes with their status and describes kept
+  bytes and the exact-repeat rule.
 - **Breaking:** the leak rule on a span's bytes counts only the bytes it writes: at most half of
   them may equal stock, fewer than 32 in a row, and a kept byte (`--`) ends such a run. Spans
   without `--` are judged as before. The field `RecipeError::UnchangedSpanBytes::len` is renamed
