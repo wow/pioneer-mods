@@ -110,7 +110,7 @@ fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
     let mut recipe = committed_recipe();
     recipe["recipe_id"] = json!("draft");
 
-    // Shifted by one byte, and identical: both refused.
+    // Shifted by one byte, and the same window with other bytes: both refused.
     recipe["replacements"] = json!([draft_replacement(0x901, 32, 0)]);
     assert_refused_with(
         &recipe,
@@ -119,7 +119,9 @@ fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
         "published replacements[0] and draft replacements[0]: windows 0x8e0..0x902 and \
          0x8e1..0x903 overlap; windows of recipes for the same release must be disjoint",
     );
-    recipe["replacements"] = json!([draft_replacement(0x900, 32, 0)]);
+    let mut other_bytes = draft_replacement(0x900, 32, 0);
+    other_bytes["bytes_hex"] = json!("0103");
+    recipe["replacements"] = json!([other_bytes]);
     assert_refused_with(
         &recipe,
         None,
@@ -128,14 +130,18 @@ fn refuses_a_window_overlapping_a_committed_one_before_reading_the_input() {
          0x8e0..0x902 overlap",
     );
 
-    // Disjoint: the command goes on to the (missing) input.
-    recipe["replacements"] = json!([draft_replacement(0x902, 0, 32)]);
-    assert_refused_with(
-        &recipe,
-        None,
-        committed.path(),
-        "failed to read input update",
-    );
+    // Disjoint, or the published replacement repeated exactly (hash included): the command goes
+    // on to the (missing) input.
+    let repeated = draft_replacement(0x900, 32, 0);
+    for replacements in [json!([draft_replacement(0x902, 0, 32)]), json!([repeated])] {
+        recipe["replacements"] = replacements;
+        assert_refused_with(
+            &recipe,
+            None,
+            committed.path(),
+            "failed to read input update",
+        );
+    }
 }
 
 #[test]
@@ -205,6 +211,20 @@ fn refuses_a_committed_directory_without_another_recipe_for_the_release() {
         "{stderr}"
     );
     assert!(result.stdout.is_empty());
+
+    // A directory holding only a copy of the draft (another file, the same recipe_id): the copy
+    // repeats every replacement exactly, but it is not another recipe.
+    let only_copy = tempfile::tempdir().expect("tempdir");
+    write_bytes(
+        &only_copy.path().join("copy.json"),
+        &serde_json::to_vec(&committed_recipe()).expect("serialize"),
+    );
+    assert_refused_with(
+        &committed_recipe(),
+        None,
+        only_copy.path(),
+        "it holds no other recipe for release xdj700-v1.15",
+    );
 }
 
 #[cfg(unix)]

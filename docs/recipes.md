@@ -60,6 +60,10 @@ unless the bytes are predictable or other hashes overlap them. So:
   hash would reveal the difference). CI checks that the windows of **all committed recipes** of a
   release are disjoint, too. For nearby spans, extend the first window before its span and the
   second after its own.
+- One exception across recipes: a recipe may repeat another committed recipe's replacement
+  **exactly** (offset, `bytes_hex`, `before`, `after` and the hash; only `purpose` may differ), so
+  that it can build on that change. It publishes nothing the first did not. Copy the replacement
+  with its hash: a placeholder makes it differ, and `precondition` then refuses the overlap.
 - A window may not reach into a protected range (it holds known strings).
 - At least 32 window bytes must lie outside the span (`before + after`). The span's own stock
   bytes do not count: they may follow from the replacement (a flipped bit, a changed condition).
@@ -78,7 +82,8 @@ that shares code with this one needs the same care. Review is the backstop.
 
 ### Known exceptions
 
-Windows over data that review accepted, and why. No later recipe can use these ranges.
+Windows over data that review accepted, and why. No later recipe can use these ranges, except by
+repeating the replacement exactly.
 
 - **`xdj700-v1.15/beat-loop-16-plays-32.json`:** decoded `0xD6234..0xD66F5`, the span and the
   1,216 bytes after it.
@@ -124,8 +129,9 @@ paste stock bytes into an issue or a commit, only their hash.
 
    Before it computes any hash, the command runs the recipe's own checks (release pins, version
    order, bounds, protected ranges), checks that its windows are disjoint from those of the other
-   committed recipes (the draft's own file is skipped, and the directory must hold another recipe
-   for the release), and then rebuilds the draft, running each window's leak checks before it
+   committed recipes or repeat one of their replacements exactly (the draft's own file, and any
+   recipe with its `recipe_id`, are skipped, and the directory must hold another recipe for the
+   release), and then rebuilds the draft, running each window's leak checks before it
    hashes the window. So it never prints the hash of a window those rules refuse, prints nothing
    unless the whole rebuild succeeds, and writes nothing. For each replacement it prints the
    window and its SHA-256, for each [image edit](#image-edits) the image (with no hash), and the
@@ -317,9 +323,10 @@ XDJ700_PROTECTED_SET=/path/to/xdj700-v1.15-protected-set.tsv \
 ## The committed recipes
 
 `recipes/<release>/` holds the project's recipes. CI checks that each one passes every check
-that needs no firmware and pins its output identities, and that their precondition windows are
-disjoint. The owner-input tests apply every one of them to the official file (which runs the
-window rules) and check those identities.
+that needs no firmware and pins its output identities, that their `recipe_id`s are distinct, and
+that their precondition windows are disjoint, except where one recipe repeats another's
+replacement exactly. The owner-input tests apply every one of them to the official file (which
+runs the window rules) and check those identities.
 
 | Recipe | What it does | Output |
 | --- | --- | --- |

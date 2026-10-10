@@ -188,10 +188,12 @@ impl CheckedRecipe {
     }
 
     /// Checks that the recipe's precondition windows are disjoint from those of every other
-    /// recipe under `dir` for the same release (the committed recipes), so that no hash is
-    /// computed for a window that would overlap one already published. `path` is the recipe's own
-    /// file: if it lies under `dir`, it is skipped. A `dir` without another recipe for the
-    /// release is refused, so a mistyped path cannot skip the check.
+    /// recipe under `dir` for the same release (the committed recipes), or repeat one of their
+    /// replacements exactly, so that no hash is computed for a window that would overlap one
+    /// already published. `path` is the recipe's own file: if it lies under `dir`, it is skipped,
+    /// and so is any recipe with the same `recipe_id` (a copy of the draft, or the version it
+    /// revises), which would otherwise count as an exact repeat of itself. A `dir` without
+    /// another recipe for the release is refused, so a mistyped path cannot skip the check.
     pub fn check_against_committed(&self, path: &Path, dir: &Path) -> Result<()> {
         let committed_failed = || format!("failed to read committed recipes '{}'", dir.display());
         let own = std::fs::canonicalize(path)
@@ -205,7 +207,9 @@ impl CheckedRecipe {
             let recipe: RecipeV2 = serde_json::from_slice(&raw).with_context(|| {
                 format!("failed to parse committed recipe '{}'", file.display())
             })?;
-            if recipe.target.release == self.recipe.target.release {
+            if recipe.target.release == self.recipe.target.release
+                && recipe.recipe_id != self.recipe.recipe_id
+            {
                 committed.push(recipe);
             }
         }
