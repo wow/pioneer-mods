@@ -225,9 +225,10 @@ Gate:
 
 ### 3. Code changes
 
-Some features cannot be expressed as data. Stage 7's lit pad appears to be chosen by code from
-the loop length (no data table holding the mapping was found). Code fragments would place new code in verified unused areas (the three `0xFF` runs
-already checked at run time) and divert to it from short hooks.
+Some features cannot be expressed as data. Stage 7's lit pad appears to be chosen by code from the
+loop length (no data table holding the mapping was found). Code fragments would place new code in
+verified unused areas (the three `0xFF` runs already checked at run time) and divert to it from
+short hooks.
 
 Gate, per fragment:
 1. The hook and the new code lie outside the protected set; the hook is not reached before the
