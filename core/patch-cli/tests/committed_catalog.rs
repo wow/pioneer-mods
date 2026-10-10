@@ -183,6 +183,14 @@ fn symbolic_links_are_refused() {
     symlink(&moved, &recipes).expect("link");
     assert!(refusal(root.path()).contains("is a symbolic link"));
 
+    // The catalog directory itself.
+    let root = copy();
+    let catalog = root.path().join("catalog");
+    let moved = outside.path().join("catalog");
+    std::fs::rename(&catalog, &moved).expect("move");
+    symlink(&moved, &catalog).expect("link");
+    assert!(refusal(root.path()).contains("a symbolic link"));
+
     // A dangling directory link is refused, not read as empty.
     let root = copy();
     let features = root.path().join("catalog/features");

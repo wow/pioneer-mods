@@ -166,6 +166,16 @@ fn each_recipe_must_be_for_its_player_and_pin_its_output() {
     let message = refused(|r| r["expected"] = json!(null));
     assert!(message.contains("does not pin its output"), "{message}");
 
+    // The second implementation of a feature is checked too.
+    let mut fixture = Fixture::new();
+    let table = fixture.recipes.get_mut("recipes/p/labelled-table.json");
+    table.expect("recipe")["expected"] = json!(null);
+    let message = fixture.problem();
+    assert!(
+        message.contains("recipe recipes/p/labelled-table.json: it does not pin its output"),
+        "{message}"
+    );
+
     let mut fixture = Fixture::new();
     fixture.recipes.remove("recipes/p/plain.json");
     assert_eq!(

@@ -221,3 +221,52 @@ fn a_key_given_twice_is_refused() {
         "{error}"
     );
 }
+
+/// The parse error of `text` as a `T`.
+fn parse_error<T: serde::de::DeserializeOwned + std::fmt::Debug>(text: &str) -> String {
+    serde_json::from_str::<T>(text)
+        .expect_err("refused")
+        .to_string()
+}
+
+#[test]
+fn every_other_map_refuses_a_key_given_twice() {
+    let screen = r#"{ "schema_version": 1, "id": "s", "player": "p", "title": "t",
+        "slots": {
+            "a": { "count": 1, "description": "d" },
+            "a": { "count": 2, "description": "d" }
+        },
+        "maintainer": "m" }"#;
+    let labels = r#"{ "schema_version": 1, "id": "f", "title": "f", "description": "f",
+        "labels": { "s.a": ["1"], "s.a": ["2"] }, "implementations": {}, "maintainer": "m" }"#;
+    let requires = r#"{ "schema_version": 1, "id": "f", "title": "f", "description": "f",
+        "requires": { "capabilities": { "x": [], "x": ["1"] } },
+        "implementations": {}, "maintainer": "m" }"#;
+    let skin = |implementations: &str| {
+        format!(
+            r#"{{ "schema_version": 1, "id": "k", "title": "k", "screen": "s",
+            "requires": {{ "screen_class": {{ "width": 1, "height": 1, "pixels": "rgb565" }} }},
+            "art": "original", "implementations": {implementations}, "maintainer": "m" }}"#
+        )
+    };
+    let skin_players = skin(r#"{ "p": [], "p": [] }"#);
+    let skin_labels = skin(
+        r#"{ "p": [{ "recipe": "recipes/a.json", "maturity": "dev", "evidence": "e",
+        "labels": { "a": ["1"], "a": ["2"] } }] }"#,
+    );
+    let profile = r#"{ "schema_version": 1, "player": "p",
+        "screens": { "main": "stock", "main": "dark" },
+        "label": "Ver1.16", "reported_version": "0.12" }"#;
+
+    let errors = [
+        ("screen.slots", parse_error::<Screen>(screen)),
+        ("feature.labels", parse_error::<Feature>(labels)),
+        ("requires.capabilities", parse_error::<Feature>(requires)),
+        ("skin.implementations", parse_error::<Skin>(&skin_players)),
+        ("skin labels", parse_error::<Skin>(&skin_labels)),
+        ("profile.screens", parse_error::<Profile>(profile)),
+    ];
+    for (map, error) in errors {
+        assert!(error.contains("given twice"), "{map}: {error}");
+    }
+}
