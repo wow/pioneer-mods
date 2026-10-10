@@ -34,8 +34,8 @@ what needs no firmware, and the maintainer runs the rest before an item is offer
   stock bytes it may not reveal, against protected code and data, and against the bounded diff;
   output is written only after the whole build verifies.
 - **Recovery first.** Nothing may change the code a normal boot runs before the update-mode
-  decision, or the update path (section 5 of the flashing guide, without exception). The only
-  exception this design foresees, a safe mode, would need its own gate, not yet written
+  decision, or the update path (section 5 of the flashing guide). The one change to this rule
+  that this design foresees, a safe mode, would need its own gate, not yet written
   ([below](#1-data-read-at-start-up-moving-elements)). The official update must always restore
   stock (the reported version stays lower).
 - **Evidence over assumption.** A feature or skin is offered only with the evidence its maturity
