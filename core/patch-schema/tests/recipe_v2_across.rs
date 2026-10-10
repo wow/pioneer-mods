@@ -45,8 +45,10 @@ fn windows_shifted_across_recipes_are_refused() {
         Err(WindowOverlap {
             first: "a replacements[0]".to_owned(),
             first_window: 0x8e0..0x901,
+            first_recipe: 1,
             second: "b replacements[0]".to_owned(),
             second_window: 0x900..0x921,
+            second_recipe: 0,
         })
     );
 }

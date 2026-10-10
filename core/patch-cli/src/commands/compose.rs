@@ -4,9 +4,7 @@ use patch_cli::recipe::{
     CheckedRecipe, PROTECTED_SET_ENV, ProtectedSetSource, protected_set_line, read_recipe_versioned,
 };
 use patch_core::firmware_file_name;
-use patch_core::xdj700::{
-    ComposeError, Composition, RecipeChecks, check_composition, compose_recipes_to,
-};
+use patch_core::xdj700::{ComposeError, Composition, RecipeChecks, check_composition};
 use patch_schema::{RecipeV2, SCHEMA_VERSION_V2};
 use std::path::PathBuf;
 
@@ -79,9 +77,10 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
         args.no_protected_set,
         std::env::var_os(PROTECTED_SET_ENV),
     )?;
-    let mut protected_set = None;
+    // Read once, for the release every recipe names.
+    let protected_set = source.load(target)?;
     for recipe in &checked {
-        protected_set = recipe.check_protected_set(&source)?;
+        recipe.check_against_protected_set(protected_set.as_ref())?;
     }
     let fragments: Vec<RecipeV2> = checked.iter().map(|c| c.recipe().clone()).collect();
     let composition = Composition {
@@ -91,19 +90,32 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
     let checks = RecipeChecks {
         protected_set: protected_set.as_ref(),
     };
+    // Every refusal names the files of the recipes it is about.
     let refuse = |error: ComposeError| match error {
         ComposeError::Fragment { index, source, .. } => {
             checked[index].refusal(&args.input, "compose", source)
         }
-        other => anyhow::Error::new(other).context(refusing.clone()),
+        other => {
+            let files: Vec<String> = other
+                .recipes()
+                .into_iter()
+                .map(|index| format!("'{}'", args.recipes[index].display()))
+                .collect();
+            let context = match files.as_slice() {
+                [] => refusing.clone(),
+                [file] => format!("{refusing}: recipe {file}"),
+                files => format!("{refusing}: recipes {}", files.join(" and ")),
+            };
+            anyhow::Error::new(other).context(context)
+        }
     };
-    // The label and version, the pins, and the windows and images across the recipes.
-    check_composition(&fragments, target, composition, checks).map_err(refuse)?;
+    // Distinct recipes, the pins, the windows and images across the recipes, and the label and
+    // version.
+    let composition = check_composition(&fragments, target, composition, checks).map_err(refuse)?;
     ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;
     let input = checked[0].read_input(&args.input, "compose")?;
 
-    let composed =
-        compose_recipes_to(&fragments, target, composition, &input, checks).map_err(refuse)?;
+    let composed = composition.compose(&input).map_err(refuse)?;
     let rebuilt = &composed.rebuilt;
     write_output_atomically(&args.output, rebuilt.bytes(), Overwrite::Never)?;
 

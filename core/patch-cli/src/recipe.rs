@@ -91,6 +91,25 @@ pub enum ProtectedSetSource {
 }
 
 impl ProtectedSetSource {
+    /// Reads and parses the protected set this source names (measured in emulation, kept outside
+    /// the repository), refusing a set for another release than `target`'s; `None` when the
+    /// check is skipped on purpose.
+    pub fn load(&self, target: &RecipeTarget<'_>) -> Result<Option<ProtectedSet>> {
+        let path = match self {
+            Self::Flag(path) | Self::Env(path) => path,
+            Self::Skipped => return Ok(None),
+        };
+        let text = read_protected_set(path)?;
+        let set = ProtectedSet::parse(&text, target).with_context(|| {
+            format!(
+                "refusing protected set '{}' for release {}",
+                path.display(),
+                target.id
+            )
+        })?;
+        Ok(Some(set))
+    }
+
     /// The source from the command's flags and, without them, the environment (`env`, normally
     /// the value of [`PROTECTED_SET_ENV`]). `--no-protected-set` wins over the environment; clap
     /// refuses it together with `--protected-set`.
@@ -225,33 +244,29 @@ impl CheckedRecipe {
             .map_err(|error| anyhow::Error::new(error).context(self.refusing.clone()))
     }
 
-    /// Reads the protected set `source` names (measured in emulation, kept outside the repository)
-    /// and refuses the recipe if the set belongs to another release, covers the version string, or
-    /// overlaps a replacement's span or precondition window. Needs no firmware. Returns the set,
-    /// or `None` when the check is skipped on purpose (a warning goes to stderr).
+    /// Reads the protected set `source` names ([`ProtectedSetSource::load`]) and refuses the
+    /// recipe against it ([`CheckedRecipe::check_against_protected_set`]). Needs no firmware.
+    /// Returns the set, or `None` when the check is skipped on purpose.
     pub fn check_protected_set(&self, source: &ProtectedSetSource) -> Result<Option<ProtectedSet>> {
-        let path = match source {
-            ProtectedSetSource::Flag(path) | ProtectedSetSource::Env(path) => path,
-            ProtectedSetSource::Skipped => {
-                eprintln!(
-                    "warning: --no-protected-set: recipe '{}' is not checked against the code \
-                     that runs at start-up and in the update path",
-                    self.recipe.recipe_id
-                );
-                return Ok(None);
-            }
+        let set = source.load(self.target)?;
+        self.check_against_protected_set(set.as_ref())?;
+        Ok(set)
+    }
+
+    /// Refuses the recipe if `set` covers the version string or overlaps a replacement's span or
+    /// precondition window, or an edited image. `None` (the check skipped on purpose) prints a
+    /// warning to stderr.
+    pub fn check_against_protected_set(&self, set: Option<&ProtectedSet>) -> Result<()> {
+        let Some(set) = set else {
+            eprintln!(
+                "warning: --no-protected-set: recipe '{}' is not checked against the code that \
+                 runs at start-up and in the update path",
+                self.recipe.recipe_id
+            );
+            return Ok(());
         };
-        let text = read_protected_set(path)?;
-        let set = ProtectedSet::parse(&text, self.target).with_context(|| {
-            format!(
-                "refusing protected set '{}' for release {}",
-                path.display(),
-                self.target.id
-            )
-        })?;
-        check_recipe_against_protected_set(&self.recipe, self.target, &set)
-            .map_err(|error| anyhow::Error::new(error).context(self.refusing.clone()))?;
-        Ok(Some(set))
+        check_recipe_against_protected_set(&self.recipe, self.target, set)
+            .map_err(|error| anyhow::Error::new(error).context(self.refusing.clone()))
     }
 
     /// Reads the official update of the recipe's release from `input`, refusing a file of the

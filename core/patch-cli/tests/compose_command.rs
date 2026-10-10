@@ -127,6 +127,31 @@ fn refuses_overlapping_recipes_before_reading_the_input() {
     );
 
     assert_refused(&result, dir.path(), "overlap");
+    // Both files are named.
+    assert!(
+        stderr(&result).contains("shifted.json"),
+        "{}",
+        stderr(&result)
+    );
+    assert!(
+        stderr(&result).contains("beat-loop-16-plays-32.json"),
+        "{}",
+        stderr(&result)
+    );
+}
+
+#[test]
+fn refuses_the_same_recipe_twice_before_reading_the_input() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let recipe = committed("beat-loop-16-plays-32.json");
+
+    let result = run_compose(
+        dir.path(),
+        &[recipe.clone(), recipe],
+        &["--no-protected-set"],
+    );
+
+    assert_refused(&result, dir.path(), "give each recipe once");
 }
 
 #[test]
@@ -148,6 +173,11 @@ fn refuses_an_unpinned_recipe_before_reading_the_input() {
     );
 
     assert_refused(&result, dir.path(), "must pin expected.application_sha256");
+    assert!(
+        stderr(&result).contains("unpinned.json"),
+        "{}",
+        stderr(&result)
+    );
 }
 
 #[test]

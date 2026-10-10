@@ -10,6 +10,17 @@ pub enum ComposeError {
     #[error("nothing to compose: no recipe was given")]
     NoFragments,
 
+    /// The same recipe given twice, or two recipes sharing a `recipe_id`.
+    #[error(
+        "recipes {first} and {second} are both {recipe_id}; give each recipe once (recipe ids \
+         must differ)"
+    )]
+    Duplicate {
+        first: usize,
+        second: usize,
+        recipe_id: String,
+    },
+
     /// A recipe failed its own checks, or did not reproduce its own pinned output when applied
     /// alone.
     #[error("recipe {index} ({recipe_id}): {source}")]
@@ -33,7 +44,13 @@ pub enum ComposeError {
         "{first} and {second} edit overlapping images; recipes in one build must edit different \
          images, or make the same edit"
     )]
-    ImageOverlap { first: String, second: String },
+    ImageOverlap {
+        first: String,
+        /// The position of the recipe holding `first`.
+        first_recipe: usize,
+        second: String,
+        second_recipe: usize,
+    },
 
     /// The composition's label or reported version, or the composed rebuild, was refused.
     #[error("the composed build: {0}")]
@@ -56,4 +73,22 @@ pub enum ComposeError {
 
     #[error("a rebuilt update's application could not be decoded: {0}")]
     Decode(#[from] SectionError),
+}
+
+impl ComposeError {
+    /// The positions of the recipes this refusal is about, in the order they were given, so that
+    /// a front end can name their files. Empty for a refusal of the composition as a whole.
+    pub fn recipes(&self) -> Vec<usize> {
+        match self {
+            Self::Fragment { index, .. } | Self::Unpinned { index, .. } => vec![*index],
+            Self::Duplicate { first, second, .. } => vec![*first, *second],
+            Self::Overlap(overlap) => vec![overlap.first_recipe, overlap.second_recipe],
+            Self::ImageOverlap {
+                first_recipe,
+                second_recipe,
+                ..
+            } => vec![*first_recipe, *second_recipe],
+            _ => Vec::new(),
+        }
+    }
 }
