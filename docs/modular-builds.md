@@ -104,6 +104,12 @@ A behaviour change, declared against capability and slot names, never against a 
 implementation is a recipe fragment for one player: replacements, image edits, and later code.
 `acceptance` names emulator tests the implementation must pass (below).
 
+The sketch is illustrative. Its values come from the XDJ-700 recipes, but two details show where
+the design goes further than today: `conflicts` is about meaning, not bytes (this feature and
+`beat-loop-16-plays-32` share a replacement, which composition would apply once, but they define
+different button sets), and today's stage-7 recipe would fail `perform/lit-pad-follows-touch`
+until the lit-pad code fix exists (its known limit).
+
 ### Skin
 
 A look for one screen. A skin requires a screen class and slots, fills them with its own art or
@@ -149,12 +155,17 @@ firmware port:
    same edit.
 3. **Check.** Everything `patch` checks today: pins, windows and leak rules, protected ranges and
    the protected set, image bounds, the size budget, the bounded diff, and the rebuild's own
-   verification.
+   verification. In addition, each fragment keeps its own output pin (the identity it produces
+   when applied alone to the official file), and the composed application must equal, at every
+   byte a fragment changes, that fragment's own pinned output, and stock everywhere else (apart
+   from the version string). This keeps what an output pin guards today, for image edits
+   especially, whose pixels no hash covers.
 4. **Report.** The output identity, each fragment's evidence and tier, and the restore plan (the
    official file, and the stock no-op stick).
 
-A combination of fragments has no published output pin unless it is a listed combination; the
-builder prints the identity it produced, and the fragments carry the evidence.
+A combination of fragments has no published output pin of its own unless it is a listed
+combination: it is checked through its fragments' pins as above, the builder prints the identity
+it produced, and the fragments carry the evidence.
 
 ## Verification
 
@@ -178,8 +189,11 @@ Three limits stand between today's recipes and full skins. Each is lifted only t
 
 ### 1. Data read at start-up (moving elements)
 
-Today a recipe may not change data that a normal boot reads before the update-mode decision. A
-screen's layout table is copied at start-up, so moving an element is refused.
+Today the bytes a recipe changes must not be read during a normal boot, an update-mode boot, or
+a complete update in either rehearsal direction ([xdj700-flashing.md](./xdj700-flashing.md),
+section 5). A screen's layout table is read at every start-up (it is copied to RAM), so moving an
+element is refused. The gate below relaxes the rule for layout tables only, screen by screen:
+the copy at start-up is allowed when the copied data is used only later.
 
 Gate, per screen:
 1. In emulation, show where the table's copy is consumed: only when the screen is built, after
@@ -190,7 +204,10 @@ Gate, per screen:
 4. Record the result in the screen's `evidence`; only then does the screen accept positions.
 
 Longer term, a **safe mode** (a button held at power-on that skips the project's changes) would
-make start-up changes recoverable without a reflash. It needs a code change (limit 3).
+make start-up changes recoverable without a reflash. It needs a code change, and one that runs
+at start-up, before the update-mode decision and inside the protected set: the riskiest place,
+which limit 3's gate excludes. Safe mode therefore needs its own, stricter gate (to be written
+before any work on it), not limit 3's.
 
 ### 2. Size budget
 
