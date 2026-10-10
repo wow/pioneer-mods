@@ -1,10 +1,12 @@
 # Modular builds: players, per-screen skins and features (design, draft)
 
 Status: proposal (2026-10-10). Nothing here is implemented yet; the schemas below are sketches
-to be settled in the pull requests that implement them. The rules in
-[xdj700-flashing.md](./xdj700-flashing.md) section 5 and [recipes.md](./recipes.md) stay in force
-until this document changes them, one limit at a time, with the evidence described in
-[Extending the limits](#extending-the-limits).
+to be settled in the pull requests that implement them. The safety rules are stated, with
+authority, in [xdj700-flashing.md](./xdj700-flashing.md) section 5 and in
+[recipes.md](./recipes.md), and they apply unchanged. This document only proposes the evidence
+for lifting some of them ([Extending the limits](#extending-the-limits)): a limit is lifted by a
+pull request that changes section 5 (and `recipes.md` where it applies), with that evidence, and
+this document then links there.
 
 ## Goal
 
@@ -18,8 +20,9 @@ An owner builds their own firmware in three choices:
    skins cannot support is shown switched off, with the reason.
 
 Later, an owner can make a **custom skin**: start from a screen's skeleton (its default layout)
-and choose which features appear where. The community adds features and skins as data that the
-same checks verify.
+and choose which features appear where. The community adds features and skins as data; CI checks
+what needs no firmware, and the maintainer runs the rest before an item is offered
+([Community content](#community-content)).
 
 ## Principles
 
@@ -30,9 +33,11 @@ same checks verify.
 - **Pinned and fail-closed.** Every input is pinned by SHA-256; every change is checked against
   stock bytes it may not reveal, against protected code and data, and against the bounded diff;
   output is written only after the whole build verifies.
-- **Recovery first.** Nothing may change what a normal boot runs before the update-mode
-  decision, or the update path, unless the limit is extended with evidence. The official update
-  must always restore stock (the reported version stays lower).
+- **Recovery first.** Nothing may change the code a normal boot runs before the update-mode
+  decision, or the update path (section 5 of the flashing guide, without exception). The only
+  exception this design foresees, a safe mode, would need its own gate, not yet written
+  ([below](#1-data-read-at-start-up-moving-elements)). The official update must always restore
+  stock (the reported version stays lower).
 - **Evidence over assumption.** A feature or skin is offered only with the evidence its maturity
   tier requires (emulator rehearsals, acceptance tests, hardware stages).
 
@@ -50,10 +55,10 @@ One file per model and firmware release:
     "file": "XDJ700.UPD", "sha256": "73edec98…", "application_sha256": "1875381b…"
   },
   "screen_class": { "width": 800, "height": 480, "pixels": "rgb565" },
-  "budgets": { "main_growth_bytes": 262144 },
+  "budgets": { "compressed_main_growth_bytes": 262144 },
   "capabilities": {
     "beat_loop.lengths": ["1/2", "1", "2", "4", "8", "16", "32"],
-    "beat_loop.buttons": 6,
+    "beat_loop.button_count": 6,
     "jog_display": { "available": false, "reason": "absent on this model" }
   },
   "screens": ["main", "perform"]
@@ -93,7 +98,8 @@ A behaviour change, declared against capability and slot names, never against a 
   "id": "beat-loop-1-to-32",
   "requires": ["beat_loop.lengths:32", "slot:perform.beat_loop.pad"],
   "conflicts": ["beat-loop-16-plays-32"],
-  "provides": ["beat_loop.buttons:1,2,4,8,16,32"],
+  "provides": ["beat_loop.button_lengths:1,2,4,8,16,32"],
+  "labels": { "perform.beat_loop.pad": ["1", "2", "4", "8", "16", "32"] },
   "maturity": "experimental",
   "implementations": { "xdj700-v1.15": "recipes/xdj700-v1.15/beat-loop-1-to-32.json" },
   "acceptance": ["perform/pads-select-lengths", "perform/lit-pad-follows-touch"]
@@ -101,8 +107,9 @@ A behaviour change, declared against capability and slot names, never against a 
 ```
 
 `requires` and `conflicts` are what let the builder switch a feature off with a reason. An
-implementation is a recipe fragment for one player: replacements, image edits, and later code.
-`acceptance` names emulator tests the implementation must pass (below).
+implementation is a recipe fragment for one player: replacements, and later code. A feature does
+not draw: `labels` gives the text its slots should show, and the chosen skin draws it (see
+[Skin](#skin)). `acceptance` names emulator tests the implementation must pass (below).
 
 The sketch is illustrative. Its values come from the XDJ-700 recipes, but two details show where
 the design goes further than today: `conflicts` is about meaning, not bytes (this feature and
@@ -129,6 +136,13 @@ with transforms of the player's own images, and gives a fallback for every slot 
 Skins are named for what they look like ("dark pads", "full-width waveform"), never after another
 product, and carry no logos.
 
+**Labels belong to skins.** A skin draws the label text that the chosen features give for its
+slots, in its own style; the stock skin draws it with the project's own digits. So a skin and a
+feature never both edit the same image: the skin's fragment is built for the label set it is
+given, and each (skin, label set) pair has its own output pin. Today's stage-7 recipe combines
+both: in this model its table change is the feature, and its relabelled images are the stock skin
+drawing that feature's labels.
+
 ### Profile (the owner's build)
 
 The owner's choices, small and shareable, separate from the definitions so that they survive a
@@ -152,7 +166,7 @@ firmware port:
 2. **Compose.** Collect the fragments into one rebuild with one label and one reported version.
    Spans must be disjoint; a replacement repeated exactly by two fragments is applied once (the
    rule `check_windows_across` already allows). Image edits must not overlap unless they are the
-   same edit.
+   same edit; labels are drawn by the skin, so features and skins do not overlap there.
 3. **Check.** Everything `patch` checks today: pins, windows and leak rules, protected ranges and
    the protected set, image bounds, the size budget, the bounded diff, and the rebuild's own
    verification. In addition, each fragment keeps its own output pin (the identity it produces
@@ -164,16 +178,20 @@ firmware port:
 4. **Report.** The output identity, each fragment's evidence and tier, and the restore plan (the
    official file, and the stock no-op stick).
 
-A combination of fragments has no published output pin of its own unless it is a listed
-combination: it is checked through its fragments' pins as above, the builder prints the identity
-it produced, and the fragments carry the evidence.
+A combination of fragments is a new update: its application yields a different compressed stream
+and needs its own test (flashing guide, section 5). So a **listed** combination is rehearsed as a
+whole, both ways, and passes its own hardware stage before it can be `stable`; it has its own
+output pin. A combination that is **not listed** is offered at most as `experimental`, whatever
+its fragments' tiers: it is checked through its fragments' pins as above, and where the emulator
+is available the builder rehearses it both ways before writing it.
 
 ## Verification
 
 - **Static:** the existing recipe checks, applied to every fragment alone and to the composed
   build.
-- **Emulator rehearsal:** every fragment is installed over stock and stock over it, with read
-  watches on everything it changes (as for stages 5 and 7).
+- **Emulator rehearsal:** every fragment, and every listed combination as a whole, is installed
+  over stock and stock over it, with read watches on everything it changes (as for stages 5 and
+  7).
 - **Acceptance tests:** scripted emulator runs that drive the panel and touch screen and assert
   behaviour: which length-list entry a touch selects, which pad lights, that changed data is not
   read at start-up. The probes used on 2026-10-10 (call logs, the pad-state array, screen-region
@@ -186,7 +204,8 @@ it produced, and the fragments carry the evidence.
 
 ## Extending the limits
 
-Three limits stand between today's recipes and full skins. Each is lifted only through its gate.
+Four limits stand between today's recipes and full skins. Each is lifted only through its gate,
+by a pull request that changes section 5 of the flashing guide (and `recipes.md`).
 
 ### 1. Data read at start-up (moving elements)
 
@@ -210,18 +229,22 @@ at start-up, before the update-mode decision and inside the protected set: the r
 which limit 3's gate excludes. Safe mode therefore needs its own, stricter gate (to be written
 before any work on it), not limit 3's.
 
-### 2. Size budget
+### 2. Size budget (the compressed MAIN image)
 
-A rebuilt application may grow by at most 256 KiB, because the size of the flash region that
-holds it is not confirmed. Larger skins need more.
+The compressed MAIN image may be at most 256 KiB larger than stock (`MAX_MAIN_GROWTH`), because
+the size of the flash region that holds it is not confirmed. With same-length changes the decoded
+application cannot grow (limit 4); this bound limits how much worse a build may compress, for
+example art that compresses less well than stock.
 
 Gate:
-1. Establish the region from the loader: where an update erases and writes, and where the
-   settings area starts (emulation already shows the application region erased up to
-   `0x7DFFFF` and settings from `0x7E0000`, in the emulated layout).
+1. Establish the **real** layout, not the emulated one: the loader's own erase and write ranges
+   (from its code, which is the same on the unit) and the flash part's documented sector map,
+   including where the settings area starts. The emulated layout (application erased up to
+   `0x7DFFFF`, settings from `0x7E0000`) may differ from the unit's in sector sizes.
 2. Confirm on hardware without risk to the loader: the loader region is never written, and the
    official file restores the application region in full.
-3. Raise the bound with a margin, in the release's pins, with the evidence cited.
+3. Raise the bound with a margin below the real region's end, in the release's pins, with the
+   evidence cited.
 
 ### 3. Code changes
 
@@ -239,6 +262,20 @@ Gate, per fragment:
 The first candidate is the lit-pad rule, so that stage 7's lighting follows the pad that was
 touched.
 
+### 4. Same length (image sizes)
+
+Recipes change bytes in place, so the decoded application never grows ([recipes.md](./recipes.md)).
+The image archive's entries are packed back to back, so a skin cannot use a larger image or add
+one. Until this limit is lifted, skins keep each image's size, format and place in the archive.
+
+Gate:
+1. Map how the loader and the application find the application's end and the archive: section
+   lengths and checksum, what follows the application, and the archive index and its lookup.
+2. Show in emulation that a longer application, or a moved archive entry, boots, updates and is
+   restored by the official file.
+3. The compressed result stays within limit 2.
+4. Rehearsals both ways, then a hardware stage.
+
 ## Players
 
 - **XDJ-700 v1.15:** the current target; three committed recipes.
@@ -253,7 +290,10 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
 
 ## Community content
 
-- Features and skins are data in this repository, validated by CI with the same schemas.
+- Features and skins are data in this repository. CI checks their schemas and everything that
+  needs no firmware. The checks that need the official file, the protected set (kept outside the
+  repository) or the emulator (preconditions, output pins, the protected set, start-up reads,
+  rehearsals and acceptance tests) are run by the maintainer before an item is offered.
 - Code keeps the repository's licence; art carries an open art licence (to be decided by the
   maintainer); contributors declare that art is their own and contains no extracted vendor
   images.
@@ -271,7 +311,8 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
 6. The XDJ-1000MK2 v1.45 as the second player.
 7. A builder that runs in the browser on the owner's computer, and signed releases of the
    catalogue.
-8. Custom skins with positions, screen by screen as limit 1 is lifted.
+8. Custom skins with positions, screen by screen as limit 1 is lifted; larger or new images once
+   limit 4 is.
 
 ## Open questions
 

@@ -11,8 +11,10 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   An owner picks a player, a skin per screen and features. Players, screens with named slots,
   features with requires/conflicts/provides, per-screen skins with fallbacks, and the owner's
   profile are data, composed into one verified rebuild. It defines verification by maturity tier
-  (emulator acceptance tests, rehearsals, hardware stages), the evidence gates for extending
-  today's limits (data read at start-up, the 256 KiB growth bound, code changes), rules for
+  (emulator acceptance tests, rehearsals, hardware stages; combinations rehearsed as a whole or
+  offered as experimental), the evidence gates for extending today's limits (data read at
+  start-up, the bound on the compressed MAIN image, code changes, same-length images), with
+  section 5 of the flashing guide staying the authoritative statement of the rules, rules for
   community content, and a roadmap with the XDJ-1000MK2 v1.45 as the second player. The README
   links it.
 - `recipes/xdj700-v1.15/beat-loop-1-to-32.json`, **experimental; rehearsed in emulation, not yet
