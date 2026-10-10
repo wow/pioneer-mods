@@ -55,24 +55,29 @@ pub enum Status {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fragment {
     pub recipe: String,
+    /// The least settled of the implementations that name the recipe.
     pub maturity: Maturity,
     pub builds: Vec<String>,
+    /// Whether the profile's label and reported version are the recipe's own, so that the
+    /// fragment alone builds the very file its pins describe.
+    pub as_pinned: bool,
 }
 
 impl Resolution {
-    /// The tier of the build: its least settled fragment's, and `experimental` at most for a
-    /// combination of several fragments, which is a new update that no listed combination
-    /// covers yet (`docs/modular-builds.md`, "Building a profile"). `None` with no fragment.
+    /// The tier of the build: its least settled fragment's when the build is one fragment under
+    /// the recipe's own label and reported version (the very file its pins describe), and
+    /// `experimental` at most otherwise: a combination, or another label or version, is a new
+    /// update that no listed combination covers yet (`docs/modular-builds.md`, "Building a
+    /// profile"). `None` with no fragment.
     pub fn tier(&self) -> Option<Maturity> {
         let least = self
             .fragments
             .iter()
             .map(|fragment| fragment.maturity)
             .min()?;
-        Some(if self.fragments.len() > 1 {
-            least.min(Maturity::Experimental)
-        } else {
-            least
+        Some(match self.fragments.as_slice() {
+            [lone] if lone.as_pinned => least,
+            _ => least.min(Maturity::Experimental),
         })
     }
 }

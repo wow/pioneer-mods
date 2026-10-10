@@ -25,7 +25,8 @@ belong to a player in `players/` and hold at least one screen. Anything
 else in `catalog/` is refused, so a misnamed file cannot be skipped silently; only a `README.md`
 and a `.DS_Store` are skipped. A symbolic link in the catalog, or in a recipe path, is refused: it
 could point outside the tree. Every file has `"schema_version": 1` and names a `maintainer`.
-Unknown fields, and a key given twice in an object, are refused.
+Unknown fields, and a key given twice in an object, are refused, and so is a control character
+(a line break, a tab) in any text shown to the owner.
 
 Ids are lowercase letters, digits and `-` (a player id may also hold `.`: `xdj700-v1.15`, the
 release id recipes name), at most 64 bytes. Capability and slot names are lowercase segments of
@@ -78,10 +79,12 @@ a screen accepts come with the screen catalogue (design roadmap, step 3).
     needed for `stable`, but the maintainer decides: `beat-loop-16-plays-32` passed on an owner's
     unit and stays `experimental` while its lit-pad limit stands.
   - `limits`: known limits the builder shows with the feature.
-  - `draws_labels`: the screens whose labels the recipe draws itself, each in the style of a skin
-    (`{"perform": "stock"}`), so each such screen must use that skin. A labelled screen not listed
-    is left to the chosen skin, which must have an implementation drawing that label set (the
-    built-in `stock` skin has none: its labels are drawn by features). Labels belong to skins;
+  - `draws_labels`: the screens whose labels the recipe draws itself in the stock style
+    (`{"perform": "stock"}`), so each such screen must keep the `stock` skin. A labelled screen
+    not listed is left to the chosen skin, which must have an implementation drawing that label
+    set (the built-in `stock` skin has none: its labels are drawn by features). Only `stock` is
+    accepted for now: a skin cannot yet leave slots for a feature to draw, so a feature drawing
+    in another skin's style would edit the same images as that skin. Labels belong to skins;
     today's stage-7 recipe draws its labels in the stock style, so the PERFORM screen keeps the
     stock skin with it.
 
@@ -162,26 +165,32 @@ feature beat-loop-1-to-32: on (experimental, recipes/xdj700-v1.15/beat-loop-1-to
 fragments: 1
 fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json (experimental; feature beat-loop-1-to-32)
 tier: experimental
+note: a build composes these fragments under the profile's label and reported version; …
 ```
 
-The profile's choices are honoured as far as they fit, and nothing is dropped silently:
+The profile's label and reported version must pass the release's rules (higher than its own
+version, and lower), as a build applies them. The choices are honoured as far as they fit, and
+nothing is dropped silently:
 
 1. A skin or feature that is not in the catalog, has no implementation for the player, or none
    at the maturity the profile accepts, is off. So is a skin for another screen, and a screen
    the player lacks.
-2. Each feature takes its first implementation that fits the screens' skins: a screen whose
-   labels it draws must use that skin, and a screen whose labels it leaves to the skin must not
-   use `stock`, which draws none.
-3. Chosen features that conflict are both off: the owner chooses one.
-4. Each chosen skin needs an implementation drawing exactly the labels left to it. If it has
-   none, the features leaving labels to it are off (with a hint when a stock-style
-   implementation exists); with no labels to draw and no implementation without labels, the
-   skin is off and its screen keeps `stock`.
+2. Chosen features that conflict are both off: the owner chooses one. This is decided once,
+   whatever the skins.
+3. Then, in rounds until no skin goes off, each feature takes its first implementation that fits
+   the screens' skins: it draws the labels of a screen that keeps `stock`, in the stock style,
+   and leaves those of a screen with another skin to that skin. Each chosen skin takes the
+   implementation drawing exactly the labels of the most features that leave theirs to it, and
+   the features it does not draw are off (with a note when they have a stock-style
+   implementation). A skin with no such implementation, not even one without labels, is off: its
+   screen keeps `stock`, and the features are picked again.
 
-A screen whose skin is off keeps `stock`. The **tier** of the build is its least settled
-fragment's, and `experimental` at most for a combination of several fragments, a new update that
-no listed combination covers yet ([modular-builds.md](./modular-builds.md)). Only an invalid
-profile, or a player the catalog lacks, is refused outright.
+An explicit skin choice is kept whenever it can be. The **tier** of the build is its least
+settled fragment's when it is one fragment under the recipe's own label and reported version
+(the very file its pins describe), and `experimental` at most otherwise: a combination, or
+another label or version, is a new update that no listed combination covers yet
+([modular-builds.md](./modular-builds.md)). Only an invalid profile, a player the catalog lacks,
+or a label or version the release refuses is refused outright.
 
 ## Checks
 

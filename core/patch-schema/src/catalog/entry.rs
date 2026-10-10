@@ -53,6 +53,9 @@ pub enum EntryError {
     #[error("{field} must not be empty")]
     Empty { field: String },
 
+    #[error("{field} holds a control character (a line break, a tab or another)")]
+    Control { field: String },
+
     #[error("{field} lists {value:?} twice")]
     Repeated { field: String, value: String },
 
@@ -91,6 +94,16 @@ pub enum Maturity {
     Dev,
     Experimental,
     Stable,
+}
+
+impl fmt::Display for Maturity {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Maturity::Dev => "dev",
+            Maturity::Experimental => "experimental",
+            Maturity::Stable => "stable",
+        })
+    }
 }
 
 pub(crate) fn check_schema_version(version: u32) -> Result<(), EntryError> {
@@ -164,9 +177,16 @@ pub(crate) fn check_slot_ref(field: &str, value: &str) -> Result<(), EntryError>
     })
 }
 
+/// Text shown to the owner: not empty, and no control character (a line break in a limit could
+/// pass for another line of a command's report).
 pub(crate) fn check_text(field: &str, value: &str) -> Result<(), EntryError> {
     checked(!value.trim().is_empty(), || EntryError::Empty {
         field: field.to_owned(),
+    })?;
+    checked(!value.chars().any(char::is_control), || {
+        EntryError::Control {
+            field: field.to_owned(),
+        }
     })
 }
 

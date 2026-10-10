@@ -2,18 +2,22 @@
 //! a build can hold on the profile's player, which implementation of each, and why anything else
 //! is switched off. Needs no firmware; composing the fragments is for the engine.
 //!
-//! The profile's choices are honoured as far as they fit, in rounds until nothing changes:
+//! The profile's choices are honoured as far as they fit:
 //! 1. A skin or feature that is not in the catalog, has no implementation for the player, or
-//!    none at the maturity the profile accepts, is off for good.
-//! 2. Each feature takes its first implementation that fits the screens' skins: a screen whose
-//!    labels the implementation draws must use that skin, and a screen whose labels it leaves to
-//!    the skin must not use `stock`, which draws none.
-//! 3. Chosen features that conflict are both off for good: the owner chooses one.
-//! 4. Each chosen skin needs an implementation drawing exactly the labels left to it. If it has
-//!    none, the features that leave their labels to it are off for good; with no such labels,
-//!    the skin is, and its screen keeps `stock`.
+//!    none at the maturity the profile accepts, is off. So is a skin for another screen.
+//! 2. Chosen features that conflict are both off: the owner chooses one. This is decided once,
+//!    among the features step 1 leaves, whatever the skins.
+//! 3. Then, in rounds from scratch until no skin goes off:
+//!    - each feature takes its first implementation that fits the screens' skins: it draws the
+//!      labels of a screen that keeps the `stock` skin, in the stock style, and leaves those of
+//!      a screen with another skin to that skin;
+//!    - each chosen skin takes the implementation drawing the labels of the most features that
+//!      leave theirs to it (exactly those labels; the first such implementation on a tie), and
+//!      the features it does not draw are off. A skin with no such implementation, not even
+//!      one without labels, is off, its screen keeps `stock`, and the round starts again.
 //!
-//! Every round that changes something switches something off for good, so the rounds end.
+//! An explicit skin choice is kept whenever it can be, and only a skin is ever switched off
+//! between rounds, so the rounds end; features are picked afresh each round.
 
 use super::check::Catalog;
 use super::entry::Maturity;
@@ -21,28 +25,33 @@ use super::feature::{Feature, FeatureImplementation};
 use super::player::Player;
 use super::profile::Profile;
 use super::resolution::{Resolution, ResolveError};
-use super::resolve_output::maturity_name;
 use super::skin::{STOCK_SKIN, SkinImplementation};
+use crate::v2::RecipeV2;
 use std::collections::BTreeMap;
 
-/// Resolves `profile` against `catalog`, which must have passed [`Catalog::check`].
+/// Resolves `profile` against `catalog`, which must have passed [`Catalog::check`] with
+/// `recipes`.
 ///
 /// # Errors
 ///
 /// [`ResolveError::Profile`] for an invalid profile, [`ResolveError::UnknownPlayer`] for a player
 /// the catalog lacks. Anything narrower is switched off with its reason instead.
-pub fn resolve(catalog: &Catalog, profile: &Profile) -> Result<Resolution, ResolveError> {
+pub fn resolve(
+    catalog: &Catalog,
+    recipes: &BTreeMap<String, RecipeV2>,
+    profile: &Profile,
+) -> Result<Resolution, ResolveError> {
     profile.validate().map_err(ResolveError::Profile)?;
     let player = catalog
         .player(&profile.player)
         .ok_or_else(|| ResolveError::UnknownPlayer(profile.player.clone()))?;
     let mut state = State::new(catalog, player, profile);
     while state.round() {}
-    Ok(state.resolution())
+    Ok(state.resolution(recipes))
 }
 
 /// Labels by slot name on one screen.
-type Labels = BTreeMap<String, Vec<String>>;
+pub(super) type Labels = BTreeMap<String, Vec<String>>;
 
 pub(super) struct State<'a> {
     pub(super) catalog: &'a Catalog,
@@ -50,11 +59,11 @@ pub(super) struct State<'a> {
     pub(super) profile: &'a Profile,
     /// The skin chosen for each player screen.
     pub(super) chosen: BTreeMap<&'a str, &'a str>,
-    /// Chosen skins off for good, by screen; the screen keeps `stock`.
+    /// Chosen skins switched off, by screen; the screen keeps `stock`.
     pub(super) skins_off: BTreeMap<&'a str, String>,
-    /// Features off for good.
+    /// Features off whatever the skins (steps 1 and 2).
     pub(super) features_off: BTreeMap<&'a str, String>,
-    /// The last round's implementation of each feature that fits, and why the others do not.
+    /// The last round's implementation of each feature that is on, and why the others are off.
     pub(super) picks: BTreeMap<&'a str, &'a FeatureImplementation>,
     pub(super) unfit: BTreeMap<&'a str, String>,
     /// The last round's implementation of each non-stock skin, by screen.
@@ -91,10 +100,11 @@ impl<'a> State<'a> {
                 state.features_off.insert(id, reason);
             }
         }
+        state.switch_off_conflicts();
         state
     }
 
-    fn accepts(&self, maturity: Maturity) -> bool {
+    pub(super) fn accepts(&self, maturity: Maturity) -> bool {
         maturity >= self.profile.maturity && maturity != Maturity::Dev
     }
 
@@ -104,7 +114,7 @@ impl<'a> State<'a> {
         let count = maturities.len();
         maturities.sort_unstable();
         maturities.dedup();
-        let names: Vec<&str> = maturities.into_iter().map(maturity_name).collect();
+        let names: Vec<String> = maturities.iter().map(Maturity::to_string).collect();
         let accepted = match self.profile.maturity {
             Maturity::Stable => "stable only",
             _ => "experimental and stable",
@@ -157,15 +167,44 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Chosen features that conflict with another one still available are both off.
+    fn switch_off_conflicts(&mut self) {
+        let available: Vec<&'a str> = self
+            .profile
+            .features
+            .iter()
+            .map(String::as_str)
+            .filter(|id| !self.features_off.contains_key(id))
+            .collect();
+        let mut off = BTreeMap::new();
+        for id in &available {
+            let feature = self.catalog.feature(id).expect("available");
+            let others: Vec<&str> = feature
+                .conflicts
+                .iter()
+                .map(String::as_str)
+                .filter(|other| available.contains(other))
+                .collect();
+            if !others.is_empty() {
+                let reason = format!(
+                    "it conflicts with {}, also chosen; choose one",
+                    others.join(" and ")
+                );
+                off.insert(*id, reason);
+            }
+        }
+        self.features_off.extend(off);
+    }
+
     /// The skin `screen` uses: the chosen one, unless it is off.
-    fn effective(&self, screen: &str) -> &'a str {
+    pub(super) fn effective(&self, screen: &str) -> &'a str {
         match self.chosen.get(screen) {
             Some(skin) if !self.skins_off.contains_key(screen) => skin,
             _ => STOCK_SKIN,
         }
     }
 
-    /// One round; whether it switched anything off for good.
+    /// One round from scratch; whether it switched a skin off (and another round is needed).
     fn round(&mut self) -> bool {
         self.picks.clear();
         self.unfit.clear();
@@ -184,66 +223,65 @@ impl<'a> State<'a> {
                 }
             }
         }
-        if self.switch_off_conflicts() {
-            return true;
-        }
-        for screen in self.player.screens.iter().map(String::as_str) {
-            let skin = self.effective(screen);
-            if skin == STOCK_SKIN {
-                continue;
-            }
-            let required = self.labels_left_to_skin(screen);
-            let implementations =
-                &self.catalog.skin(skin).expect("available").implementations[&self.player.id];
-            let drawing = implementations
-                .iter()
-                .find(|i| self.accepts(i.maturity) && i.labels == required);
-            if let Some(implementation) = drawing {
+        // A feature a skin does not draw no longer gives labels on its other screens: settle.
+        loop {
+            let mut changed = false;
+            for screen in self.player.screens.iter().map(String::as_str) {
+                let skin = self.effective(screen);
+                if skin == STOCK_SKIN {
+                    continue;
+                }
+                let ready = self.leaving_labels(screen);
+                let Some((implementation, drawn)) = self.best_drawing(skin, screen, &ready) else {
+                    let reason = if ready.is_empty() {
+                        format!(
+                            "skin {skin} has no implementation for {} without a feature's labels",
+                            self.player.id
+                        )
+                    } else {
+                        format!(
+                            "skin {skin} has no implementation for {} drawing the labels of \
+                             some of the chosen features, or none",
+                            self.player.id
+                        )
+                    };
+                    self.skins_off.insert(screen, reason);
+                    return true;
+                };
                 self.skin_picks.insert(screen, implementation);
-            } else if required.is_empty() {
-                let reason = format!(
-                    "skin {skin} has no implementation for {} without a feature's labels",
-                    self.player.id
-                );
-                self.skins_off.insert(screen, reason);
-                return true;
-            } else {
-                let before = self.features_off.len();
-                self.switch_off_undrawn(screen, skin);
-                // The labels come from picked features, so at least one is switched off and the
-                // rounds still end.
-                assert!(
-                    self.features_off.len() > before,
-                    "labels without a picked feature"
-                );
-                return true;
+                for id in ready.into_iter().filter(|id| !drawn.contains(id)) {
+                    let reason = self.undrawn(id, screen, skin);
+                    self.picks.remove(id);
+                    self.unfit.insert(id, reason);
+                    changed = true;
+                }
+            }
+            if !changed {
+                return false;
             }
         }
-        false
     }
 
     /// The first implementation of `feature` at an accepted maturity that fits the skins.
     fn pick(&self, feature: &'a Feature) -> Result<&'a FeatureImplementation, String> {
-        let accepted: Vec<&FeatureImplementation> = feature.implementations[&self.player.id]
+        let accepted: Vec<&'a FeatureImplementation> = feature.implementations[&self.player.id]
             .iter()
             .filter(|i| self.accepts(i.maturity))
             .collect();
-        let mut first_reason = None;
-        for implementation in &accepted {
+        let mut reasons = Vec::new();
+        for implementation in accepted {
             match self.fits(feature, implementation) {
                 Ok(()) => return Ok(implementation),
-                Err(reason) => {
-                    first_reason.get_or_insert(reason);
-                }
+                Err(reason) => reasons.push(reason),
             }
         }
-        let reason = first_reason.expect("an accepted implementation");
-        Err(if accepted.len() == 1 {
-            reason
+        Err(if reasons.len() == 1 {
+            reasons.remove(0)
         } else {
             format!(
-                "none of its implementations for {} fits the skins; the first: {reason}",
-                self.player.id
+                "none of its implementations for {} fits the skins: {}",
+                self.player.id,
+                reasons.join("; ")
             )
         })
     }
@@ -255,101 +293,26 @@ impl<'a> State<'a> {
     ) -> Result<(), String> {
         for screen in labelled_screens(feature) {
             let skin = self.effective(screen);
-            match implementation.draws_labels.get(screen) {
-                Some(style) if style == skin => {}
-                Some(style) => {
-                    return Err(format!(
-                        "it draws the {screen} labels as skin {style}, but {screen} uses skin \
-                         {skin}"
-                    ));
-                }
-                None if skin == STOCK_SKIN => {
-                    return Err(format!(
-                        "it leaves the {screen} labels to the skin, and {screen} uses the stock \
-                         skin, which draws none"
-                    ));
-                }
-                None => {}
+            let draws = implementation.draws_labels.contains_key(screen);
+            if draws && skin != STOCK_SKIN {
+                return Err(format!(
+                    "it draws the {screen} labels in the stock style, and {screen} uses skin \
+                     {skin}"
+                ));
+            }
+            if !draws && skin == STOCK_SKIN {
+                return Err(format!(
+                    "it leaves the {screen} labels to a skin, and {screen} uses the stock skin, \
+                     which draws none"
+                ));
             }
         }
         Ok(())
     }
-
-    /// Chosen features that conflict with another chosen one are both off for good.
-    fn switch_off_conflicts(&mut self) -> bool {
-        let mut off = BTreeMap::new();
-        for id in self.picks.keys() {
-            let feature = self.catalog.feature(id).expect("available");
-            let others: Vec<&str> = feature
-                .conflicts
-                .iter()
-                .map(String::as_str)
-                .filter(|other| self.picks.contains_key(other))
-                .collect();
-            if !others.is_empty() {
-                let reason = format!(
-                    "it conflicts with {}, also chosen; choose one",
-                    others.join(" and ")
-                );
-                off.insert(*id, reason);
-            }
-        }
-        let changed = !off.is_empty();
-        self.features_off.extend(off);
-        changed
-    }
-
-    /// The labels the picked features leave to the skin on `screen`, by slot name.
-    fn labels_left_to_skin(&self, screen: &str) -> Labels {
-        let mut labels = Labels::new();
-        for (id, implementation) in &self.picks {
-            if implementation.draws_labels.contains_key(screen) {
-                continue;
-            }
-            let feature = self.catalog.feature(id).expect("available");
-            for (slot_ref, slot_labels) in &feature.labels {
-                if let Some((on, slot)) = slot_ref.split_once('.')
-                    && on == screen
-                {
-                    labels.insert(slot.to_owned(), slot_labels.clone());
-                }
-            }
-        }
-        labels
-    }
-
-    /// The picked features that leave labels to `skin` on `screen`, which cannot draw them, are
-    /// off for good.
-    fn switch_off_undrawn(&mut self, screen: &str, skin: &str) {
-        let mut off = BTreeMap::new();
-        for (id, implementation) in &self.picks {
-            let feature = self.catalog.feature(id).expect("available");
-            if implementation.draws_labels.contains_key(screen)
-                || !labelled_screens(feature).any(|labelled| labelled == screen)
-            {
-                continue;
-            }
-            let stock_style = feature.implementations[&self.player.id].iter().any(|i| {
-                self.accepts(i.maturity)
-                    && i.draws_labels.get(screen).is_some_and(|s| s == STOCK_SKIN)
-            });
-            let hint = if stock_style {
-                format!("; with the stock skin on {screen}, its stock-style implementation applies")
-            } else {
-                String::new()
-            };
-            let reason = format!(
-                "skin {skin} on {screen} has no implementation for {} drawing its labels{hint}",
-                self.player.id
-            );
-            off.insert(*id, reason);
-        }
-        self.features_off.extend(off);
-    }
 }
 
 /// The screens `feature` gives labels on.
-fn labelled_screens(feature: &Feature) -> impl Iterator<Item = &str> {
+pub(super) fn labelled_screens(feature: &Feature) -> impl Iterator<Item = &str> {
     let mut screens: Vec<&str> = feature
         .labels
         .keys()

@@ -6,6 +6,7 @@ use super::entry::{
     check_player_id, check_schema_version, check_slot_ref, check_text, check_unique,
     split_slot_ref, unique_keys,
 };
+use super::skin::STOCK_SKIN;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -58,8 +59,10 @@ pub struct FeatureImplementation {
     #[serde(default)]
     pub limits: Vec<String>,
     /// The screens whose labels the recipe draws itself, each in the style of a skin
-    /// (`{"perform": "stock"}`): those screens must then use that skin. A labelled screen not
-    /// listed is left to the chosen skin (a skin implementation drawing that label set).
+    /// (`{"perform": "stock"}`): those screens must then keep that skin. A labelled screen not
+    /// listed is left to the chosen skin (a skin implementation drawing that label set). Only
+    /// `stock` is accepted for now: a skin cannot yet leave slots for a feature to draw, so a
+    /// feature drawing in another skin's style would edit the same images as the skin.
     #[serde(default, deserialize_with = "unique_keys")]
     pub draws_labels: BTreeMap<String, String>,
 }
@@ -155,7 +158,14 @@ impl Feature {
         )?;
         for (screen, skin) in &implementation.draws_labels {
             check_id(&format!("{field}.draws_labels"), screen)?;
-            check_id(&format!("{field}.draws_labels.{screen}"), skin)?;
+            if skin != STOCK_SKIN {
+                return Err(EntryError::Rule {
+                    field: format!("{field}.draws_labels.{screen}"),
+                    problem: "only the stock style for now: a skin cannot yet leave slots for a \
+                              feature to draw"
+                        .to_owned(),
+                });
+            }
             let labelled = self
                 .labels
                 .keys()

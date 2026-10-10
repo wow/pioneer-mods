@@ -119,3 +119,23 @@ fn an_unusable_profile_or_catalog_is_refused() {
     let empty = tempfile::tempdir().expect("tempdir");
     assert!(stderr(&run(&profile(&[], "stable"), empty.path())).contains("no such directory"));
 }
+
+#[test]
+fn the_release_rules_for_the_label_and_reported_version_apply() {
+    let mut not_lower = profile(&["beat-loop-1-to-32"], "experimental");
+    not_lower["reported_version"] = json!("1.20");
+    assert!(stderr(&run(&not_lower, &repo_root())).contains("is not lower than the official"));
+
+    let mut not_higher = profile(&["beat-loop-1-to-32"], "experimental");
+    not_higher["label"] = json!("Ver1.10");
+    assert!(stderr(&run(&not_higher, &repo_root())).contains("is not higher"));
+
+    // Another reported version than the recipe's own: a new update, experimental at most.
+    let mut other = profile(&["beat-loop-1-to-32"], "experimental");
+    other["reported_version"] = json!("0.13");
+    let out = stdout(&run(&other, &repo_root()));
+    assert!(
+        out.contains("; under another label or reported version than its own)"),
+        "{out}"
+    );
+}

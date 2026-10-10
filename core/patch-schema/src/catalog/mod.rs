@@ -15,6 +15,7 @@ mod profile;
 mod resolution;
 mod resolve;
 mod resolve_output;
+mod resolve_skins;
 mod screen;
 mod skin;
 

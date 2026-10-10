@@ -62,6 +62,14 @@ fn features_are_checked_on_their_own() {
     let mut bad = labelled();
     bad["implementations"]["p-1.0"][0]["draws_labels"] = json!({ "main": "stock" });
     assert!(is_rule(feature(bad)));
+    // Only the stock style, for now: a skin cannot yet leave slots for a feature to draw.
+    let mut bad = labelled();
+    bad["implementations"]["p-1.0"][0]["draws_labels"] = json!({ "perform": "dark-pads" });
+    assert!(is_rule(feature(bad)));
+    // Text shown to the owner holds no control character.
+    let mut bad = plain();
+    bad["implementations"]["p-1.0"][0]["limits"] = json!(["one line\ntier: stable"]);
+    assert!(matches!(feature(bad), Err(EntryError::Control { .. })));
     // Two implementations for one player that draw the labels the same way.
     let mut bad = labelled();
     bad["implementations"]["p-1.0"][1]["draws_labels"] = json!({ "perform": "stock" });

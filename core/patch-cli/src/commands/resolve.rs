@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use patch_cli::catalog::{load_catalog, read_profile};
+use patch_core::xdj700::{check_label_and_version, recipe_target};
 use patch_schema::catalog::{Maturity, Status, resolve as resolve_profile};
 use std::path::PathBuf;
 
@@ -20,8 +21,13 @@ pub struct ResolveArgs {
 pub fn resolve(args: ResolveArgs) -> Result<()> {
     let loaded = load_catalog(&args.root)?;
     let profile = read_profile(&args.profile)?;
-    let resolution = resolve_profile(&loaded.catalog, &profile)
-        .with_context(|| format!("refusing profile '{}'", args.profile.display()))?;
+    let refusing = || format!("refusing profile '{}'", args.profile.display());
+    let resolution =
+        resolve_profile(&loaded.catalog, &loaded.recipes, &profile).with_context(refusing)?;
+    // The release's rules for the label and reported version, as a build would apply them.
+    let target = recipe_target(&resolution.player).expect("the loader checked every player");
+    check_label_and_version(&profile.label, &profile.reported_version, target)
+        .with_context(refusing)?;
 
     println!("player: {}", resolution.player);
     println!("label: {}", resolution.label);
@@ -54,16 +60,21 @@ pub fn resolve(args: ResolveArgs) -> Result<()> {
     println!("fragments: {}", resolution.fragments.len());
     for (index, fragment) in resolution.fragments.iter().enumerate() {
         println!(
-            "fragment[{index}]: {} ({}; {})",
+            "fragment[{index}]: {} ({}; {}{})",
             fragment.recipe,
-            maturity(fragment.maturity),
-            fragment.builds.join(", ")
+            fragment.maturity,
+            fragment.builds.join(", "),
+            if fragment.as_pinned {
+                ""
+            } else {
+                "; under another label or reported version than its own"
+            }
         );
     }
     match resolution.tier() {
         None => println!("tier: none; nothing to build"),
         Some(tier) => {
-            println!("tier: {}", maturity(tier));
+            println!("tier: {tier}");
             println!(
                 "note: a build composes these fragments under the profile's label and reported \
                  version; a combination of several is a new update to rehearse both ways in \
@@ -80,7 +91,7 @@ fn describe(status: &Status) -> String {
             recipe,
             maturity: m,
             ..
-        } => format!("on ({}, {recipe})", maturity(*m)),
+        } => format!("on ({m}, {recipe})"),
         Status::Stock => "stock".to_owned(),
         Status::Off { reason } => format!("off: {reason}"),
     }
@@ -91,13 +102,5 @@ fn print_limits(status: &Status) {
         for limit in limits {
             println!("  limit: {limit}");
         }
-    }
-}
-
-fn maturity(maturity: Maturity) -> &'static str {
-    match maturity {
-        Maturity::Dev => "dev",
-        Maturity::Experimental => "experimental",
-        Maturity::Stable => "stable",
     }
 }

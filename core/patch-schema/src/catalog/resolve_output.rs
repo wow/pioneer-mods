@@ -4,9 +4,13 @@ use super::entry::Maturity;
 use super::resolution::{FeatureResolution, Fragment, Resolution, ScreenResolution, Status};
 use super::resolve::State;
 use super::skin::STOCK_SKIN;
+use crate::v2::RecipeV2;
+use std::collections::BTreeMap;
 
 impl State<'_> {
-    pub(super) fn resolution(&self) -> Resolution {
+    /// The resolution, with each fragment's recipe looked up in `recipes` (the catalog's, which
+    /// [`Catalog::check`](super::Catalog::check) found complete).
+    pub(super) fn resolution(&self, recipes: &BTreeMap<String, RecipeV2>) -> Resolution {
         let mut screens = Vec::new();
         for screen in self.player.screens.iter().map(String::as_str) {
             let chosen = self.chosen[screen];
@@ -80,12 +84,20 @@ impl State<'_> {
                 continue;
             };
             match fragments.iter_mut().find(|f| &f.recipe == recipe) {
-                Some(fragment) => fragment.builds.push(builds),
-                None => fragments.push(Fragment {
-                    recipe: recipe.clone(),
-                    maturity: *maturity,
-                    builds: vec![builds],
-                }),
+                Some(fragment) => {
+                    fragment.builds.push(builds);
+                    fragment.maturity = fragment.maturity.min(*maturity);
+                }
+                None => {
+                    let own = &recipes[recipe];
+                    fragments.push(Fragment {
+                        recipe: recipe.clone(),
+                        maturity: *maturity,
+                        builds: vec![builds],
+                        as_pinned: own.label == self.profile.label
+                            && own.reported_version == self.profile.reported_version,
+                    });
+                }
             }
         }
         Resolution {
@@ -105,13 +117,5 @@ fn on(recipe: &str, maturity: Maturity, limits: &[String]) -> Status {
         recipe: recipe.to_owned(),
         maturity,
         limits: limits.to_vec(),
-    }
-}
-
-pub(super) fn maturity_name(maturity: Maturity) -> &'static str {
-    match maturity {
-        Maturity::Dev => "dev",
-        Maturity::Experimental => "experimental",
-        Maturity::Stable => "stable",
     }
 }
