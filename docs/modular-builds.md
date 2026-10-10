@@ -156,9 +156,10 @@ firmware port:
 3. **Check.** Everything `patch` checks today: pins, windows and leak rules, protected ranges and
    the protected set, image bounds, the size budget, the bounded diff, and the rebuild's own
    verification. In addition, each fragment keeps its own output pin (the identity it produces
-   when applied alone to the official file), and the composed application must equal, at every
-   byte a fragment changes, that fragment's own pinned output, and stock everywhere else (apart
-   from the version string). This keeps what an output pin guards today, for image edits
+   when applied alone to the official file). The builder first applies each fragment alone and
+   confirms the result against that pin; the composed application must then equal, at every
+   byte a fragment changes, that fragment's own verified output, and stock everywhere else
+   (apart from the version string). This keeps what an output pin guards today, for image edits
    especially, whose pixels no hash covers.
 4. **Report.** The output identity, each fragment's evidence and tier, and the restore plan (the
    official file, and the stock no-op stick).
