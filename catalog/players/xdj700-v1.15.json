@@ -32,6 +32,23 @@
       "description": "Pushing the rotary selector: in the browser it opens the highlighted entry or loads the track (emulator, 2026-10-09)."
     }
   },
+  "state_memory": [
+    {
+      "start": "0x0b6c3e3c",
+      "end": "0x0b6c3e44",
+      "evidence": "The current loop's length in beats, as a fraction: the numerator, then the denominator (32 bits each). In emulation (2026-10-11; four boots of stock, stage 5 and stage 7 with the same stick): 0 and 0 before any loop; each BEAT LOOP pad touched sets it to the length the pad selects (stock 1/2 to 16, stage 5's sixth pad 32, stage 7 1 to 32), and it holds after. Above the loaded application (0x08000000 to 0x091BD788)."
+    },
+    {
+      "start": "0x0c0e6c2c",
+      "end": "0x0c0e6c44",
+      "evidence": "The six BEAT LOOP pads' lit states, left to right (32 bits each): 2 lit, 0 not. In emulation (2026-10-11; the same runs): stock lights the touched pad; stage 5 lights none for its 32-beat loop, and stage 7 the pad to the right of the touched one and none for 32, as docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\", describes. Above the loaded application (0x08000000 to 0x091BD788)."
+    },
+    {
+      "start": "0x0c0e75c0",
+      "end": "0x0c0e75c4",
+      "evidence": "The index of the BEAT LOOP pad touched last, 0 to 5 from the left (32 bits): 0 before any touch. In emulation (2026-10-11; the same runs): each pad touched sets its index, on stock, stage 5 and stage 7 alike. Above the loaded application (0x08000000 to 0x091BD788)."
+    }
+  ],
   "restore": {
     "official": "The unit accepts it over a build, which reports a lower version than 1.15, and it writes back the stock application (stages 4 and 6, on an owner's unit).",
     "backup": "The stock no-op rebuild labelled Ver1.16, built without --report-version (the stage-1b file): check its SHA-256 before flashing, since the stage files share its name and label; untested over a modified application (section 3, step 5).",

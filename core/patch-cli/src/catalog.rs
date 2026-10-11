@@ -166,6 +166,20 @@ fn check_against_engine(catalog: &Catalog, recipes: &BTreeMap<String, RecipeV2>)
                 target.id
             );
         }
+        // Memory checks read run-time state, never the loaded application (which the recipes
+        // keep at its stock length). An unpacked copy elsewhere rests on each range's evidence.
+        let app_start = target.load_address;
+        let app_end = app_start + target.application_len as u64;
+        for range in &player.state_memory {
+            let (start, end) = (u64::from(range.start.0), u64::from(range.end.0));
+            if start < app_end && end > app_start {
+                bail!(
+                    "player {}: state range {start:#010x} to {end:#010x} overlaps the loaded \
+                     application ({app_start:#010x} to {app_end:#010x})",
+                    player.id
+                );
+            }
+        }
     }
     for (path, recipe) in recipes {
         let target = recipe_target(&recipe.target.release)

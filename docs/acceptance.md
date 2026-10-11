@@ -9,7 +9,8 @@ test of the lit pad would have caught it.
 **Status.** The format, the checks that need no firmware and the runner are implemented: tests
 load with the catalog ([catalog.md](./catalog.md)), implementations name the tests they must
 pass, and `patch-cli accept` runs a test on an update in the owner's emulator
-([Running a test](#running-a-test)). No test is committed yet.
+([Running a test](#running-a-test)). Three XDJ-700 tests are committed
+([The BEAT LOOP tests](#the-beat-loop-tests)).
 
 ## What a test may hold
 
@@ -95,9 +96,20 @@ added with the evidence that names them.
 A player also names the address ranges memory checks may read (`state_memory`): each a `start` and
 an exclusive `end` (guest physical addresses; ranges that overlap or touch are written as one) and
 the `evidence` that the range holds only run-time state, outside the loaded application (and
-outside any copy of it the application unpacks into RAM). Nothing checks that mechanically: a range
-is added only with its evidence, and reviewed. The XDJ-700 names none yet, so its tests cannot
-check memory until a range is added with its evidence (the first tests, roadmap step 2).
+outside any copy of it the application unpacks into RAM). The catalog check refuses a range that
+overlaps the loaded application (the engine's load address and application length for the
+player's release); the rest, that a range holds run-time state and no unpacked copy, rests on its
+evidence and on review. The XDJ-700 names three, all found in emulation by
+comparing its memory before and after each BEAT LOOP pad is touched, at the same address in every
+boot of stock, stage 5 and stage 7, and above the loaded application (`0x08000000` to
+`0x091BD788`):
+
+- `0x0B6C3E3C` to `0x0B6C3E44`: the current loop's length in beats, as a fraction: the numerator,
+  then the denominator (32 bits each); 0 and 0 before any loop;
+- `0x0C0E6C2C` to `0x0C0E6C44`: the six BEAT LOOP pads' lit states, left to right (32 bits each):
+  2 lit, 0 not;
+- `0x0C0E75C0` to `0x0C0E75C4`: the index of the pad touched last, 0 to 5 from the left (32 bits);
+  0 before any touch.
 
 ## Running a test
 
@@ -152,6 +164,34 @@ poll, or before the emulator starts: the emulator is stopped and the directory r
 Ctrl-C ends the runner at once, like a run killed outright (`kill -9`), which cannot remove the
 directory: its flash image, from the owner's update, then stays in the system's temporary directory
 until deleted.
+
+## The BEAT LOOP tests
+
+Three tests touch the six BEAT LOOP pads of the PERFORM screen left to right, with a track loaded
+from the owner's stick (`"stick": true`). The stick's first track must load after USB and seven
+pushes of the rotary selector; the PERFORM screen opens when its tab is touched. Each test first
+checks that no loop is set yet (and the lit-pad test that the first pad is not lit), then touches
+each pad and polls for a value no earlier touch can leave: the touched pad's index, and for the
+first pad (index 0 before any touch) its length or its lit state. A length test then expects the
+length; the lit-pad test waits 2 s more for the lit states to settle, then expects the touched pad
+lit and the other five not. So a poll never passes on the previous touch's state, whether the build
+passes the test or not, and a failing run fails at the same steps every time:
+
+| Test | Checks | Stock | Stage 5 | Stage 7 |
+| --- | --- | --- | --- | --- |
+| `beat-loop-1-to-32-pads-select-lengths` | lengths 1, 2, 4, 8, 16, 32 | FAIL | FAIL | PASS |
+| `beat-loop-16-plays-32-pads-select-lengths` | lengths 1/2, 1, 2, 4, 8, 32 | FAIL | PASS | FAIL |
+| `beat-loop-lit-pad-follows-touch` | the touched pad lights | PASS | FAIL | FAIL |
+
+Stage 7 names the first test and stage 5 the second. No build names the lit-pad test yet: stock
+passes it, and stages 5 and 7 fail it, their known limit
+([xdj700-flashing.md](./xdj700-flashing.md), "The lit BEAT LOOP pad"); a lit-pad fix would name it.
+All nine results are the owner suite's (`official_accept_beat_loop`), in the owner's emulator with
+the official v1.15 file and the stage files built from it; for each failing run it also checks
+which steps fail. Boot and browsing are waited out for fixed times (about two and a half minutes,
+host time), which a much slower or busier host may outrun; the suite runs at most one emulator per
+two host cores, three at most, for that reason. The waits become polls when a state range shows
+that a track is loaded.
 
 ## Naming tests
 

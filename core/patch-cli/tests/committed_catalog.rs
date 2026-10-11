@@ -21,6 +21,74 @@ fn the_committed_catalog_loads_and_checks() {
 }
 
 #[test]
+fn the_committed_acceptance_tests_are_named_and_read_only_state_above_the_application() {
+    let loaded = load_catalog(&repo_root()).expect("committed catalog");
+    let catalog = loaded.catalog();
+    let mut ids: Vec<&str> = catalog.acceptance.iter().map(|t| t.id.as_str()).collect();
+    ids.sort_unstable();
+    assert_eq!(
+        ids,
+        [
+            "beat-loop-1-to-32-pads-select-lengths",
+            "beat-loop-16-plays-32-pads-select-lengths",
+            "beat-loop-lit-pad-follows-touch"
+        ]
+    );
+    for (feature, test) in [
+        ("beat-loop-1-to-32", "beat-loop-1-to-32-pads-select-lengths"),
+        (
+            "beat-loop-16-plays-32",
+            "beat-loop-16-plays-32-pads-select-lengths",
+        ),
+    ] {
+        let feature = catalog.feature(feature).expect("feature");
+        assert_eq!(
+            feature.implementations["xdj700-v1.15"][0].acceptance,
+            [test]
+        );
+    }
+}
+
+/// Loads a copy of the committed catalog whose XDJ-700 also names the state range `start..end`.
+fn with_state_range(start: &str, end: &str) -> anyhow::Result<()> {
+    let root = copy();
+    let path = root.path().join("catalog/players/xdj700-v1.15.json");
+    let mut player: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).expect("read")).expect("player");
+    let range = serde_json::json!({ "start": start, "end": end, "evidence": "e" });
+    player["state_memory"]
+        .as_array_mut()
+        .expect("ranges")
+        .push(range);
+    write_bytes(&path, &serde_json::to_vec(&player).expect("json"));
+    load_catalog(root.path()).map(drop)
+}
+
+#[test]
+fn a_state_range_overlapping_the_loaded_application_is_refused() {
+    // The application is loaded at 0x08000000 and is 18,601,864 bytes, to 0x091bd788.
+    for (start, end) in [
+        ("0x07fffffc", "0x08000004"),
+        ("0x091bd784", "0x091bd78c"),
+        ("0x08100000", "0x08100004"),
+    ] {
+        let message = format!("{:#}", with_state_range(start, end).expect_err("refused"));
+        assert!(
+            message.contains("overlaps the loaded application (0x08000000 to 0x091bd788)"),
+            "{message}"
+        );
+    }
+    // Ranges that only touch it, below or above, and erased flash far below it.
+    for (start, end) in [
+        ("0x07fffffc", "0x08000000"),
+        ("0x091bd788", "0x091bd78c"),
+        ("0x00f00000", "0x01000000"),
+    ] {
+        with_state_range(start, end).expect("loads");
+    }
+}
+
+#[test]
 fn each_player_carries_the_engine_pins_and_budget() {
     let loaded = load_catalog(&repo_root()).expect("committed catalog");
 

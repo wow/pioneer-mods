@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{copy_catalog, write_bytes};
+use common::{copy_catalog, repo_root, write_bytes};
 use patch_cli::catalog::load_catalog;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -55,7 +55,12 @@ fn a_test_loads_and_an_implementation_names_it() {
 
     let checked = load_catalog(root.path()).expect("loads");
     let catalog = checked.catalog();
-    assert_eq!(catalog.acceptance.len(), 1);
+    // The committed tests, and this one.
+    let committed = load_catalog(&repo_root()).expect("committed catalog");
+    assert_eq!(
+        catalog.acceptance.len(),
+        committed.catalog().acceptance.len() + 1
+    );
     assert!(catalog.acceptance_test("pads-select-lengths").is_some());
     let feature = catalog.feature("beat-loop-1-to-32").expect("feature");
     assert_eq!(
@@ -92,14 +97,22 @@ fn a_misnamed_unknown_or_unfit_test_is_refused() {
     );
     std::fs::remove_file(dir.join("unfit.json")).expect("remove");
 
-    // The XDJ-700 names no run-time state ranges yet, so no memory check is accepted.
+    // A memory check reads only inside the XDJ-700's state ranges: not the loaded application,
+    // and not the words just before or just after the loop length's range (0x0b6c3e3c..44).
     let mut memory = test_file("memory");
+    for address in ["0x08000000", "0x0b6c3e38", "0x0b6c3e44"] {
+        memory["steps"][4] =
+            json!({ "expect": { "memory": { "address": address, "bytes": 4, "equals": 1 } } });
+        write_json(&dir.join("memory.json"), &memory);
+        let message = refusal(root.path());
+        assert!(
+            message.contains("reads outside xdj700-v1.15's run-time state ranges"),
+            "{address}: {message}"
+        );
+    }
+    // Its last word is inside.
     memory["steps"][4] =
-        json!({ "expect": { "memory": { "address": "0x0c000000", "bytes": 4, "equals": 1 } } });
+        json!({ "expect": { "memory": { "address": "0x0b6c3e40", "bytes": 4, "equals": 1 } } });
     write_json(&dir.join("memory.json"), &memory);
-    let message = refusal(root.path());
-    assert!(
-        message.contains("reads outside xdj700-v1.15's run-time state ranges"),
-        "{message}"
-    );
+    load_catalog(root.path()).expect("loads");
 }

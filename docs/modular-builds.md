@@ -326,8 +326,8 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
 1. Schemas for player, screen, feature, skin and profile; composition of several fragments into
    one rebuild; the builder's switched-off reasons.
 2. Emulator acceptance harness: scripted, asserting tests per feature and screen. The format is
-   implemented ([acceptance.md](./acceptance.md)), and so is the runner (`patch-cli accept`); the
-   first tests are next.
+   implemented ([acceptance.md](./acceptance.md)), and so is the runner (`patch-cli accept`), with
+   the first tests: the BEAT LOOP pads' lengths and lit pad, on stock, stage 5 and stage 7.
 3. Screen catalogue for the XDJ-700: `main` and `perform`, with evidence.
 4. First per-screen skins (PERFORM, main), from original art or owner-local transforms.
 5. Code fragments, starting with the lit-pad rule.
