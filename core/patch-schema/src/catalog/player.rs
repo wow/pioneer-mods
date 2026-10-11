@@ -1,7 +1,7 @@
 //! A player: one model and firmware release, its pins, screen class, budgets, capabilities and
 //! screens (`catalog/players/<id>.json`).
 
-use super::acceptance::parse_address;
+use super::acceptance::Address;
 use super::entry::{
     CatalogEntry, EntryError, check_doc_path, check_id, check_name, check_player_id,
     check_schema_version, check_sha256, check_text, check_unique, unique_keys,
@@ -63,32 +63,28 @@ impl Control {
     }
 }
 
-/// A range of run-time state an acceptance test may read, `start` to `end` exclusive (`0x` and one
-/// to eight hexadecimal digits each), and the `evidence` that it holds run-time state only.
+/// A range of run-time state an acceptance test may read, `start` to `end` exclusive, and the
+/// `evidence` that it holds run-time state only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StateRange {
-    pub start: String,
-    pub end: String,
+    pub start: Address,
+    pub end: Address,
     pub evidence: String,
 }
 
 impl StateRange {
-    /// Whether the `bytes` bytes at `address` lie within the range (if it is well formed).
+    /// Whether the `bytes` bytes at `address` lie within the range.
     pub fn holds(&self, address: u32, bytes: u8) -> bool {
-        let (Some(start), Some(end)) = (parse_address(&self.start), parse_address(&self.end))
-        else {
-            return false;
-        };
         let last = u64::from(address) + u64::from(bytes);
-        u64::from(start) <= u64::from(address) && last <= u64::from(end)
+        self.start.0 <= address && last <= u64::from(self.end.0)
     }
 }
 
 /// `0x` and two hexadecimal digits.
 fn hex_byte(value: &str) -> Option<u8> {
     let digits = value.strip_prefix("0x")?;
-    if digits.len() != 2 {
+    if digits.len() != 2 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
     }
     u8::from_str_radix(digits, 16).ok()
@@ -178,12 +174,21 @@ impl CatalogEntry for Player {
             "firmware.application_sha256",
             &self.firmware.application_sha256,
         )?;
+        let mut events = BTreeMap::new();
         for (name, control) in &self.controls {
             check_name("controls", name)?;
-            if control.bytes().is_none() {
+            let Some(event) = control.bytes() else {
                 return Err(EntryError::Rule {
                     field: format!("controls.{name}"),
                     problem: "code and value: 0x and two hexadecimal digits each".to_owned(),
+                });
+            };
+            if let Some(other) = events.insert(event, name) {
+                return Err(EntryError::Rule {
+                    field: format!("controls.{name}"),
+                    problem: format!(
+                        "the same code and value as {other}: a test pressing one would press both"
+                    ),
                 });
             }
             check_text(
@@ -193,15 +198,20 @@ impl CatalogEntry for Player {
         }
         for (index, range) in self.state_memory.iter().enumerate() {
             let field = format!("state_memory[{index}]");
-            match (parse_address(&range.start), parse_address(&range.end)) {
-                (Some(start), Some(end)) if start < end => {}
-                _ => {
-                    return Err(EntryError::Rule {
-                        field,
-                        problem: "start below end, each 0x and one to eight hexadecimal digits"
-                            .to_owned(),
-                    });
-                }
+            let rule = |problem: &str| EntryError::Rule {
+                field: field.clone(),
+                problem: problem.to_owned(),
+            };
+            if range.start >= range.end {
+                return Err(rule("start below end"));
+            }
+            // Ranges that overlap or touch are written as one, so a read is in one range or none.
+            let earlier = &self.state_memory[..index];
+            if earlier
+                .iter()
+                .any(|other| range.start <= other.end && other.start <= range.end)
+            {
+                return Err(rule("overlaps or touches another range; write them as one"));
             }
             check_text(&format!("{field}.evidence"), &range.evidence)?;
         }

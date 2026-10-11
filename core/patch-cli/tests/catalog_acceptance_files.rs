@@ -87,7 +87,7 @@ fn a_misnamed_unknown_or_unfit_test_is_refused() {
     write_json(&dir.join("unfit.json"), &unfit);
     let message = refusal(root.path());
     assert!(
-        message.contains("control play of player xdj700-v1.15 is not in the catalog"),
+        message.contains("presses control play, which player xdj700-v1.15 does not have"),
         "{message}"
     );
     std::fs::remove_file(dir.join("unfit.json")).expect("remove");

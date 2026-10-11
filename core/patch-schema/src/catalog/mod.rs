@@ -23,7 +23,7 @@ mod screen;
 mod skin;
 
 pub use acceptance::{
-    AcceptanceTest, Check, MAX_HOLD_MS, MAX_MEMORY_CHECKS, MAX_OTHER_REGIONS, MAX_STEPS,
+    AcceptanceTest, Address, Check, MAX_HOLD_MS, MAX_MEMORY_CHECKS, MAX_OTHER_REGIONS, MAX_STEPS,
     MAX_TOTAL_WAIT_MS, MAX_WAIT_MS, Region, Step, brightness, expand_rgb565, mean_brightness,
     parse_address,
 };

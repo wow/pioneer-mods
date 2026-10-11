@@ -5,7 +5,7 @@ mod common;
 
 use common::{Fixture, acceptance_test};
 use patch_schema::catalog::{
-    AcceptanceTest, CatalogEntry, Check, EntryError, Region, Step, parse_address,
+    AcceptanceTest, Address, CatalogEntry, Check, EntryError, Region, Step, parse_address,
 };
 use serde_json::{Value, json};
 
@@ -52,7 +52,7 @@ fn a_test_parses_with_its_defaults() {
     assert_eq!(check.regions().len(), 3);
     assert_eq!(test.steps[4], {
         let check = Check::Memory {
-            address: "0x0c000014".to_owned(),
+            address: Address(0x0c00_0014),
             bytes: 2,
             equals: 32,
         };
@@ -175,12 +175,22 @@ fn memory_checks_name_an_aligned_address_and_a_value_that_fits() {
         "0X10",
         "+0x10",
     ] {
-        let message = refused(memory(address, 4, 0));
+        // Refused when the file is read, as every address is.
+        let error =
+            serde_json::from_value::<AcceptanceTest>(memory(address, 4, 0)).expect_err("refused");
         assert!(
-            message.contains("address: 0x and one to eight"),
-            "{address}: {message}"
+            error
+                .to_string()
+                .contains("an address is 0x and one to eight"),
+            "{address}: {error}"
         );
     }
+    // Written back in one form.
+    let address: Address = serde_json::from_value(json!("0xC")).expect("address");
+    assert_eq!(
+        serde_json::to_value(address).expect("json"),
+        json!("0x0000000c")
+    );
     assert!(refused(memory("0x0c000014", 3, 0)).contains("bytes: 1, 2 or 4"));
     assert!(refused(memory("0x0c000016", 4, 0)).contains("address: aligned to bytes"));
     assert!(refused(memory("0x0c000015", 2, 0)).contains("address: aligned to bytes"));
@@ -199,11 +209,39 @@ fn brightness_checks_compare_with_one_to_sixteen_regions_by_a_margin() {
                 "region": region.clone(), "others": others, "margin": margin } } }),
         )
     };
-    assert_eq!(validated(brightest(json!([region.clone()]), 1)), Ok(()));
+    let at = |x: u32, y: u32| json!({ "x": x, "y": y, "w": 1, "h": 1 });
+    assert_eq!(validated(brightest(json!([at(1, 0)]), 1)), Ok(()));
     assert!(refused(brightest(json!([]), 1)).contains("others: one to 16 regions"));
-    let many = Value::Array(vec![region.clone(); 17]);
+    let many = Value::Array((1..=17).map(|x| at(x, 0)).collect());
     assert!(refused(brightest(many, 1)).contains("others: one to 16 regions"));
-    assert!(refused(brightest(json!([region.clone()]), 0)).contains("margin: at least 1"));
+    assert!(refused(brightest(json!([at(1, 0)]), 0)).contains("margin: at least 1"));
+
+    // Overlapping regions share pixels between the means: the check could never pass, or would
+    // pass by less than its margin.
+    let message = refused(brightest(json!([at(1, 0), region.clone()]), 1));
+    assert!(
+        message.contains("others: none may overlap region"),
+        "{message}"
+    );
+    let wide = json!({ "x": 0, "y": 0, "w": 3, "h": 1 });
+    assert!(refused(brightest(json!([wide]), 1)).contains("none may overlap region"));
+    let message = refused(brightest(json!([at(1, 0), at(2, 0), at(1, 0)]), 1));
+    assert!(message.contains("others: no two may overlap"), "{message}");
+
+    let overlaps = |a: (u32, u32, u32, u32), b: (u32, u32, u32, u32)| {
+        let region = |(x, y, w, h)| Region { x, y, w, h };
+        region(a).overlaps(&region(b))
+    };
+    assert!(overlaps((0, 0, 2, 2), (1, 1, 2, 2)));
+    assert!(
+        !overlaps((0, 0, 2, 2), (2, 0, 2, 2)),
+        "touching is not overlapping"
+    );
+    assert!(!overlaps((0, 0, 2, 2), (0, 2, 2, 2)));
+    assert!(!overlaps((2, 0, 2, 2), (0, 0, 2, 2)));
+    assert!(!overlaps((0, 2, 2, 2), (0, 0, 2, 2)));
+    assert!(!overlaps((0, 0, 2, 2), (5, 5, 1, 1)));
+    assert!(overlaps((u32::MAX - 1, 0, 2, 1), (u32::MAX, 0, 1, 1)));
 
     let fits = |x, y, w, h| Region { x, y, w, h }.fits(800, 480);
     assert!(fits(0, 0, 800, 480));
@@ -229,7 +267,8 @@ fn a_test_must_fit_its_player() {
     );
     assert_eq!(
         refused(|t| t["steps"][1]["press"]["control"] = json!("play")),
-        "acceptance test pads: control play of player p-1.0 is not in the catalog"
+        "acceptance test pads: steps[1]: presses control play, which player p-1.0 does not have \
+         (controls)"
     );
     assert_eq!(
         refused(|t| t["steps"][2]["touch"]["x"] = json!(800)),

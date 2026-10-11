@@ -73,7 +73,8 @@ maintainer's computer; a runner reports PASS or FAIL per check, with counts.
     player's `state_memory` ranges; at most 64 memory checks per test;
   - `brightest`: the mean brightness of `region` exceeds that of each of `others` (one to 16
     regions) by at least `margin` (1 to 255). Every region (`x`, `y`, `w`, `h`) is non-empty and
-    on the player's screen.
+    on the player's screen; no region of `others` overlaps `region` or another of `others`,
+    since shared pixels would make the check impossible to pass, or weaker than its margin.
 
 A pixel's brightness is its Rec. 601 luma, `(299 R + 587 G + 114 B) / 1000` rounded down, from
 8-bit channels; an RGB565 pixel is expanded first by replicating each channel's high bits into
@@ -87,15 +88,16 @@ Unknown steps, checks and fields are refused.
 A player names the panel controls tests may press (`controls` in its catalog entry): each has the
 `code` and `value` the application receives from the panel, as the emulator delivers them (`0x`
 and two hexadecimal digits each; not checked against the hardware panel), and a `description`.
+No two controls have the same code and value: a test pressing one would press the other.
 The XDJ-700 lists `usb` and `rotary_push`, the two the emulator runs have used so far; more are
 added with the evidence that names them.
 
 A player also names the address ranges memory checks may read (`state_memory`): each a `start` and
-an exclusive `end` (guest physical addresses) and the `evidence` that the range holds only run-time
-state, outside the loaded application (and outside any copy of it the application unpacks into
-RAM). Nothing checks that mechanically: a range is added only with its evidence, and reviewed. The
-XDJ-700 names none yet, so its tests cannot check memory until a range is added with its evidence
-(the first tests, roadmap step 2).
+an exclusive `end` (guest physical addresses; ranges that overlap or touch are written as one) and
+the `evidence` that the range holds only run-time state, outside the loaded application (and
+outside any copy of it the application unpacks into RAM). Nothing checks that mechanically: a range
+is added only with its evidence, and reviewed. The XDJ-700 names none yet, so its tests cannot
+check memory until a range is added with its evidence (the first tests, roadmap step 2).
 
 ## Naming tests
 

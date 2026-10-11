@@ -94,8 +94,9 @@ impl Catalog {
     /// - a recipe a skin names is named by no feature and no other skin: it is the skin's own,
     ///   under the skin's licence;
     /// - every acceptance test's player exists, has the controls it presses and a screen its
-    ///   touches and regions fit, and every test an implementation names exists for that
-    ///   implementation's player.
+    ///   touches and regions fit, and every memory check reads only that player's run-time state
+    ///   ranges (`state_memory`), never the loaded application;
+    /// - every test an implementation names exists for that implementation's player.
     ///
     /// # Errors
     ///
@@ -124,6 +125,8 @@ impl Catalog {
         self.check_entries()?;
         self.check_unique()?;
         self.check_screens()?;
+        // Tests first: an implementation naming a test relies on the test being sound.
+        self.check_acceptance()?;
         for feature in &self.features {
             self.check_feature(feature, recipes)?;
         }
@@ -131,7 +134,7 @@ impl Catalog {
         for skin in &self.skins {
             self.check_skin(skin, recipes)?;
         }
-        self.check_acceptance()
+        Ok(())
     }
 
     fn check_entries(&self) -> Result<(), CatalogError> {

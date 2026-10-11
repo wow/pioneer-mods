@@ -52,8 +52,9 @@ letters, digits and `_` joined by `.` (`beat_loop.pad`). A slot is referred to a
 - `screens`: the screens catalogued for it, each with its own file.
 - `controls`: the panel controls acceptance tests may press, by name, each with the `code` and
   `value` the application receives from the panel (as the emulator delivers them) and a
-  `description`; `state_memory`: the run-time state ranges memory checks may read, each with its
-  `evidence` ([acceptance.md](./acceptance.md#controls-and-run-time-state)).
+  `description`, no two with the same code and value; `state_memory`: the run-time state ranges
+  memory checks may read, none overlapping or touching another, each with its `evidence`
+  ([acceptance.md](./acceptance.md#controls-and-run-time-state)).
 - `restore`: how an owner brings back the stock application after flashing a build, which
   `patch-cli build` prints with every build: what the `official` update does over a build, the
   `backup`, and the player's flashing `guide` (`docs/<file>.md`, a file the loader checks).

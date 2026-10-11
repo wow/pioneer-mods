@@ -82,8 +82,8 @@ pub enum Check {
     /// one of the player's run-time state ranges ([`Player::state_memory`](super::Player)), so a
     /// test never holds the loaded application's contents.
     Memory {
-        /// `0x` and one to eight hexadecimal digits, aligned to `bytes`.
-        address: String,
+        /// Aligned to `bytes`.
+        address: Address,
         /// 1, 2 or 4.
         bytes: u8,
         equals: u32,
@@ -96,6 +96,28 @@ pub enum Check {
         others: Vec<Region>,
         margin: u8,
     },
+}
+
+/// A guest physical address, written `0x` and one to eight hexadecimal digits; anything else is
+/// refused when the file is read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct Address(pub u32);
+
+impl TryFrom<String> for Address {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, String> {
+        parse_address(&value).map(Address).ok_or_else(|| {
+            format!("{value:?}: an address is 0x and one to eight hexadecimal digits")
+        })
+    }
+}
+
+impl From<Address> for String {
+    fn from(address: Address) -> String {
+        format!("{:#010x}", address.0)
+    }
 }
 
 /// A rectangle of the screen, in pixels from the top left.
@@ -122,13 +144,22 @@ impl Region {
                 .checked_add(self.h)
                 .is_some_and(|bottom| bottom <= height)
     }
+
+    /// Whether the two regions share a pixel.
+    pub fn overlaps(&self, other: &Region) -> bool {
+        let span = |a: u32, a_len: u32, b: u32, b_len: u32| {
+            u64::from(a) < u64::from(b) + u64::from(b_len)
+                && u64::from(b) < u64::from(a) + u64::from(a_len)
+        };
+        span(self.x, self.w, other.x, other.w) && span(self.y, self.h, other.y, other.h)
+    }
 }
 
 impl Check {
-    /// The address of a `memory` check as a number, if it is well formed.
+    /// The address a `memory` check reads (none for any other check).
     pub fn address(&self) -> Option<u32> {
         match self {
-            Check::Memory { address, .. } => parse_address(address),
+            Check::Memory { address, .. } => Some(address.0),
             Check::Brightest { .. } => None,
         }
     }
@@ -144,8 +175,7 @@ impl Check {
                 bytes,
                 equals,
             } => {
-                let address = parse_address(address)
-                    .ok_or_else(|| rule("address: 0x and one to eight hexadecimal digits"))?;
+                let address = address.0;
                 if ![1, 2, 4].contains(bytes) {
                     return Err(rule("bytes: 1, 2 or 4"));
                 }
@@ -156,9 +186,23 @@ impl Check {
                     return Err(rule("equals: a value that fits in bytes"));
                 }
             }
-            Check::Brightest { others, margin, .. } => {
+            Check::Brightest {
+                region,
+                others,
+                margin,
+            } => {
                 if others.is_empty() || others.len() > MAX_OTHER_REGIONS {
                     return Err(rule("others: one to 16 regions"));
+                }
+                // An overlap shares pixels between the means it compares: the region could never
+                // be brighter than itself, or by less than the margin meant.
+                if others.iter().any(|other| region.overlaps(other)) {
+                    return Err(rule("others: none may overlap region"));
+                }
+                if (others.iter().enumerate())
+                    .any(|(index, a)| others[index + 1..].iter().any(|b| a.overlaps(b)))
+                {
+                    return Err(rule("others: no two may overlap"));
                 }
                 if *margin == 0 {
                     return Err(rule("margin: at least 1"));

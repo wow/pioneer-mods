@@ -5,7 +5,8 @@ mod common;
 
 use common::Fixture;
 use patch_schema::catalog::{
-    CatalogEntry, EntryError, Player, StateRange, brightness, expand_rgb565, mean_brightness,
+    Address, CatalogEntry, EntryError, Player, StateRange, brightness, expand_rgb565,
+    mean_brightness,
 };
 use serde_json::{Value, json};
 
@@ -29,6 +30,8 @@ fn controls_are_named_and_given_as_hexadecimal_bytes() {
         ("11", "0x01"),
         ("0x11", "0x100"),
         ("0xzz", "0x01"),
+        ("0x+5", "0x01"),
+        ("0x11", "0x-1"),
     ] {
         let error = player(json!({ "usb": control(code, value) })).expect_err("refused");
         assert!(
@@ -59,12 +62,44 @@ fn state_ranges_are_well_formed_and_backed_by_evidence() {
     };
     let range = |start: &str, end: &str| json!({ "start": start, "end": end, "evidence": "e" });
     assert_eq!(player(json!([range("0x0", "0x1")])), Ok(()));
+    // A malformed address is refused when the file is read.
     for (start, end) in [
-        ("0x10", "0x10"),
-        ("0x20", "0x10"),
         ("10", "0x20"),
         ("0x10", "0x"),
+        ("0x+1", "0x20"),
+        ("0x123456789", "0x0"),
     ] {
+        let mut value = Fixture::new().player;
+        value["state_memory"] = json!([range(start, end)]);
+        let error = serde_json::from_value::<Player>(value).expect_err("refused");
+        assert!(
+            error
+                .to_string()
+                .contains("an address is 0x and one to eight"),
+            "{error}"
+        );
+    }
+    // Ranges that overlap or touch are written as one.
+    assert_eq!(
+        player(json!([range("0x0", "0x10"), range("0x20", "0x30")])),
+        Ok(())
+    );
+    for second in [
+        range("0x10", "0x20"),
+        range("0x8", "0x18"),
+        range("0x0", "0x10"),
+    ] {
+        let error = player(json!([range("0x0", "0x10"), second])).expect_err("refused");
+        assert!(
+            error
+                .to_string()
+                .contains("overlaps or touches another range"),
+            "{error}"
+        );
+    }
+    let error = player(json!([range("0x20", "0x30"), range("0x0", "0x20")])).expect_err("refused");
+    assert!(error.to_string().contains("state_memory[1]"), "{error}");
+    for (start, end) in [("0x10", "0x10"), ("0x20", "0x10")] {
         let error = player(json!([range(start, end)])).expect_err("refused");
         assert!(
             error.to_string().contains("start below end"),
@@ -104,8 +139,8 @@ fn brightness_is_rec_601_luma_of_8_bit_channels() {
 #[test]
 fn a_state_range_holds_the_bytes_a_check_reads() {
     let range = StateRange {
-        start: "0x10".to_owned(),
-        end: "0x16".to_owned(),
+        start: Address(0x10),
+        end: Address(0x16),
         evidence: "e".to_owned(),
     };
     assert!(range.holds(0x10, 4));
@@ -115,9 +150,18 @@ fn a_state_range_holds_the_bytes_a_check_reads() {
     assert!(!range.holds(0x16, 1), "the end is exclusive");
     assert!(!range.holds(0x0f, 1), "below the start");
     assert!(!range.holds(u32::MAX, 4));
-    let malformed = StateRange {
-        end: "16".to_owned(),
-        ..range
-    };
-    assert!(!malformed.holds(0x10, 1));
+}
+
+#[test]
+fn two_controls_may_not_send_the_same_event() {
+    let mut value = Fixture::new().player;
+    value["controls"]["usb_copy"] = value["controls"]["usb"].clone();
+    let error = serde_json::from_value::<Player>(value)
+        .expect("parses")
+        .validate()
+        .expect_err("refused");
+    assert_eq!(
+        error.to_string(),
+        "controls.usb_copy: the same code and value as usb: a test pressing one would press both"
+    );
 }
