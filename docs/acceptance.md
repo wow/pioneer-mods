@@ -124,16 +124,21 @@ player's emulator, the emulator and any stick image must be files, and a test th
 must be given one. The runner then lays the update's MAIN records out in an erased flash image, as
 the player's updater does, and boots it. Steps run in order:
 
-- `press` and `touch` go to the emulator's panel key socket (UDP on 127.0.0.1), and the runner
+- `press` and `touch` go to the emulator's panel key socket (UDP on 127.0.0.1; another local
+  process could send it panel input too, which affects only the emulated player), and the runner
   waits out the hold;
-- `memory` checks read the value through the emulator's monitor (`xp`, TCP on 127.0.0.1);
+- `memory` checks read the value through the emulator's monitor (`xp`), a Unix socket in the
+  run's private directory: the monitor can read memory and run programs as the owner, so no other
+  user or process may reach it;
 - `brightest` checks take a frame (`screendump`), measure each region and compare;
 - `wait_until` reads its check again every 500 ms until it holds or its timeout passes.
 
 Each check prints one line, PASS or FAIL, with what was read (a value, or the brightness of each
 region); a failed check does not stop the run, and the command fails if any check failed. The flash
-image, frames and the emulator's log stay in a temporary directory, removed afterwards; nothing
-else is printed.
+image, frames and the emulator's log stay in a temporary directory only the owner may enter (mode
+0700), removed afterwards; nothing else is printed. A run killed outright (`kill -9`) cannot remove
+it: its flash image, from the owner's update, then stays in the system's temporary directory until
+deleted.
 
 ## Naming tests
 

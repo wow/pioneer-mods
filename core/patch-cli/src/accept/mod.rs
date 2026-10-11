@@ -8,7 +8,7 @@ mod qemu;
 
 pub use flash::flash_image;
 pub use frame::{Frame, parse_ppm};
-pub use qemu::{Profile, Qemu, QemuSetup, parse_xp, profile};
+pub use qemu::{Profile, Qemu, QemuSetup, option_value, parse_xp, private_work_dir, profile};
 
 use anyhow::{Result, bail};
 use patch_schema::catalog::{AcceptanceTest, Check, Player, Step};

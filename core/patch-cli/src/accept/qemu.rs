@@ -1,12 +1,15 @@
 //! The local emulator (QEMU, run from the owner's own build; never part of this repository),
 //! started headless for one test. Panel controls and touches go to its panel key socket (UDP on
-//! 127.0.0.1); memory reads (`xp`) and frames (`screendump`) go through its monitor (TCP on
-//! 127.0.0.1). The flash image, frames and the emulator's log stay in the run's directory.
+//! 127.0.0.1); memory reads (`xp`) and frames (`screendump`) go through its monitor, a Unix socket
+//! in the run's private directory, so no other user or process can reach it (the monitor can read
+//! memory and run programs as the owner). The flash image, frames and the emulator's log stay in
+//! the run's directory. Unix hosts only.
 
 use super::{Emulator, Frame, parse_ppm};
 use anyhow::{Context, Result, bail};
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream, UdpSocket};
+use std::net::UdpSocket;
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -52,7 +55,7 @@ pub struct QemuSetup {
 /// A running emulator. Dropping it quits QEMU, or kills it.
 pub struct Qemu {
     child: Child,
-    monitor: TcpStream,
+    monitor: UnixStream,
     keys: UdpSocket,
     key_port: u16,
     work: PathBuf,
@@ -66,14 +69,31 @@ impl Qemu {
     ///
     /// # Errors
     ///
-    /// The flash image cannot be written, the emulator does not start, or its monitor does not
-    /// answer in time.
+    /// A run directory others may enter, a flash image that cannot be written, an emulator that
+    /// does not start, or a monitor that does not answer in time.
     pub fn start(setup: QemuSetup) -> Result<Self> {
+        use std::os::unix::fs::PermissionsExt;
+        // The monitor socket goes here: no other user may enter the directory.
+        let mode = std::fs::metadata(&setup.work)
+            .with_context(|| format!("failed to read '{}'", setup.work.display()))?
+            .permissions()
+            .mode();
+        if mode & 0o077 != 0 {
+            bail!(
+                "refusing run directory '{}': others may enter it (mode {:o}); it holds the \
+                 emulator's monitor",
+                setup.work.display(),
+                mode & 0o777
+            );
+        }
         let flash = setup.work.join("flash.bin");
         std::fs::write(&flash, &setup.flash)
             .with_context(|| format!("failed to write '{}'", flash.display()))?;
         let key_port = free_udp_port()?;
-        let monitor_port = free_tcp_port()?;
+        // Everything that can fail goes before the spawn, so a started emulator is always reaped.
+        let keys = UdpSocket::bind("127.0.0.1:0").context("failed to open the key socket")?;
+        // In the run's directory, which only the owner can enter (created mode 0700).
+        let monitor_path = setup.work.join("monitor.sock");
         let log = std::fs::File::create(setup.work.join("emulator.log"))
             .context("failed to create the emulator's log")?;
         let mut command = Command::new(&setup.emulator);
@@ -87,15 +107,21 @@ impl Qemu {
                 "none",
             ])
             .arg("-monitor")
-            .arg(format!("tcp:127.0.0.1:{monitor_port},server,nowait"))
+            .arg(format!(
+                "unix:{},server,nowait",
+                option_value(&monitor_path)?
+            ))
             .arg("-drive")
-            .arg(format!("if=pflash,format=raw,file={}", flash.display()));
+            .arg(format!(
+                "if=pflash,format=raw,file={}",
+                option_value(&flash)?
+            ));
         if let Some(stick) = &setup.stick {
             command
                 .arg("-drive")
                 .arg(format!(
                     "if=none,id=usbstick,format=raw,file={},snapshot=on",
-                    stick.display()
+                    option_value(stick)?
                 ))
                 .args(["-device", "usb-storage,drive=usbstick,port=1"]);
         }
@@ -111,7 +137,7 @@ impl Qemu {
         let mut child = command
             .spawn()
             .with_context(|| format!("failed to start '{}'", setup.emulator.display()))?;
-        let monitor = match connect_monitor(&mut child, monitor_port) {
+        let monitor = match connect_monitor(&mut child, &monitor_path) {
             Ok(monitor) => monitor,
             Err(error) => {
                 let _ = child.kill();
@@ -119,7 +145,6 @@ impl Qemu {
                 return Err(error);
             }
         };
-        let keys = UdpSocket::bind("127.0.0.1:0").context("failed to open the key socket")?;
         let mut qemu = Qemu {
             child,
             monitor,
@@ -243,13 +268,13 @@ pub fn parse_xp(output: &str, address: u32) -> Result<u32> {
     bail!("the emulator did not report the value at {address:#x}")
 }
 
-fn connect_monitor(child: &mut Child, port: u16) -> Result<TcpStream> {
+fn connect_monitor(child: &mut Child, path: &std::path::Path) -> Result<UnixStream> {
     let deadline = Instant::now() + MONITOR_TIMEOUT;
     loop {
         if let Some(status) = child.try_wait().context("failed to poll the emulator")? {
-            bail!("the emulator exited before its monitor came up ({status}); see its log");
+            bail!("the emulator exited before its monitor came up ({status})");
         }
-        if let Ok(stream) = TcpStream::connect(("127.0.0.1", port)) {
+        if let Ok(stream) = UnixStream::connect(path) {
             stream
                 .set_read_timeout(Some(Duration::from_millis(200)))
                 .context("failed to set the monitor's timeout")?;
@@ -262,14 +287,35 @@ fn connect_monitor(child: &mut Child, port: u16) -> Result<TcpStream> {
     }
 }
 
+/// `path` as a QEMU option value: UTF-8, each comma doubled (QEMU separates options with commas).
+///
+/// # Errors
+///
+/// A path that is not UTF-8.
+pub fn option_value(path: &std::path::Path) -> Result<String> {
+    let text = path
+        .to_str()
+        .with_context(|| format!("the path '{}' is not UTF-8", path.display()))?;
+    Ok(text.replace(',', ",,"))
+}
+
+/// A new run directory only the owner may enter (mode 0700 from creation, whatever the umask),
+/// removed when dropped.
+///
+/// # Errors
+///
+/// The directory cannot be created.
+pub fn private_work_dir() -> Result<tempfile::TempDir> {
+    use std::os::unix::fs::PermissionsExt;
+    tempfile::Builder::new()
+        .permissions(std::fs::Permissions::from_mode(0o700))
+        .tempdir()
+        .context("failed to create the run's directory")
+}
+
 fn free_udp_port() -> Result<u16> {
     let socket = UdpSocket::bind("127.0.0.1:0").context("no free UDP port")?;
     Ok(socket.local_addr().context("no free UDP port")?.port())
-}
-
-fn free_tcp_port() -> Result<u16> {
-    let listener = TcpListener::bind("127.0.0.1:0").context("no free TCP port")?;
-    Ok(listener.local_addr().context("no free TCP port")?.port())
 }
 
 fn is_timeout(error: &std::io::Error) -> bool {

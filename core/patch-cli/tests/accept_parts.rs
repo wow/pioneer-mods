@@ -1,7 +1,9 @@
 //! The acceptance runner's parts that need no emulator: the flash image of an update (synthetic,
 //! no vendor bytes), frames as the emulator writes them, and its memory replies.
 
-use patch_cli::accept::{Frame, flash_image, parse_ppm, parse_xp, profile};
+use patch_cli::accept::{
+    Frame, Qemu, QemuSetup, flash_image, parse_ppm, parse_xp, private_work_dir, profile,
+};
 use patch_core::upd::crc16_xmodem;
 use patch_schema::catalog::Region;
 
@@ -154,4 +156,32 @@ fn memory_replies_are_read_for_the_address_asked() {
         error.to_string(),
         "the emulator's reply for 0x20 is not a value"
     );
+}
+
+#[test]
+fn the_emulator_runs_only_in_a_directory_no_other_user_may_enter() {
+    use std::os::unix::fs::PermissionsExt;
+    let work = tempfile::tempdir().expect("tempdir");
+    std::fs::set_permissions(work.path(), std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let setup = QemuSetup {
+        emulator: work.path().join("never-run"),
+        profile: profile("xdj700-v1.15").expect("a profile"),
+        work: work.path().to_path_buf(),
+        flash: Vec::new(),
+        stick: None,
+    };
+    let error = Qemu::start(setup).err().expect("refused");
+    assert!(
+        error.to_string().contains("others may enter it (mode 755)"),
+        "{error}"
+    );
+    assert!(!work.path().join("flash.bin").exists());
+
+    // The command's own run directory is the owner's alone.
+    let private = private_work_dir().expect("dir");
+    let mode = std::fs::metadata(private.path())
+        .expect("meta")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o700);
 }

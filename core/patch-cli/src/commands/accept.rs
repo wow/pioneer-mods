@@ -1,5 +1,7 @@
 use anyhow::{Context, Result, bail};
-use patch_cli::accept::{Qemu, QemuSetup, flash_image, profile, read_update, run_test};
+use patch_cli::accept::{
+    Qemu, QemuSetup, flash_image, private_work_dir, profile, read_update, run_test,
+};
 use patch_cli::catalog::load_catalog;
 use patch_core::{firmware_file_name, sha256_hex};
 use std::path::PathBuf;
@@ -83,7 +85,7 @@ pub fn accept(args: AcceptArgs) -> Result<()> {
     println!("test: {} ({})", test.id, test.player);
     println!("update_file: {}", firmware_file_name(&args.update));
     println!("update_sha256_hex: {}", sha256_hex(&update));
-    let work = tempfile::tempdir().context("failed to create the run's directory")?;
+    let work = private_work_dir()?;
     let mut qemu = Qemu::start(QemuSetup {
         emulator,
         profile,
