@@ -1,8 +1,8 @@
 //! The local emulator (QEMU, run from the owner's own build; never part of this repository),
 //! started headless for one test. Panel controls and touches go to its panel key socket (UDP on
 //! 127.0.0.1); memory reads (`xp`) and frames (`screendump`) go through its monitor, a Unix socket
-//! in the run's private directory, so no other user or process can reach it (the monitor can read
-//! memory and run programs as the owner). The flash image, frames and the emulator's log stay in
+//! in the run's private directory, so no other user can reach it (the monitor can read memory and
+//! run programs as the owner). The flash image, frames and the emulator's log stay in
 //! the run's directory. Unix hosts only.
 
 use super::{Emulator, Frame, parse_ppm};
@@ -61,6 +61,9 @@ pub struct Qemu {
     work: PathBuf,
 }
 
+/// Longest Unix socket path every supported host binds (macOS allows 103 bytes, Linux 107).
+pub const MAX_SOCKET_PATH: usize = 100;
+
 /// How long the monitor may take to come up, or to answer one command.
 const MONITOR_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -94,6 +97,14 @@ impl Qemu {
         let keys = UdpSocket::bind("127.0.0.1:0").context("failed to open the key socket")?;
         // In the run's directory, which only the owner can enter (created mode 0700).
         let monitor_path = setup.work.join("monitor.sock");
+        if monitor_path.as_os_str().len() > MAX_SOCKET_PATH {
+            bail!(
+                "refusing run directory '{}': the monitor's socket path would be longer than {} \
+                 bytes, which Unix sockets cannot bind; set TMPDIR to a shorter directory",
+                setup.work.display(),
+                MAX_SOCKET_PATH
+            );
+        }
         let log = std::fs::File::create(setup.work.join("emulator.log"))
             .context("failed to create the emulator's log")?;
         let mut command = Command::new(&setup.emulator);

@@ -129,7 +129,7 @@ the player's updater does, and boots it. Steps run in order:
   waits out the hold;
 - `memory` checks read the value through the emulator's monitor (`xp`), a Unix socket in the
   run's private directory: the monitor can read memory and run programs as the owner, so no other
-  user or process may reach it;
+  user may reach it;
 - `brightest` checks take a frame (`screendump`), measure each region and compare;
 - `wait_until` reads its check again every 500 ms until it holds or its timeout passes.
 

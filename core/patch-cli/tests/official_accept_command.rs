@@ -8,6 +8,7 @@
 //! PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD XDJ700_QEMU=/path/to/qemu-system-sh4 \
 //!     cargo test -p patch-cli --test official_accept_command -- --ignored
 //! ```
+#![cfg(unix)]
 
 mod common;
 #[path = "../../patch-core/tests/common/official_pins.rs"]

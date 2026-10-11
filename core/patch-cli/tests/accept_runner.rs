@@ -1,6 +1,7 @@
 //! Running an acceptance test (`patch_cli::accept::run_test`) against a scripted emulator: how
 //! each step reaches the emulator, and how each check passes or fails. Needs no firmware and no
 //! emulator.
+#![cfg(unix)]
 
 use anyhow::{Result, bail};
 use patch_cli::accept::{Emulator, Frame, POLL_MS, run_test};

@@ -1,5 +1,6 @@
 //! The acceptance runner's parts that need no emulator: the flash image of an update (synthetic,
 //! no vendor bytes), frames as the emulator writes them, and its memory replies.
+#![cfg(unix)]
 
 use patch_cli::accept::{
     Frame, Qemu, QemuSetup, flash_image, parse_ppm, parse_xp, private_work_dir, profile,
@@ -184,4 +185,27 @@ fn the_emulator_runs_only_in_a_directory_no_other_user_may_enter() {
         .permissions()
         .mode();
     assert_eq!(mode & 0o777, 0o700);
+}
+
+#[test]
+fn a_run_directory_too_deep_for_the_monitor_socket_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let base = private_work_dir().expect("dir");
+    let work = base.path().join("d".repeat(120));
+    std::fs::create_dir(&work).expect("dir");
+    std::fs::set_permissions(&work, std::fs::Permissions::from_mode(0o700)).expect("chmod");
+    let setup = QemuSetup {
+        emulator: work.join("never-run"),
+        profile: profile("xdj700-v1.15").expect("a profile"),
+        work: work.clone(),
+        flash: Vec::new(),
+        stick: None,
+    };
+    let error = Qemu::start(setup).err().expect("refused");
+    assert!(
+        error
+            .to_string()
+            .contains("longer than 100 bytes, which Unix sockets cannot bind"),
+        "{error}"
+    );
 }

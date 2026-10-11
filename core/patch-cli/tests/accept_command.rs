@@ -1,5 +1,6 @@
 //! `patch-cli accept`: refusals that need no firmware and no emulator. Each comes before the
 //! emulator would start; the emulator path given is a plain file that is never run.
+#![cfg(unix)]
 
 mod common;
 

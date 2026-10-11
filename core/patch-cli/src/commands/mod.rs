@@ -1,3 +1,4 @@
+#[cfg(unix)]
 mod accept;
 mod build;
 mod compose;
@@ -7,6 +8,7 @@ mod precondition;
 mod rebuild;
 mod resolve;
 
+#[cfg(unix)]
 pub use accept::{AcceptArgs, accept};
 pub use build::{BuildArgs, build};
 pub use compose::{ComposeArgs, compose};

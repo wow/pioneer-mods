@@ -1,5 +1,6 @@
 //! Starting the emulator (`patch_cli::accept::Qemu`) with a fake one: a shell script that records
 //! its arguments and environment, then exits. Needs no firmware and no emulator.
+#![cfg(unix)]
 
 use patch_cli::accept::{Qemu, QemuSetup, option_value, private_work_dir, profile};
 use std::os::unix::fs::PermissionsExt;
