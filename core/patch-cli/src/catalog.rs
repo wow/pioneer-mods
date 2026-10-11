@@ -32,7 +32,8 @@ const SKIPPED: [&str; 2] = ["README.md", ".DS_Store"];
 /// implementations name (paths relative to `root`). `catalog/` must exist; a missing
 /// subdirectory is empty. Anything else (but a `README.md` or `.DS_Store`) is refused, so a
 /// misnamed file cannot be skipped silently, and so is a symbolic link anywhere under `root`
-/// that the walk or a recipe path meets: it could point outside the tree.
+/// that the walk, a recipe path or a player's flashing guide meets: it could point outside the
+/// tree. Each player's flashing guide (`restore.guide`) must be a file under `root`.
 ///
 /// # Errors
 ///
@@ -54,7 +55,16 @@ pub fn load_catalog(root: &Path) -> Result<CheckedCatalog> {
         }
     }
     for path in json_files(&dir.join("players"))? {
-        catalog.players.push(read_entry::<Player>(&path)?);
+        let player = read_entry::<Player>(&path)?;
+        let guide = &player.restore.guide;
+        refuse_links(root, guide, "flashing guide")?;
+        if !root.join(guide).is_file() {
+            bail!(
+                "refusing catalog file '{}': its flashing guide '{guide}' is not a file",
+                path.display()
+            );
+        }
+        catalog.players.push(player);
     }
     let screens = dir.join("screens");
     for player in entries(&screens)? {
@@ -201,7 +211,7 @@ fn read_recipes(root: &Path, catalog: &Catalog) -> Result<BTreeMap<String, Recip
             continue;
         }
         let file = root.join(path);
-        refuse_links(root, path)?;
+        refuse_links(root, path, "recipe")?;
         let (raw, schema_version) = read_recipe_versioned(&file)?;
         if schema_version != SCHEMA_VERSION_V2 {
             bail!(
@@ -269,16 +279,17 @@ fn entries(dir: &Path) -> Result<Vec<String>> {
     Ok(names)
 }
 
-/// Refuses a symbolic link at any component of `path` (relative, validated) under `root`.
-fn refuse_links(root: &Path, path: &str) -> Result<()> {
+/// Refuses a symbolic link at any component of `path` (relative, validated) under `root`; `what`
+/// names the file in messages ("recipe").
+fn refuse_links(root: &Path, path: &str, what: &str) -> Result<()> {
     let mut at = root.to_path_buf();
     for component in path.split('/') {
         at.push(component);
         let metadata = std::fs::symlink_metadata(&at)
-            .with_context(|| format!("failed to read recipe '{}'", root.join(path).display()))?;
+            .with_context(|| format!("failed to read {what} '{}'", root.join(path).display()))?;
         if metadata.file_type().is_symlink() {
             bail!(
-                "refusing recipe '{}': '{}' is a symbolic link",
+                "refusing {what} '{}': '{}' is a symbolic link",
                 root.join(path).display(),
                 at.display()
             );

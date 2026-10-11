@@ -7,8 +7,10 @@
 mod common;
 
 use common::resolve::{off, on, perform, profile, recipes, resolved, status, stock_style_only};
-use common::{Fixture, implementation};
-use patch_schema::catalog::{Fragment, Maturity, Profile, ResolveError, Status, resolve};
+use common::{Fixture, OUT, implementation};
+use patch_schema::catalog::{
+    BuildError, Fragment, Maturity, Profile, ResolveError, Status, resolve,
+};
 use serde_json::json;
 
 #[test]
@@ -27,6 +29,7 @@ fn a_feature_with_the_stock_skins_uses_its_stock_style_implementation() {
             recipe: "recipes/p/labelled.json".to_owned(),
             maturity: Maturity::Experimental,
             builds: vec!["feature labelled".to_owned()],
+            pinned_update: Some(OUT.to_owned()),
             as_pinned: true,
         }]
     );
@@ -150,6 +153,24 @@ fn only_a_lone_fragment_under_its_own_label_and_version_keeps_its_tier() {
     let resolution = resolved(&fixture, stable.clone());
     assert!(resolution.fragments[0].as_pinned);
     assert_eq!(resolution.tier(), Some(Maturity::Stable));
+    assert_eq!(resolution.buildable(), Ok(Maturity::Stable));
+    assert_eq!(resolution.pinned_output(), Some(OUT));
+
+    // A recipe that pins no update file: its output is not a pinned file.
+    let mut unpinned = Fixture::new();
+    unpinned.features[0]["implementations"]["p-1.0"][0]["maturity"] = json!("stable");
+    unpinned
+        .recipes
+        .get_mut("recipes/p/plain.json")
+        .expect("plain")["expected"]
+        .as_object_mut()
+        .expect("expected")
+        .remove("upd_sha256");
+    let resolution = resolved(&unpinned, stable.clone());
+    assert_eq!(resolution.fragments[0].pinned_update, None);
+    assert!(!resolution.fragments[0].as_pinned);
+    assert_eq!(resolution.pinned_output(), None);
+    assert_eq!(resolution.tier(), Some(Maturity::Experimental));
 
     // Another label: a new update.
     let mut relabelled = stable.clone();
@@ -205,4 +226,37 @@ fn a_conflict_with_a_feature_already_off_switches_nothing_off() {
         off(&resolution, "labelled"),
         "its implementations for p-1.0 are experimental; the profile accepts stable only"
     );
+}
+
+#[test]
+fn a_build_needs_something_on_and_a_tier_the_profile_accepts() {
+    let resolution = resolved(&Fixture::new(), profile(json!([]), json!({})));
+    assert_eq!(resolution.buildable(), Err(BuildError::NothingOn));
+
+    // A stable implementation under another reported version: a new update, experimental at most.
+    let mut fixture = Fixture::new();
+    fixture.features[0]["implementations"]["p-1.0"][0]["maturity"] = json!("stable");
+    let mut stable = profile(json!(["plain"]), json!({}));
+    stable["maturity"] = json!("stable");
+    stable["reported_version"] = json!("0.13");
+    let resolution = resolved(&fixture, stable);
+    let refused = resolution.buildable().expect_err("refused");
+    assert_eq!(
+        refused,
+        BuildError::LessSettled {
+            tier: Maturity::Experimental,
+            accepts: Maturity::Stable
+        }
+    );
+    assert!(
+        refused.to_string().ends_with(
+            "is a new update and experimental at most); the profile accepts stable only"
+        ),
+        "{refused}"
+    );
+    assert_eq!(resolution.pinned_output(), None);
+
+    // Experimental accepted: the same build may be built.
+    let resolution = resolved(&Fixture::new(), profile(json!(["plain"]), json!({})));
+    assert_eq!(resolution.buildable(), Ok(Maturity::Experimental));
 }

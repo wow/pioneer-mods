@@ -3,8 +3,8 @@ mod commands;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use commands::{
-    ComposeArgs, InspectArgs, PatchArgs, PreconditionArgs, RebuildArgs, ResolveArgs, compose,
-    inspect, patch, precondition, rebuild, resolve,
+    BuildArgs, ComposeArgs, InspectArgs, PatchArgs, PreconditionArgs, RebuildArgs, ResolveArgs,
+    build, compose, inspect, patch, precondition, rebuild, resolve,
 };
 
 #[derive(Parser, Debug)]
@@ -36,6 +36,9 @@ enum Commands {
     /// Resolve a profile against the catalog: every chosen skin and feature, on or off with its
     /// reason, and the fragments a build composes (needs no firmware, writes nothing).
     Resolve(ResolveArgs),
+    /// Build a profile: resolve it against the catalog and compose its fragments under its label
+    /// and reported version into one update (verified, never overwrites).
+    Build(BuildArgs),
 }
 
 fn main() -> Result<()> {
@@ -51,5 +54,6 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Precondition(args) => precondition(args),
         Commands::Compose(args) => compose(args),
         Commands::Resolve(args) => resolve(args),
+        Commands::Build(args) => build(args),
     }
 }

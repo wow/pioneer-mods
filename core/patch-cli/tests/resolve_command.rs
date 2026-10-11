@@ -3,37 +3,16 @@
 
 mod common;
 
-use common::write_bytes;
+use common::{copy_catalog, profile, repo_root, run_with_profile, write_bytes};
 use patch_cli::catalog::resolve_profile;
 use patch_schema::catalog::Profile;
-use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use serde_json::json;
+use std::path::Path;
+use std::process::Output;
 
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn profile(features: &[&str], maturity: &str) -> Value {
-    json!({
-        "schema_version": 1, "player": "xdj700-v1.15", "screens": { "perform": "stock" },
-        "features": features, "label": "Ver1.16", "reported_version": "0.12",
-        "maturity": maturity
-    })
-}
-
-fn run(profile: &Value, root: &Path) -> Output {
+fn run(profile: &serde_json::Value, root: &Path) -> Output {
     let dir = tempfile::tempdir().expect("tempdir");
-    let path = dir.path().join("profile.json");
-    write_bytes(&path, &serde_json::to_vec(profile).expect("json"));
-    Command::new(env!("CARGO_BIN_EXE_patch-cli"))
-        .arg("resolve")
-        .arg("--profile")
-        .arg(&path)
-        .arg("--root")
-        .arg(root)
-        .output()
-        .expect("run patch-cli resolve")
+    run_with_profile("resolve", profile, root, dir.path(), [] as [&str; 0])
 }
 
 fn stdout(output: &Output) -> String {
@@ -51,7 +30,7 @@ fn stderr(output: &Output) -> String {
 }
 
 #[test]
-fn a_feature_is_on_with_its_recipe_and_limits() {
+fn a_feature_is_on_with_its_recipe_evidence_and_limits() {
     let out = stdout(&run(
         &profile(&["beat-loop-1-to-32"], "experimental"),
         &repo_root(),
@@ -63,6 +42,7 @@ fn a_feature_is_on_with_its_recipe_and_limits() {
         "screen main: stock",
         "screen perform: stock",
         "feature beat-loop-1-to-32: on (experimental, recipes/xdj700-v1.15/beat-loop-1-to-32.json)",
+        "  evidence: Rehearsed in emulation, both ways; not yet tested on hardware",
         "  limit: The lit pad follows the stock lengths",
         "fragments: 1",
         "fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json (experimental; feature \
@@ -172,4 +152,34 @@ fn the_library_applies_the_release_rules_before_resolving() {
     let fine: Profile = serde_json::from_value(profile(&["beat-loop-16-plays-32"], "experimental"))
         .expect("profile");
     assert!(resolve_profile(&catalog, &fine).is_ok());
+}
+
+#[test]
+fn a_recipe_pinning_no_update_file_builds_a_new_update() {
+    // Stage 7's recipe without its update pin: under its own label and version, its build is
+    // still not a pinned file.
+    let root = copy_catalog();
+    let path = root
+        .path()
+        .join("recipes/xdj700-v1.15/beat-loop-1-to-32.json");
+    let mut recipe: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).expect("read")).expect("recipe");
+    recipe["expected"]
+        .as_object_mut()
+        .expect("expected")
+        .remove("upd_sha256")
+        .expect("pinned");
+    write_bytes(&path, &serde_json::to_vec(&recipe).expect("json"));
+
+    let out = stdout(&run(
+        &profile(&["beat-loop-1-to-32"], "experimental"),
+        root.path(),
+    ));
+    for line in [
+        "fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json (experimental; feature \
+         beat-loop-1-to-32; the recipe pins no update file)",
+        "note: a build composes these fragments",
+    ] {
+        assert!(out.contains(line), "{line}\n{out}");
+    }
 }

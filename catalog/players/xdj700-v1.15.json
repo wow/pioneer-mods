@@ -20,5 +20,10 @@
     }
   },
   "screens": ["main", "perform"],
+  "restore": {
+    "official": "The unit accepts it over a build, which reports a lower version than 1.15, and it writes back the stock application (stages 4 and 6, on an owner's unit).",
+    "backup": "The stock no-op rebuild labelled Ver1.16, built without --report-version (the stage-1b file): check its SHA-256 before flashing, since the stage files share its name and label; untested over a modified application (section 3, step 5).",
+    "guide": "docs/xdj700-flashing.md"
+  },
   "maintainer": "wow"
 }

@@ -187,12 +187,18 @@ pub struct CheckedRecipe {
 }
 
 impl CheckedRecipe {
-    /// Parses `raw`, read from `path`, finds its release and runs `check_recipe_v2`. Refusals are
-    /// reported under `refusing`.
+    /// Parses `raw`, read from `path`, and checks it ([`CheckedRecipe::from_recipe`]). Refusals
+    /// are reported under `refusing`.
     pub fn load(path: &Path, raw: &[u8], refusing: String) -> Result<Self> {
         let recipe: RecipeV2 = serde_json::from_slice(raw).with_context(|| {
             format!("failed to parse schema-v2 recipe JSON '{}'", path.display())
         })?;
+        Self::from_recipe(recipe, refusing)
+    }
+
+    /// Finds the release of `recipe` and runs `check_recipe_v2`. Refusals are reported under
+    /// `refusing`.
+    pub fn from_recipe(recipe: RecipeV2, refusing: String) -> Result<Self> {
         let refuse = |error| anyhow::Error::new(error).context(refusing.clone());
         let target = recipe_target(&recipe.target.release)
             .ok_or_else(|| refuse(unknown_release(&recipe.target.release)))?;

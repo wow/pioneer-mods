@@ -25,10 +25,10 @@ pub use entry::{
     is_name, is_player_id, split_slot_ref,
 };
 pub use feature::{Feature, FeatureImplementation, Requires};
-pub use player::{Budgets, Capability, Firmware, PixelFormat, Player, ScreenClass};
+pub use player::{Budgets, Capability, Firmware, PixelFormat, Player, Restore, ScreenClass};
 pub use profile::Profile;
 pub use resolution::{
-    FeatureResolution, Fragment, Resolution, ResolveError, ScreenResolution, Status,
+    BuildError, FeatureResolution, Fragment, Resolution, ResolveError, ScreenResolution, Status,
 };
 pub use resolve::{MAX_CONFIGURATIONS, resolve};
 pub use screen::{Screen, Slot};

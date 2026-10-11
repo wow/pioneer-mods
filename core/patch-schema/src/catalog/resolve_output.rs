@@ -25,6 +25,7 @@ impl State<'_> {
                 on(
                     &implementation.recipe,
                     implementation.maturity,
+                    &implementation.evidence,
                     &implementation.limits,
                 )
             };
@@ -54,7 +55,7 @@ impl State<'_> {
                     (Some(reason), _) => Status::Off {
                         reason: reason.clone(),
                     },
-                    (None, Some(i)) => on(&i.recipe, i.maturity, &i.limits),
+                    (None, Some(i)) => on(&i.recipe, i.maturity, &i.evidence, &i.limits),
                     (None, None) => unreachable!("every feature is picked, unfit or off"),
                 };
                 FeatureResolution {
@@ -86,12 +87,15 @@ impl State<'_> {
                 }
                 None => {
                     let own = &recipes[recipe];
+                    let pinned_update = own.expected.as_ref().and_then(|e| e.upd_sha256.clone());
                     fragments.push(Fragment {
                         recipe: recipe.clone(),
                         maturity: *maturity,
                         builds: vec![builds],
                         as_pinned: own.label == self.profile.label
-                            && own.reported_version == self.profile.reported_version,
+                            && own.reported_version == self.profile.reported_version
+                            && pinned_update.is_some(),
+                        pinned_update,
                     });
                 }
             }
@@ -109,10 +113,11 @@ impl State<'_> {
     }
 }
 
-fn on(recipe: &str, maturity: Maturity, limits: &[String]) -> Status {
+fn on(recipe: &str, maturity: Maturity, evidence: &str, limits: &[String]) -> Status {
     Status::On {
         recipe: recipe.to_owned(),
         maturity,
+        evidence: evidence.to_owned(),
         limits: limits.to_vec(),
     }
 }

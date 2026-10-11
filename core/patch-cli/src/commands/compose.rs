@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use patch_cli::output::{Overwrite, ensure_safe_output_path, write_output_atomically};
 use patch_cli::recipe::{
     CheckedRecipe, PROTECTED_SET_ENV, ProtectedSetSource, protected_set_line, read_recipe_versioned,
@@ -6,7 +6,7 @@ use patch_cli::recipe::{
 use patch_core::firmware_file_name;
 use patch_core::xdj700::{ComposeError, Composition, RecipeChecks, check_composition};
 use patch_schema::{RecipeV2, SCHEMA_VERSION_V2};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(clap::Args, Debug)]
 pub struct ComposeArgs {
@@ -49,8 +49,7 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
         bail!("compose needs at least two recipes; apply a single recipe with `patch`");
     }
     let refusing = format!("refusing to compose recipes for '{}'", args.input.display());
-    // Every check that needs no firmware, for every recipe, before the input is read.
-    let mut checked = Vec::with_capacity(args.recipes.len());
+    let mut recipes = Vec::with_capacity(args.recipes.len());
     for path in &args.recipes {
         let (raw, schema_version) = read_recipe_versioned(path)?;
         if schema_version != SCHEMA_VERSION_V2 {
@@ -62,9 +61,66 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
         }
         // Each recipe's refusals name it.
         let context = format!("{refusing}: recipe '{}'", path.display());
-        checked.push(CheckedRecipe::load(path, &raw, context)?);
+        let name = format!("'{}'", path.display());
+        recipes.push((CheckedRecipe::load(path, &raw, context)?, name));
     }
-    let target = checked[0].target();
+    compose_checked(ComposeJob {
+        recipes,
+        refusing,
+        verb: "compose",
+        input: &args.input,
+        output: &args.output,
+        label: &args.label,
+        reported_version: &args.report_version,
+        protected_set: args.protected_set.as_deref(),
+        no_protected_set: args.no_protected_set,
+        pinned_output: None,
+    })?;
+    println!(
+        "note: a combination is a new update with no pin of its own: rehearse it both ways in \
+         emulation before flashing; unless it is a listed combination it is experimental at most \
+         (docs/modular-builds.md)"
+    );
+    Ok(())
+}
+
+/// Recipes that passed their own checks, and what to compose them into.
+pub(super) struct ComposeJob<'a> {
+    /// Each recipe, and how refusals name it (`'recipes/…/r.json'`).
+    pub(super) recipes: Vec<(CheckedRecipe, String)>,
+    /// Why a refusal happened, for example "refusing to compose recipes for 'XDJ700.UPD'".
+    pub(super) refusing: String,
+    /// The command, for the input's refusals ("refusing to compose '…/XDJ700.UPD'").
+    pub(super) verb: &'static str,
+    pub(super) input: &'a Path,
+    pub(super) output: &'a Path,
+    pub(super) label: &'a str,
+    pub(super) reported_version: &'a str,
+    pub(super) protected_set: Option<&'a Path>,
+    pub(super) no_protected_set: bool,
+    /// The SHA-256 the output must have, when it is to be a recipe's own pinned update; checked
+    /// before anything is written.
+    pub(super) pinned_output: Option<&'a str>,
+}
+
+/// Composes `job`: every check that needs no firmware (the release, the protected set, the
+/// composition) before the input is read, then the build, written only once verified. Prints
+/// the identities; the caller prints what kind of update it is.
+pub(super) fn compose_checked(job: ComposeJob<'_>) -> Result<()> {
+    let ComposeJob {
+        recipes,
+        refusing,
+        verb,
+        input: input_path,
+        output,
+        label,
+        reported_version,
+        protected_set,
+        no_protected_set,
+        pinned_output,
+    } = job;
+    let (checked, names): (Vec<CheckedRecipe>, Vec<String>) = recipes.into_iter().unzip();
+    let target = checked.first().context("nothing to compose")?.target();
     if let Some(other) = checked.iter().find(|c| c.target().id != target.id) {
         bail!(
             "{refusing}: recipes for releases {} and {} cannot be composed",
@@ -73,8 +129,8 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
         );
     }
     let source = ProtectedSetSource::choose(
-        args.protected_set.as_deref(),
-        args.no_protected_set,
+        protected_set,
+        no_protected_set,
         std::env::var_os(PROTECTED_SET_ENV),
     )?;
     // Read once, for the release every recipe names.
@@ -84,27 +140,27 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
     }
     let fragments: Vec<RecipeV2> = checked.iter().map(|c| c.recipe().clone()).collect();
     let composition = Composition {
-        label: &args.label,
-        reported_version: &args.report_version,
+        label,
+        reported_version,
     };
     let checks = RecipeChecks {
         protected_set: protected_set.as_ref(),
     };
-    // Every refusal names the files of the recipes it is about.
+    // Every refusal names the recipes it is about.
     let refuse = |error: ComposeError| match error {
         ComposeError::Fragment { index, source, .. } => {
-            checked[index].refusal(&args.input, "compose", source)
+            checked[index].refusal(input_path, verb, source)
         }
         other => {
-            let files: Vec<String> = other
+            let named: Vec<&str> = other
                 .recipes()
                 .into_iter()
-                .map(|index| format!("'{}'", args.recipes[index].display()))
+                .map(|index| names[index].as_str())
                 .collect();
-            let context = match files.as_slice() {
+            let context = match named.as_slice() {
                 [] => refusing.clone(),
-                [file] => format!("{refusing}: recipe {file}"),
-                files => format!("{refusing}: recipes {}", files.join(" and ")),
+                [one] => format!("{refusing}: recipe {one}"),
+                several => format!("{refusing}: recipes {}", several.join(" and ")),
             };
             anyhow::Error::new(other).context(context)
         }
@@ -112,15 +168,25 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
     // Distinct recipes, the pins, the windows and images across the recipes, and the label and
     // version.
     let composition = check_composition(&fragments, target, composition, checks).map_err(refuse)?;
-    ensure_safe_output_path(&args.input, &args.output, Overwrite::Never)?;
-    let input = checked[0].read_input(&args.input, "compose")?;
+    ensure_safe_output_path(input_path, output, Overwrite::Never)?;
+    let input = checked[0].read_input(input_path, verb)?;
 
     let composed = composition.compose(&input).map_err(refuse)?;
     let rebuilt = &composed.rebuilt;
-    write_output_atomically(&args.output, rebuilt.bytes(), Overwrite::Never)?;
+    if let Some(pin) = pinned_output
+        && !rebuilt.sha256().eq_ignore_ascii_case(pin)
+    {
+        bail!(
+            "{refusing}: the build is to be {}'s own pinned update (SHA-256 {pin}), but its \
+             SHA-256 is {}; nothing was written",
+            names[0],
+            rebuilt.sha256()
+        );
+    }
+    write_output_atomically(output, rebuilt.bytes(), Overwrite::Never)?;
 
     println!("release: {}", target.id);
-    println!("input_file: {}", firmware_file_name(&args.input));
+    println!("input_file: {}", firmware_file_name(input_path));
     println!("input_sha256_hex: {}", target.release.upd_sha256);
     for (index, (recipe, alone)) in fragments.iter().zip(&composed.fragments).enumerate() {
         let update_pinned = recipe
@@ -144,22 +210,23 @@ pub fn compose(args: ComposeArgs) -> Result<()> {
         rebuilt.application_reported_version().unwrap_or("none")
     );
     println!("application_sha256_hex: {}", rebuilt.application_sha256());
-    println!("version_label: {}", args.label);
+    println!("version_label: {label}");
     println!("main_image_len: {}", rebuilt.main_image_len());
     println!("main_image_sha256_hex: {}", rebuilt.main_image_sha256());
-    println!("output_file: {}", args.output.display());
+    println!("output_file: {}", output.display());
     println!("output_len: {}", rebuilt.bytes().len());
     println!("output_sha256_hex: {}", rebuilt.sha256());
     println!("{}", protected_set_line(&source, protected_set.as_ref()));
     println!(
         "verified: each recipe reproduced its own pinned output alone; the composed application \
          equals each recipe's output where it changes bytes and stock elsewhere; the rebuild was \
-         re-parsed and checked against the input; file read back before it was renamed into place"
-    );
-    println!(
-        "note: a combination is a new update with no pin of its own: rehearse it both ways in \
-         emulation before flashing; unless it is a listed combination it is experimental at most \
-         (docs/modular-builds.md)"
+         re-parsed and checked against the input; {}file read back before it was renamed into \
+         place",
+        if pinned_output.is_some() {
+            "the output is the recipe's own pinned update; "
+        } else {
+            ""
+        }
     );
     Ok(())
 }
