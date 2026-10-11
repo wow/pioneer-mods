@@ -1,10 +1,10 @@
 //! Owner-input test of the committed BEAT LOOP acceptance tests (`catalog/acceptance/`): stock,
 //! stage 5 and stage 7, built here from the official XDJ-700 v1.15 update, in the owner's local
 //! emulator with the owner's stick image. Each build passes the test its implementation names (the
-//! lit-pad test, for stock), and two runs show the tests telling builds apart: stage 7 fails the
-//! lit-pad test (its known limit) and stock fails stage 7's lengths. Nothing but the PASS and FAIL
-//! lines is printed, and the builds stay in a temporary directory. Five runs, three at a time; to
-//! run locally (about ten minutes):
+//! lit-pad test, for stock) and fails the others at the steps its behaviour predicts (stages 5 and
+//! 7 fail the lit-pad test, their known limit). Nothing but the PASS and FAIL lines is printed,
+//! and the builds stay in a temporary directory. Nine runs, three at a time; to run locally (about
+//! fifteen minutes):
 //!
 //! ```text
 //! PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD XDJ700_QEMU=/path/to/qemu-system-sh4 \
@@ -57,11 +57,20 @@ fn stage(update: &Path, recipe: &str, dir: &Path) -> PathBuf {
     output_path
 }
 
-/// One expected run: a test on an update, and how its last line (PASS or the failure) reads.
+/// One expected run: a test on an update, and the steps whose checks fail (none for a PASS).
 struct Run {
     test: &'static str,
     update: PathBuf,
-    result: &'static str,
+    fails: &'static [usize],
+}
+
+/// The steps whose checks failed, from the runner's lines (`steps[N] ...: FAIL (...)`).
+fn failed_steps(stdout: &str) -> Vec<usize> {
+    stdout
+        .lines()
+        .filter(|line| line.contains(": FAIL ("))
+        .filter_map(|line| line.strip_prefix("steps[")?.split(']').next()?.parse().ok())
+        .collect()
 }
 
 fn accept(run: &Run, emulator: &Path, stick: &Path) -> Output {
@@ -85,35 +94,62 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
     let stage5 = stage(&update, "beat-loop-16-plays-32", builds.path());
     let stage7 = stage(&update, "beat-loop-1-to-32", builds.path());
 
-    let pass = "result: PASS (";
+    let (lengths_32, lengths_16, lit) = (
+        "beat-loop-1-to-32-pads-select-lengths",
+        "beat-loop-16-plays-32-pads-select-lengths",
+        "beat-loop-lit-pad-follows-touch",
+    );
+    // Every build against every test. A length test polls the part of the length each touch
+    // changes, and expects the other; the lit-pad test waits for each touch to be taken, then
+    // expects the six pads' states.
     let runs = [
+        // Stock sets 1/2 to 16 beats and lights the touched pad.
         Run {
-            test: "beat-loop-lit-pad-follows-touch",
+            test: lit,
             update: update.clone(),
-            result: pass,
+            fails: &[],
         },
         Run {
-            test: "beat-loop-16-plays-32-pads-select-lengths",
+            test: lengths_32,
+            update: update.clone(),
+            fails: &[23, 25, 28, 31, 34, 37],
+        },
+        Run {
+            test: lengths_16,
+            update: update.clone(),
+            fails: &[37],
+        },
+        // Stage 5: the sixth pad sets 32 beats and lights none.
+        Run {
+            test: lengths_16,
+            update: stage5.clone(),
+            fails: &[],
+        },
+        Run {
+            test: lengths_32,
+            update: stage5.clone(),
+            fails: &[23, 25, 28, 31, 34],
+        },
+        Run {
+            test: lit,
             update: stage5,
-            result: pass,
+            fails: &[68],
         },
+        // Stage 7: 1 to 32 beats; the pad to the right of the touched one lights, none for 32.
         Run {
-            test: "beat-loop-1-to-32-pads-select-lengths",
+            test: lengths_32,
             update: stage7.clone(),
-            result: pass,
+            fails: &[],
         },
-        // Stage 7 lights the pad to the right of the touched one, and none for 32.
         Run {
-            test: "beat-loop-lit-pad-follows-touch",
+            test: lengths_16,
+            update: stage7.clone(),
+            fails: &[23, 26, 28, 31, 34],
+        },
+        Run {
+            test: lit,
             update: stage7,
-            result: "failed: 6 of 8 checks",
-        },
-        // Stock sets 1/2 to 16 beats: every pad but the first misses its stage-7 length, and the
-        // first misses its denominator.
-        Run {
-            test: "beat-loop-1-to-32-pads-select-lengths",
-            update,
-            result: "failed: 6 of 14 checks",
+            fails: &[23, 24, 32, 33, 41, 42, 50, 51, 59, 60, 68],
         },
     ];
     let mut failures = Vec::new();
@@ -131,14 +167,19 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         for (run, output) in batch.iter().zip(outputs) {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let last = if output.status.success() {
-                stdout.trim_end().lines().last().unwrap_or("").to_owned()
+            let failed = failed_steps(&stdout);
+            let ended = if run.fails.is_empty() {
+                output.status.success() && stdout.contains("result: PASS (")
             } else {
-                stderr.trim_end().to_owned()
+                let count = format!("failed: {} of ", run.fails.len());
+                !output.status.success() && stderr.contains(&count)
             };
-            if !last.contains(run.result) {
+            if !ended || failed != run.fails {
                 let name = run.update.file_name().expect("name").to_string_lossy();
-                failures.push(format!("{} on {name}: {last}\n{stdout}", run.test));
+                failures.push(format!(
+                    "{} on {name}: failed steps {failed:?}, expected {:?}\n{stdout}{stderr}",
+                    run.test, run.fails
+                ));
             }
         }
     }

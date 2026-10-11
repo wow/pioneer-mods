@@ -97,7 +97,7 @@ A player also names the address ranges memory checks may read (`state_memory`): 
 an exclusive `end` (guest physical addresses; ranges that overlap or touch are written as one) and
 the `evidence` that the range holds only run-time state, outside the loaded application (and
 outside any copy of it the application unpacks into RAM). Nothing checks that mechanically: a range
-is added only with its evidence, and reviewed. The XDJ-700 names two, both found in emulation by
+is added only with its evidence, and reviewed. The XDJ-700 names three, all found in emulation by
 comparing its memory before and after each BEAT LOOP pad is touched, at the same address in every
 boot of stock, stage 5 and stage 7, and above the loaded application (`0x08000000` to
 `0x091BD888`):
@@ -105,7 +105,9 @@ boot of stock, stage 5 and stage 7, and above the loaded application (`0x0800000
 - `0x0B6C3E3C` to `0x0B6C3E44`: the current loop's length in beats, as a fraction: the numerator,
   then the denominator (32 bits each); 0 and 0 before any loop;
 - `0x0C0E6C2C` to `0x0C0E6C44`: the six BEAT LOOP pads' lit states, left to right (32 bits each):
-  2 lit, 0 not.
+  2 lit, 0 not;
+- `0x0C0E75C0` to `0x0C0E75C4`: the index of the pad touched last, 0 to 5 from the left (32 bits);
+  0 before any touch.
 
 ## Running a test
 
@@ -166,7 +168,10 @@ until deleted.
 Three tests touch the six BEAT LOOP pads of the PERFORM screen left to right, with a track loaded
 from the owner's stick (`"stick": true`). The stick's first track must load after USB and seven
 pushes of the rotary selector; the PERFORM screen opens when its tab is touched. Each test first
-checks that no loop is set yet, then touches each pad and checks the state ranges above:
+checks that no loop is set yet, then touches each pad. A length test polls the part of the length
+the touch changes, and expects the other, so the previous touch's state cannot pass it; the lit-pad
+test waits until the touch is taken (the pad's index, or for the first pad a numerator of 1, which
+every build sets), then expects the touched pad lit and the other five not:
 
 | Test | Checks | Stock | Stage 5 | Stage 7 |
 | --- | --- | --- | --- | --- |
@@ -177,8 +182,11 @@ checks that no loop is set yet, then touches each pad and checks the state range
 Stage 7 names the first test and stage 5 the second. No build names the lit-pad test yet: stock
 passes it, and stages 5 and 7 fail it, their known limit
 ([xdj700-flashing.md](./xdj700-flashing.md), "The lit BEAT LOOP pad"); a lit-pad fix would name it.
-The results are the owner suite's (`official_accept_beat_loop`), in the owner's emulator with the
-official v1.15 file and the stage files built from it.
+All nine results are the owner suite's (`official_accept_beat_loop`), in the owner's emulator with
+the official v1.15 file and the stage files built from it; for each failing run it also checks
+which steps fail. Boot and browsing are waited out for fixed times (about two and a half minutes,
+host time), which a much slower host may outrun; they become polls when a state range shows that a
+track is loaded.
 
 ## Naming tests
 
