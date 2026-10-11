@@ -1,0 +1,13 @@
+Community skins
+
+Community skins in this repository are licensed under the Creative Commons
+Attribution-ShareAlike 4.0 International licence (CC BY-SA 4.0):
+https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+A community skin is its catalog entry (catalog/skins/<id>.json) and the recipes its
+implementations name, with the glyph masks and other art they hold. The entry's "licence"
+field states CC-BY-SA-4.0 and its "authors" field names who made it; a recipe a skin names is
+named by no feature and no other skin.
+
+Everything else in this repository, including feature recipes and the glyph masks they hold,
+is licensed under the MIT licence in LICENSE.

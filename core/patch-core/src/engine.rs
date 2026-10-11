@@ -1,7 +1,7 @@
 //! Pure, in-memory recipe engine: compatibility gate, bounded apply, and post-apply verification.
 //!
-//! The engine performs no file-system I/O so that every front-end (CLI, future WASM/desktop)
-//! shares the same safety checks. Callers own reading input and writing output.
+//! The engine performs no file-system I/O so that every front-end (the CLI, and the browser
+//! builder via WASM) shares the same safety checks. Callers own reading input and writing output.
 
 use crate::error::{OperationRegion, PatchEngineError};
 use crate::identity::sha256_hex;

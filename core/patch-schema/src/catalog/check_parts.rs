@@ -100,9 +100,33 @@ impl Catalog {
                     check_label_count(&entry, &slot_ref, labels.len(), count)?;
                 }
                 check_recipe(&entry, player, &implementation.recipe, recipes)?;
+                if let Some(other) = self.other_holder(&skin.id, &implementation.recipe) {
+                    return Err(inconsistent(format!(
+                        "recipe {} is also named by {other}; a skin's recipes are its own, under \
+                         its licence",
+                        implementation.recipe
+                    )));
+                }
             }
         }
         Ok(())
+    }
+
+    /// Another entry that names `recipe`: a feature, or a skin other than `skin`.
+    fn other_holder(&self, skin: &str, recipe: &str) -> Option<String> {
+        let feature = self.features.iter().find(|feature| {
+            (feature.implementations.values().flatten()).any(|i| i.recipe == recipe)
+        });
+        let other_skin = || {
+            self.skins.iter().find(|other| {
+                other.id != skin
+                    && (other.implementations.values().flatten()).any(|i| i.recipe == recipe)
+            })
+        };
+        match feature {
+            Some(feature) => Some(format!("feature {}", feature.id)),
+            None => other_skin().map(|other| format!("skin {}", other.id)),
+        }
     }
 }
 

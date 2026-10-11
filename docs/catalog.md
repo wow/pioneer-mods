@@ -111,6 +111,8 @@ file. No skin is committed yet; the format:
     "slots": ["beat_loop.pad"]
   },
   "art": "original",
+  "authors": ["…"],
+  "licence": "CC-BY-SA-4.0",
   "implementations": {
     "xdj700-v1.15": [
       { "recipe": "recipes/…", "maturity": "dev", "evidence": "…" },
@@ -126,6 +128,11 @@ file. No skin is committed yet; the format:
 
 - `art`: `original` (drawn by the skin's authors, who declare it their own) or `transform`
   (computed from the player's own images on the owner's computer; no pixel is published).
+- `authors`: who made the skin, as its licence's attribution names them; at least one.
+- `licence`: `CC-BY-SA-4.0`, the licence of community skins
+  ([LICENSE-ART](../LICENSE-ART), [modular-builds.md](./modular-builds.md#community-content)).
+  It covers the entry and the recipes its implementations name, which no feature or other skin
+  may name.
 - `implementations`: per player, one per label set the skin draws (none: the stock labels), since
   each (skin, label set) pair has its own output pin. Two implementations may not draw the same
   label set. The player must have the screen, the required slots and the screen class.
@@ -250,7 +257,7 @@ Each file is checked on its own, then the catalog as a whole, with no firmware:
   counts; a skin named in `draws_labels` is built in, or exists, is for that screen and has an
   implementation for the player;
 - every recipe named exists, is a valid schema-v2 recipe for its player, carries the player's pins
-  and pins its output;
+  and pins its output; a recipe a skin names is named by no feature and no other skin;
 - every player's flashing guide is a file in the repository, not a symbolic link.
 
 The loader (`patch_cli::catalog::load_catalog`) then holds the catalog to the engine: every
