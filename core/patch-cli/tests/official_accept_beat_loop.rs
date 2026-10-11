@@ -133,7 +133,7 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         Run {
             test: lit,
             update: stage5,
-            fails: &[73],
+            fails: &[74],
         },
         // Stage 7: 1 to 32 beats; the pad to the right of the touched one lights, none for 32.
         Run {
@@ -149,7 +149,7 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         Run {
             test: lit,
             update: stage7,
-            fails: &[22, 24, 33, 34, 43, 44, 53, 54, 63, 64, 73],
+            fails: &[23, 25, 34, 35, 44, 45, 54, 55, 64, 65, 74],
         },
     ];
     let mut failures = Vec::new();

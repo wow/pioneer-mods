@@ -170,12 +170,12 @@ until deleted.
 Three tests touch the six BEAT LOOP pads of the PERFORM screen left to right, with a track loaded
 from the owner's stick (`"stick": true`). The stick's first track must load after USB and seven
 pushes of the rotary selector; the PERFORM screen opens when its tab is touched. Each test first
-checks that no loop is set yet, then touches each pad and polls for a value no earlier touch can
-leave: the touched pad's index, and for the first pad (index 0 before any touch) its length or its
-lit state. A length test then expects the length; the lit-pad test waits 2 s more for the lit
-states to settle, then expects the touched pad lit and the other five not. So a poll never passes on
-the previous touch's state, whether the build passes the test or not, and a failing run fails at
-the same steps every time:
+checks that no loop is set yet (and the lit-pad test that the first pad is not lit), then touches
+each pad and polls for a value no earlier touch can leave: the touched pad's index, and for the
+first pad (index 0 before any touch) its length or its lit state. A length test then expects the
+length; the lit-pad test waits 2 s more for the lit states to settle, then expects the touched pad
+lit and the other five not. So a poll never passes on the previous touch's state, whether the build
+passes the test or not, and a failing run fails at the same steps every time:
 
 | Test | Checks | Stock | Stage 5 | Stage 7 |
 | --- | --- | --- | --- | --- |

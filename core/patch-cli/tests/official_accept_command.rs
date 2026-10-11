@@ -1,6 +1,6 @@
 //! Owner-input test of `patch-cli accept`: the official XDJ-700 v1.15 update in the owner's local
-//! emulator. A catalog copy names erased flash above the update's records as a state range (only
-//! here: erased flash holds no vendor bytes, and reads as all ones), so the memory path is
+//! emulator. A catalog copy also names erased flash above the update's records as a state range
+//! (only here: erased flash holds no vendor bytes, and reads as all ones), so the memory path is
 //! checked against a known value; a frame's regions are measured. Nothing but the PASS and FAIL
 //! lines is printed. To run locally (about two minutes):
 //!
@@ -38,8 +38,13 @@ fn the_runner_reads_memory_and_measures_frames_in_the_emulator() {
     let player_path = root.path().join("catalog/players/xdj700-v1.15.json");
     let mut player: Value =
         serde_json::from_slice(&std::fs::read(&player_path).expect("read")).expect("player");
-    player["state_memory"] = json!([{ "start": "0x00f00000", "end": "0x01000000",
-        "evidence": "Erased flash above the update's records (this test only)." }]);
+    // Added to the player's own ranges, which the committed tests read.
+    let erased = json!({ "start": "0x00f00000", "end": "0x01000000",
+        "evidence": "Erased flash above the update's records (this test only)." });
+    player["state_memory"]
+        .as_array_mut()
+        .expect("ranges")
+        .push(erased);
     write_json(&player_path, &player);
     let memory = |address: &str, bytes: u8, equals: u32| {
         let check = json!({ "address": address, "bytes": bytes, "equals": equals });
