@@ -74,6 +74,21 @@ impl Catalog {
                     return Err(off_screen(index, "the touch"));
                 }
                 Step::Expect(check) | Step::WaitUntil { check, .. }
+                    if check.address().is_some_and(|address| {
+                        let bytes = check.bytes();
+                        !player.state_memory.iter().any(|r| r.holds(address, bytes))
+                    }) =>
+                {
+                    return Err(CatalogError::Inconsistent {
+                        entry,
+                        problem: format!(
+                            "steps[{index}]: the memory check reads outside {}'s run-time state \
+                             ranges (state_memory); a test never reads the loaded application",
+                            player.id
+                        ),
+                    });
+                }
+                Step::Expect(check) | Step::WaitUntil { check, .. }
                     if !check.regions().iter().all(|r| r.fits(width, height)) =>
                 {
                     return Err(off_screen(index, "a region"));

@@ -5,7 +5,7 @@ mod common;
 
 use common::{Fixture, acceptance_test};
 use patch_schema::catalog::{
-    AcceptanceTest, CatalogEntry, Check, EntryError, Player, Region, Step, parse_address,
+    AcceptanceTest, CatalogEntry, Check, EntryError, Region, Step, parse_address,
 };
 use serde_json::{Value, json};
 
@@ -83,6 +83,8 @@ fn steps_are_bounded_and_a_test_checks_something() {
     assert!(message.contains("wait: 1 ms to 10 minutes"), "{message}");
     let message = refused(with_step(3, json!({ "wait": { "ms": 600_001 } })));
     assert!(message.contains("wait: 1 ms to 10 minutes"), "{message}");
+    let message = refused(with_step(3, json!({ "wait": { "ms": 0 } })));
+    assert!(message.contains("wait: 1 ms to 10 minutes"), "{message}");
     let message = refused(with_step(
         1,
         json!({ "press": { "control": "usb", "ms": 0 } }),
@@ -111,7 +113,31 @@ fn steps_are_bounded_and_a_test_checks_something() {
     let mut test = acceptance_test("t");
     let steps = test["steps"].as_array_mut().expect("steps");
     steps.extend(std::iter::repeat_n(json!({ "wait": { "ms": 600_000 } }), 6));
-    assert!(refused(test).contains("waits and timeouts of at most one hour"));
+    assert!(refused(test).contains("waits, holds and timeouts of at most one hour"));
+
+    // Holds count too: 400 presses of ten seconds.
+    let mut test = acceptance_test("t");
+    let press = json!({ "press": { "control": "usb", "ms": 10_000 } });
+    let steps = test["steps"].as_array_mut().expect("steps");
+    steps.extend(std::iter::repeat_n(press, 400));
+    assert!(refused(test).contains("waits, holds and timeouts of at most one hour"));
+    let mut test = acceptance_test("t");
+    let touch = json!({ "touch": { "x": 1, "y": 1, "ms": 10_000 } });
+    let steps = test["steps"].as_array_mut().expect("steps");
+    steps.extend(std::iter::repeat_n(touch, 400));
+    assert!(refused(test).contains("waits, holds and timeouts of at most one hour"));
+
+    // At most 64 memory checks, counting polls.
+    let mut test = acceptance_test("t");
+    let check = test["steps"][4].clone();
+    let steps = test["steps"].as_array_mut().expect("steps");
+    steps.extend(std::iter::repeat_n(check, 63));
+    assert!(refused(test).contains("at most 64 memory checks"));
+    let mut test = acceptance_test("t");
+    let check = test["steps"][4].clone();
+    let steps = test["steps"].as_array_mut().expect("steps");
+    steps.extend(std::iter::repeat_n(check, 62));
+    assert_eq!(validated(test), Ok(()));
 
     // Timeouts count as waits: seven polls of up to ten minutes.
     let mut test = acceptance_test("t");
@@ -119,7 +145,7 @@ fn steps_are_bounded_and_a_test_checks_something() {
     let poll = test["steps"][0].clone();
     let steps = test["steps"].as_array_mut().expect("steps");
     steps.extend(std::iter::repeat_n(poll, 6));
-    assert!(refused(test).contains("waits and timeouts of at most one hour"));
+    assert!(refused(test).contains("waits, holds and timeouts of at most one hour"));
 
     let mut test = acceptance_test("t");
     let wait = json!({ "wait": { "ms": 1 } });
@@ -217,6 +243,35 @@ fn a_test_must_fit_its_player() {
         "acceptance test pads: steps[5]: a region is not on p-1.0's 800x480 screen"
     );
 
+    // Memory checks read only the player's run-time state ranges.
+    let outside = "acceptance test pads: steps[4]: the memory check reads outside p-1.0's \
+                   run-time state ranges (state_memory); a test never reads the loaded \
+                   application";
+    assert_eq!(
+        refused(|t| t["steps"][4]["expect"]["memory"]["address"] = json!("0x0c001000")),
+        outside
+    );
+    // The last two bytes of the range fit; four bytes from there would not.
+    let mut fixture = Fixture::new();
+    fixture.acceptance[0]["steps"][4]["expect"]["memory"]["address"] = json!("0x0c000ffe");
+    assert_eq!(fixture.check(), Ok(()));
+    fixture.acceptance[0]["steps"][4]["expect"]["memory"]["bytes"] = json!(4);
+    fixture.acceptance[0]["steps"][4]["expect"]["memory"]["address"] = json!("0x0c000ffc");
+    assert_eq!(fixture.check(), Ok(()));
+    fixture.acceptance[0]["steps"][4]["expect"]["memory"]["address"] = json!("0x0bfffffc");
+    assert!(fixture.problem().contains("reads outside"));
+    let message =
+        refused(|t| t["steps"][0]["wait_until"]["check"]["memory"]["address"] = json!("0x0"));
+    assert!(message.starts_with("acceptance test pads: steps[0]: the memory check reads outside"));
+    // A player with no ranges allows no memory check.
+    let mut fixture = Fixture::new();
+    fixture.player["state_memory"] = json!([]);
+    assert!(
+        fixture
+            .problem()
+            .contains("steps[0]: the memory check reads outside")
+    );
+
     let mut fixture = Fixture::new();
     fixture.acceptance.push(acceptance_test("pads"));
     assert_eq!(fixture.problem(), "acceptance test pads is defined twice");
@@ -276,43 +331,4 @@ fn an_implementation_names_tests_for_its_own_player() {
     let mut fixture = Fixture::new();
     fixture.features[0]["implementations"]["p-1.0"][0]["acceptance"] = json!(["Pads"]);
     assert!(fixture.problem().contains("is not an id"));
-}
-
-#[test]
-fn controls_are_named_and_given_as_hexadecimal_bytes() {
-    let player = |controls: Value| {
-        let mut value = Fixture::new().player;
-        value["controls"] = controls;
-        serde_json::from_value::<Player>(value)
-            .expect("parses")
-            .validate()
-    };
-    let control =
-        |code: &str, value: &str| json!({ "code": code, "value": value, "description": "d" });
-    assert_eq!(
-        player(json!({ "rotary_push": control("0x11", "0x01") })),
-        Ok(())
-    );
-    for (code, value) in [
-        ("0x1", "0x01"),
-        ("11", "0x01"),
-        ("0x11", "0x100"),
-        ("0xzz", "0x01"),
-    ] {
-        let error = player(json!({ "usb": control(code, value) })).expect_err("refused");
-        assert!(
-            error.to_string().contains("0x and two hexadecimal digits"),
-            "{error}"
-        );
-    }
-    assert!(matches!(
-        player(json!({ "USB": control("0x13", "0x04") })),
-        Err(EntryError::Name { .. })
-    ));
-    let mut empty = control("0x13", "0x04");
-    empty["description"] = json!(" ");
-    assert!(matches!(
-        player(json!({ "usb": empty })),
-        Err(EntryError::Empty { .. })
-    ));
 }

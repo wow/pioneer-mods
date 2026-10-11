@@ -1,6 +1,7 @@
 //! A player: one model and firmware release, its pins, screen class, budgets, capabilities and
 //! screens (`catalog/players/<id>.json`).
 
+use super::acceptance::parse_address;
 use super::entry::{
     CatalogEntry, EntryError, check_doc_path, check_id, check_name, check_player_id,
     check_schema_version, check_sha256, check_text, check_unique, unique_keys,
@@ -26,6 +27,11 @@ pub struct Player {
     /// The panel controls acceptance tests may press, by name (`usb`, `rotary_push`).
     #[serde(default, deserialize_with = "unique_keys")]
     pub controls: BTreeMap<String, Control>,
+    /// The guest physical address ranges acceptance tests may read: run-time state (variables
+    /// the application sets while it runs), never the loaded application. None: no memory check
+    /// for this player yet.
+    #[serde(default)]
+    pub state_memory: Vec<StateRange>,
     pub restore: Restore,
     pub maintainer: String,
 }
@@ -40,8 +46,8 @@ pub struct Firmware {
     pub application_sha256: String,
 }
 
-/// A panel control as the panel reports it to the application: its message code and value, each
-/// `0x` and two hexadecimal digits.
+/// A panel control: the code and value the application receives from the panel, as the emulator
+/// delivers them (not checked against the hardware panel), each `0x` and two hexadecimal digits.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Control {
@@ -54,6 +60,28 @@ impl Control {
     /// The code and value as bytes, if well formed.
     pub fn bytes(&self) -> Option<(u8, u8)> {
         Some((hex_byte(&self.code)?, hex_byte(&self.value)?))
+    }
+}
+
+/// A range of run-time state an acceptance test may read, `start` to `end` exclusive (`0x` and one
+/// to eight hexadecimal digits each), and the `evidence` that it holds run-time state only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StateRange {
+    pub start: String,
+    pub end: String,
+    pub evidence: String,
+}
+
+impl StateRange {
+    /// Whether the `bytes` bytes at `address` lie within the range (if it is well formed).
+    pub fn holds(&self, address: u32, bytes: u8) -> bool {
+        let (Some(start), Some(end)) = (parse_address(&self.start), parse_address(&self.end))
+        else {
+            return false;
+        };
+        let last = u64::from(address) + u64::from(bytes);
+        u64::from(start) <= u64::from(address) && last <= u64::from(end)
     }
 }
 
@@ -162,6 +190,20 @@ impl CatalogEntry for Player {
                 &format!("controls.{name}.description"),
                 &control.description,
             )?;
+        }
+        for (index, range) in self.state_memory.iter().enumerate() {
+            let field = format!("state_memory[{index}]");
+            match (parse_address(&range.start), parse_address(&range.end)) {
+                (Some(start), Some(end)) if start < end => {}
+                _ => {
+                    return Err(EntryError::Rule {
+                        field,
+                        problem: "start below end, each 0x and one to eight hexadecimal digits"
+                            .to_owned(),
+                    });
+                }
+            }
+            check_text(&format!("{field}.evidence"), &range.evidence)?;
         }
         check_text("restore.official", &self.restore.official)?;
         check_text("restore.backup", &self.restore.backup)?;

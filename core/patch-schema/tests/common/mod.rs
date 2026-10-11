@@ -125,6 +125,7 @@ impl Fixture {
                 },
                 "screens": ["main", "perform"],
                 "controls": { "usb": { "code": "0x13", "value": "0x04", "description": "USB" } },
+                "state_memory": [{ "start": "0x0c000000", "end": "0x0c001000", "evidence": "e" }],
                 "restore": { "official": "o", "backup": "b", "guide": "docs/p.md" },
                 "maintainer": "m"
             }),

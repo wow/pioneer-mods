@@ -17,7 +17,9 @@ fn test_file(id: &str) -> Value {
             { "press": { "control": "usb" } },
             { "press": { "control": "rotary_push" } },
             { "touch": { "x": 50, "y": 420, "ms": 150 } },
-            { "expect": { "memory": { "address": "0x0c000000", "bytes": 4, "equals": 1 } } }
+            { "expect": { "brightest": { "region": { "x": 10, "y": 400, "w": 80, "h": 53 },
+                                         "others": [{ "x": 95, "y": 400, "w": 80, "h": 53 }],
+                                         "margin": 16 } } }
         ],
         "maintainer": "wow"
     })
@@ -86,6 +88,18 @@ fn a_misnamed_unknown_or_unfit_test_is_refused() {
     let message = refusal(root.path());
     assert!(
         message.contains("control play of player xdj700-v1.15 is not in the catalog"),
+        "{message}"
+    );
+    std::fs::remove_file(dir.join("unfit.json")).expect("remove");
+
+    // The XDJ-700 names no run-time state ranges yet, so no memory check is accepted.
+    let mut memory = test_file("memory");
+    memory["steps"][4] =
+        json!({ "expect": { "memory": { "address": "0x0c000000", "bytes": 4, "equals": 1 } } });
+    write_json(&dir.join("memory.json"), &memory);
+    let message = refusal(root.path());
+    assert!(
+        message.contains("reads outside xdj700-v1.15's run-time state ranges"),
         "{message}"
     );
 }

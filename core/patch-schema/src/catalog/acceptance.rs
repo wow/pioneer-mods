@@ -2,9 +2,10 @@
 //! screen and checks what the running application does (`catalog/acceptance/<id>.json`).
 //!
 //! A test holds no firmware and no pixels: it presses named controls, touches screen points and
-//! checks memory values at run-time addresses, or compares regions of the same screen with each
-//! other. Implementations name the tests they must pass (`acceptance`); a runner executes them
-//! against an update in the emulator (`docs/acceptance.md`).
+//! checks memory values in the run-time state ranges its player names (never the loaded
+//! application), or compares regions of the same screen with each other. Implementations name the
+//! tests they must pass (`acceptance`); a runner executes them against an update in the emulator
+//! (`docs/acceptance.md`).
 
 use super::entry::{
     CatalogEntry, EntryError, check_id, check_name, check_player_id, check_schema_version,
@@ -22,6 +23,8 @@ pub const MAX_TOTAL_WAIT_MS: u64 = 3_600_000;
 pub const MAX_HOLD_MS: u32 = 10_000;
 /// Most regions a `brightest` check compares against.
 pub const MAX_OTHER_REGIONS: usize = 16;
+/// Most `memory` checks a test may hold.
+pub const MAX_MEMORY_CHECKS: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -74,8 +77,10 @@ fn default_hold_ms() -> u32 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum Check {
-    /// The `bytes`-byte value at the run-time `address` of the running application, in the
-    /// emulated processor's byte order, equals `equals`.
+    /// The `bytes`-byte value at the guest physical `address` (as the emulator's memory bus
+    /// sees it), in the emulated processor's byte order, equals `equals`. The bytes must lie in
+    /// one of the player's run-time state ranges ([`Player::state_memory`](super::Player)), so a
+    /// test never holds the loaded application's contents.
     Memory {
         /// `0x` and one to eight hexadecimal digits, aligned to `bytes`.
         address: String,
@@ -83,9 +88,9 @@ pub enum Check {
         bytes: u8,
         equals: u32,
     },
-    /// The mean brightness of `region` exceeds that of each of `others` by at least `margin`
-    /// (0 to 255): for example, the pad that lights. Regions of the same frame are compared with
-    /// each other; no reference image is stored.
+    /// The mean brightness ([`mean_brightness`]) of `region` exceeds that of each of `others` by
+    /// at least `margin` (1 to 255): for example, the pad that lights. Regions of the same frame
+    /// are compared with each other; no reference image is stored.
     Brightest {
         region: Region,
         others: Vec<Region>,
@@ -163,6 +168,14 @@ impl Check {
         Ok(())
     }
 
+    /// How many bytes a `memory` check reads (0 for any other check).
+    pub fn bytes(&self) -> u8 {
+        match self {
+            Check::Memory { bytes, .. } => *bytes,
+            Check::Brightest { .. } => 0,
+        }
+    }
+
     /// The regions the check reads.
     pub fn regions(&self) -> Vec<Region> {
         match self {
@@ -172,6 +185,41 @@ impl Check {
                 .collect(),
         }
     }
+}
+
+/// The brightness of an 8-bit RGB pixel, 0 to 255: Rec. 601 luma, `(299 R + 587 G + 114 B) /
+/// 1000`, rounded down. A runner expands an RGB565 pixel to 8 bits a channel first
+/// ([`expand_rgb565`]).
+pub fn brightness(r: u8, g: u8, b: u8) -> u8 {
+    let luma = (299 * u32::from(r) + 587 * u32::from(g) + 114 * u32::from(b)) / 1000;
+    u8::try_from(luma).expect("at most 255")
+}
+
+/// An RGB565 pixel as 8-bit R, G and B, each channel's bits replicated into the low bits (31 and
+/// 63 become 255).
+pub fn expand_rgb565(pixel: u16) -> (u8, u8, u8) {
+    let r = u8::try_from(pixel >> 11).expect("5 bits");
+    let g = u8::try_from((pixel >> 5) & 0x3f).expect("6 bits");
+    let b = u8::try_from(pixel & 0x1f).expect("5 bits");
+    (
+        (r << 3) | (r >> 2),
+        (g << 2) | (g >> 4),
+        (b << 3) | (b >> 2),
+    )
+}
+
+/// The mean brightness of `pixels` (8-bit RGB), rounded down; 0 for none. What a `brightest`
+/// check compares.
+pub fn mean_brightness(pixels: impl IntoIterator<Item = (u8, u8, u8)>) -> u8 {
+    let (sum, count) = pixels
+        .into_iter()
+        .fold((0u64, 0u64), |(sum, count), (r, g, b)| {
+            (sum + u64::from(brightness(r, g, b)), count + 1)
+        });
+    if count == 0 {
+        return 0;
+    }
+    u8::try_from(sum / count).expect("a mean of bytes")
 }
 
 /// `0x` and one to eight hexadecimal digits.
@@ -209,6 +257,7 @@ impl CatalogEntry for AcceptanceTest {
         }
         let mut waited = 0u64;
         let mut checks = 0usize;
+        let mut memory_checks = 0usize;
         for (index, step) in self.steps.iter().enumerate() {
             let field = format!("steps[{index}]");
             match step {
@@ -223,18 +272,22 @@ impl CatalogEntry for AcceptanceTest {
                     if *ms == 0 || *ms > MAX_HOLD_MS {
                         return Err(rule(field, "press: held 1 ms to 10 s"));
                     }
+                    waited += u64::from(*ms);
                 }
                 Step::Touch { ms, .. } => {
                     if *ms == 0 || *ms > MAX_HOLD_MS {
                         return Err(rule(field, "touch: held 1 ms to 10 s"));
                     }
+                    waited += u64::from(*ms);
                 }
                 Step::Expect(check) => {
                     check.validate(&field)?;
                     checks += 1;
+                    memory_checks += usize::from(check.address().is_some());
                 }
                 Step::WaitUntil { check, timeout_ms } => {
                     check.validate(&field)?;
+                    memory_checks += usize::from(check.address().is_some());
                     if *timeout_ms == 0 || *timeout_ms > MAX_WAIT_MS {
                         return Err(rule(field, "wait_until: a timeout of 1 ms to 10 minutes"));
                     }
@@ -249,10 +302,13 @@ impl CatalogEntry for AcceptanceTest {
                 "at least one step checks something",
             ));
         }
+        if memory_checks > MAX_MEMORY_CHECKS {
+            return Err(rule("steps".to_owned(), "at most 64 memory checks"));
+        }
         if waited > MAX_TOTAL_WAIT_MS {
             return Err(rule(
                 "steps".to_owned(),
-                "waits and timeouts of at most one hour",
+                "waits, holds and timeouts of at most one hour",
             ));
         }
         check_text("maintainer", &self.maintainer)

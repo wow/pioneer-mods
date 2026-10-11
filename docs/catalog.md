@@ -51,7 +51,9 @@ letters, digits and `_` joined by `.` (`beat_loop.pad`). A slot is referred to a
   stock button lengths and 32, the one other length a button has been shown to set.
 - `screens`: the screens catalogued for it, each with its own file.
 - `controls`: the panel controls acceptance tests may press, by name, each with the `code` and
-  `value` the panel reports and a `description` ([acceptance.md](./acceptance.md#controls)).
+  `value` the application receives from the panel (as the emulator delivers them) and a
+  `description`; `state_memory`: the run-time state ranges memory checks may read, each with its
+  `evidence` ([acceptance.md](./acceptance.md#controls-and-run-time-state)).
 - `restore`: how an owner brings back the stock application after flashing a build, which
   `patch-cli build` prints with every build: what the `official` update does over a build, the
   `backup`, and the player's flashing `guide` (`docs/<file>.md`, a file the loader checks).
@@ -265,8 +267,9 @@ Each file is checked on its own, then the catalog as a whole, with no firmware:
   implementation for the player;
 - every recipe named exists, is a valid schema-v2 recipe for its player, carries the player's pins
   and pins its output; a recipe a skin names is named by no feature and no other skin;
-- every acceptance test's player exists and has the controls it presses, and its touches and
-  regions lie on that player's screen; every test an implementation names exists for its player;
+- every acceptance test's player exists and has the controls it presses, its touches and regions
+  lie on that player's screen, and its memory checks read only that player's run-time state
+  ranges; every test an implementation names exists for its player;
 - every player's flashing guide is a file in the repository, not a symbolic link.
 
 The loader (`patch_cli::catalog::load_catalog`) then holds the catalog to the engine: every

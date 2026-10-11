@@ -23,8 +23,9 @@ mod screen;
 mod skin;
 
 pub use acceptance::{
-    AcceptanceTest, Check, MAX_HOLD_MS, MAX_OTHER_REGIONS, MAX_STEPS, MAX_TOTAL_WAIT_MS,
-    MAX_WAIT_MS, Region, Step, parse_address,
+    AcceptanceTest, Check, MAX_HOLD_MS, MAX_MEMORY_CHECKS, MAX_OTHER_REGIONS, MAX_STEPS,
+    MAX_TOTAL_WAIT_MS, MAX_WAIT_MS, Region, Step, brightness, expand_rgb565, mean_brightness,
+    parse_address,
 };
 pub use check::{Catalog, CatalogError, CheckedCatalog};
 pub use entry::{
@@ -33,7 +34,7 @@ pub use entry::{
 };
 pub use feature::{Feature, FeatureImplementation, Requires};
 pub use player::{
-    Budgets, Capability, Control, Firmware, PixelFormat, Player, Restore, ScreenClass,
+    Budgets, Capability, Control, Firmware, PixelFormat, Player, Restore, ScreenClass, StateRange,
 };
 pub use profile::Profile;
 pub use resolution::{
