@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod protected_set;
+pub mod synthetic_upd;
 
 use serde_json::{Value, json};
 use std::ffi::OsStr;

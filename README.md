@@ -68,7 +68,8 @@ players, screens, features and skins with its checks ([docs/catalog.md](./docs/c
 Resolving a profile against the catalog, with a reason for everything switched off, is
 `patch-cli resolve`, and building it into one verified update is `patch-cli build`. Acceptance
 tests, scripted emulator runs that check what a build does, have their format
-([docs/acceptance.md](./docs/acceptance.md)); the runner is next.
+([docs/acceptance.md](./docs/acceptance.md)), and `patch-cli accept` runs one on an update in the
+owner's local emulator.
 
 ## Quick start (developer)
 
