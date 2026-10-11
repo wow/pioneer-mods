@@ -53,6 +53,8 @@ pub fn skin(id: &str, screen: &str, slots: Value, implementations: Value) -> Val
             "slots": slots
         },
         "art": "original",
+        "authors": ["a"],
+        "licence": "CC-BY-SA-4.0",
         "implementations": { "p-1.0": implementations },
         "maintainer": "m"
     })

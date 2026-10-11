@@ -335,9 +335,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
-- Decided: community skin art is licensed under CC BY-SA 4.0, and the builder runs in the browser
-  on the owner's computer, the official update never uploaded (`docs/modular-builds.md`,
-  "Decisions"; `CONTRIBUTING.md`).
+- Decided: community skins are licensed under CC BY-SA 4.0 (`LICENSE-ART`), and code and feature
+  recipes stay MIT; the builder runs in the browser on the owner's computer, the official update
+  never uploaded (`docs/modular-builds.md`, "Decisions"; `CONTRIBUTING.md`). A skin entry now
+  names its `authors` and its `licence` (`CC-BY-SA-4.0`), and the catalog check refuses a recipe
+  a skin names that a feature or another skin also names.
 - Stage 7's known limit is documented: the BEAT LOOP lengths are right, but the pad that lights
   is the one to the right of the touched pad, and the 32 pad lights none, because the firmware
   lights the pad whose stock length matches the loop (found in emulation, 2026-10-10; no data

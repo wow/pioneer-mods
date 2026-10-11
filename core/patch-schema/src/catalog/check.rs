@@ -84,7 +84,9 @@ impl Catalog {
     /// - each implementation's player exists and meets the feature's or skin's requirements, and
     ///   label counts match slot counts;
     /// - each recipe is for that player, carries its pins and pins its output (every fragment of
-    ///   a build must).
+    ///   a build must);
+    /// - a recipe a skin names is named by no feature and no other skin: it is the skin's own,
+    ///   under the skin's licence.
     ///
     /// # Errors
     ///

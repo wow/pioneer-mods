@@ -1,7 +1,9 @@
 # Modular builds: players, per-screen skins and features (design, draft)
 
-Status: proposal (2026-10-10). Nothing here is implemented yet; the schemas below are sketches
-to be settled in the pull requests that implement them. The safety rules are stated, with
+Status: proposal (2026-10-10), partly implemented: the catalog formats, resolving a profile and
+building one (`patch-cli resolve`, `patch-cli build`) are described with authority in
+[catalog.md](./catalog.md), and the [Decisions](#decisions) are settled. The rest are sketches to
+be settled in the pull requests that implement them. The safety rules are stated, with
 authority, in [xdj700-flashing.md](./xdj700-flashing.md) section 5 and in
 [recipes.md](./recipes.md), and they apply unchanged. This document only proposes the evidence
 for lifting some of them ([Extending the limits](#extending-the-limits)): a limit is lifted by a
@@ -304,10 +306,15 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
   needs no firmware. The checks that need the official file, the protected set (kept outside the
   repository) or the emulator (preconditions, output pins, the protected set, start-up reads,
   rehearsals and acceptance tests) are run by the maintainer before an item is offered.
-- Code keeps the repository's licence (MIT), and so do the glyph masks inside recipes. Skin art
-  is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/): contributors
-  declare that it is their own and contains no extracted vendor images, and each skin credits its
-  authors.
+- Licences go by role ([LICENSE](../LICENSE), [LICENSE-ART](../LICENSE-ART)):
+  - code, and feature recipes with the glyph masks they hold (labels drawn in the stock style
+    among them), are MIT;
+  - a community skin, that is its catalog entry and the recipes its implementations name, with
+    the masks and art they hold, is
+    [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The entry states it
+    (`licence`) and names who made it (`authors`). A recipe a skin names is named by no feature
+    and no other skin, so its licence is never in doubt.
+- Contributors declare that their art is their own and contains no extracted vendor images.
   Transforms of a player's own images are computed on the owner's computer and never published,
   so the repository holds none of their pixels.
 - No firmware, keys or built updates are accepted.
@@ -329,13 +336,27 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
 
 ## Decisions
 
-- **Art licence** (2026-10-11): community skin art is licensed under CC BY-SA 4.0
-  ([Community content](#community-content)). Others may reuse and adapt a skin, crediting its
-  authors; adaptations they share carry the same licence.
+- **Art licence** (2026-10-11): community skin art is licensed under CC BY-SA 4.0; code stays
+  MIT. Others may reuse and adapt a skin, crediting its authors, linking the licence and noting
+  their changes; adaptations they share carry the same licence. Applying it by role, so that each
+  file has one licence (a skin's entry and recipes CC BY-SA 4.0; feature recipes and their glyph
+  masks MIT; [Community content](#community-content)), is this document's reading, awaiting the
+  owner's confirmation.
 - **Builder** (2026-10-11): the builder runs in the browser, on the owner's computer. The
-  official update is read locally and never uploaded; the build runs in the page, with the same
-  engine compiled to WebAssembly. No desktop app is planned. `patch-cli` stays the reference
-  front end, the one the tests and owner suites drive.
+  official update is read locally and never uploaded; the build runs in the page. No desktop app
+  is planned. `patch-cli` stays the reference front end, the one the tests and owner suites drive.
+  - **One implementation of the checks.** The engine (`patch-core`) and resolution
+    (`patch-schema`) are expected to compile to WebAssembly as they are (not yet checked; a CI
+    step comes with the page). Loading the catalog against the engine,
+    the composition front end and the protected-set handling live in `patch-cli` today; before
+    the page is built they move into a shared library crate, without file I/O, that both front
+    ends call.
+  - **The protected set.** It stays outside the repository, so the page has none. It needs none:
+    the protected-set check is per fragment, the maintainer runs it on every fragment before
+    the fragment is offered, and a composed build changes only bytes its fragments change (the
+    composition check). The page says so in its output, as `--no-protected-set` does. With the
+    page, each implementation records the protected set it passed (its SHA-256 and the date), so
+    that the page can print it, and a re-measured set shows which fragments to check again.
 
 ## Open questions
 
