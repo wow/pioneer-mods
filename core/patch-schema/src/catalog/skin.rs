@@ -24,6 +24,11 @@ pub struct Skin {
     pub screen: String,
     pub requires: SkinRequires,
     pub art: Art,
+    /// Who made the skin: the names its licence's attribution gives.
+    pub authors: Vec<String>,
+    /// The licence of the skin: its entry, and the recipes its implementations name, with the
+    /// masks and art they hold.
+    pub licence: SkinLicence,
     /// The implementations for each player id: one per label set the skin draws, since each
     /// (skin, label set) pair has its own output pin.
     #[serde(deserialize_with = "unique_keys")]
@@ -48,6 +53,14 @@ pub enum Art {
     Original,
     /// Computed from the player's own images on the owner's computer; no pixel is published.
     Transform,
+}
+
+/// The licence a community skin is published under (`docs/modular-builds.md`, "Community
+/// content"), by its SPDX identifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SkinLicence {
+    #[serde(rename = "CC-BY-SA-4.0")]
+    CcBySa40,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,6 +96,15 @@ impl CatalogEntry for Skin {
         }
         check_text("title", &self.title)?;
         check_id("screen", &self.screen)?;
+        if self.authors.is_empty() {
+            return Err(EntryError::Empty {
+                field: "authors".to_owned(),
+            });
+        }
+        for author in &self.authors {
+            check_text("authors", author)?;
+        }
+        check_unique("authors", &self.authors)?;
         for slot in &self.requires.slots {
             check_name("requires.slots", slot)?;
         }

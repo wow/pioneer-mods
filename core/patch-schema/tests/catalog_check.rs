@@ -185,3 +185,27 @@ fn a_skin_must_fit_its_players_screen() {
         "{message}"
     );
 }
+
+#[test]
+fn a_skins_recipes_are_its_own() {
+    // A skin naming a feature's recipe: whose licence it is under would be unclear.
+    let mut fixture = Fixture::new();
+    fixture.skins[0]["implementations"]["p-1.0"][0]["recipe"] = json!("recipes/p/plain.json");
+    assert_eq!(
+        fixture.problem(),
+        "skin dark-pads: recipe recipes/p/plain.json is also named by feature plain; a skin's \
+         recipes are its own, under its licence"
+    );
+
+    // Two skins naming one recipe.
+    let mut fixture = Fixture::new();
+    let mut other = fixture.skins[0].clone();
+    other["id"] = json!("light-pads");
+    other["implementations"]["p-1.0"] = json!([fixture.skins[0]["implementations"]["p-1.0"][0]]);
+    fixture.skins.push(other);
+    let message = fixture.problem();
+    assert!(
+        message.contains("recipe recipes/p/stock-labels.json is also named by skin"),
+        "{message}"
+    );
+}

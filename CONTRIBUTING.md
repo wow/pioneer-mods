@@ -11,6 +11,13 @@ This project is unofficial and experimental. Please read [README.md](./README.md
 3. Keep changes focused and easy to review.
 4. Add or update tests for behavior changes.
 5. Update documentation when behavior, compatibility, or release process changes.
+6. **Licences go by role.** Code, and feature recipes with the glyph masks they hold, are
+   contributed under the MIT licence ([LICENSE](./LICENSE)). A community skin (its catalog entry
+   and the recipes its implementations name, with their masks and art) is contributed under
+   [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) ([LICENSE-ART](./LICENSE-ART)):
+   set its `licence` to `CC-BY-SA-4.0` and name who made it in its `authors`. Declare that any art
+   you contribute is your own work and holds no image extracted from vendor firmware
+   ([docs/modular-builds.md](./docs/modular-builds.md#community-content)).
 
 ## Development flow
 

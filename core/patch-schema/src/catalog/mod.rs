@@ -32,4 +32,4 @@ pub use resolution::{
 };
 pub use resolve::{MAX_CONFIGURATIONS, resolve};
 pub use screen::{Screen, Slot};
-pub use skin::{Art, STOCK_SKIN, Skin, SkinImplementation, SkinRequires};
+pub use skin::{Art, STOCK_SKIN, Skin, SkinImplementation, SkinLicence, SkinRequires};

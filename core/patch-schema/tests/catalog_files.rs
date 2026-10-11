@@ -191,6 +191,21 @@ fn skins_are_checked_on_their_own() {
     let mut bad = fixture.skins[0].clone();
     bad["requires"]["slots"] = json!([]);
     assert!(is_rule(skin(bad)));
+
+    // Its authors: at least one, each named once, in plain text.
+    let mut bad = fixture.skins[0].clone();
+    bad["authors"] = json!([]);
+    assert!(matches!(skin(bad), Err(EntryError::Empty { .. })));
+    let mut bad = fixture.skins[0].clone();
+    bad["authors"] = json!(["a", "a"]);
+    assert!(matches!(skin(bad), Err(EntryError::Repeated { .. })));
+    let mut bad = fixture.skins[0].clone();
+    bad["authors"] = json!(["a\nb"]);
+    assert!(skin(bad).is_err());
+    // Its licence: the one community skins are published under.
+    let mut bad = fixture.skins[0].clone();
+    bad["licence"] = json!("MIT");
+    assert!(serde_json::from_value::<Skin>(bad).is_err());
 }
 
 #[test]
