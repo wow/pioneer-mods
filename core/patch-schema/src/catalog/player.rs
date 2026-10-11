@@ -1,6 +1,7 @@
 //! A player: one model and firmware release, its pins, screen class, budgets, capabilities and
 //! screens (`catalog/players/<id>.json`).
 
+use super::acceptance::Address;
 use super::entry::{
     CatalogEntry, EntryError, check_doc_path, check_id, check_name, check_player_id,
     check_schema_version, check_sha256, check_text, check_unique, unique_keys,
@@ -23,6 +24,14 @@ pub struct Player {
     pub capabilities: BTreeMap<String, Capability>,
     /// The screens catalogued for this player, each in `catalog/screens/<player>/<screen>.json`.
     pub screens: Vec<String>,
+    /// The panel controls acceptance tests may press, by name (`usb`, `rotary_push`).
+    #[serde(default, deserialize_with = "unique_keys")]
+    pub controls: BTreeMap<String, Control>,
+    /// The guest physical address ranges acceptance tests may read: run-time state (variables
+    /// the application sets while it runs), never the loaded application. None: no memory check
+    /// for this player yet.
+    #[serde(default)]
+    pub state_memory: Vec<StateRange>,
     pub restore: Restore,
     pub maintainer: String,
 }
@@ -35,6 +44,50 @@ pub struct Firmware {
     pub file: String,
     pub upd_sha256: String,
     pub application_sha256: String,
+}
+
+/// A panel control: the code and value the application receives from the panel, as the emulator
+/// delivers them (not checked against the hardware panel), each `0x` and two hexadecimal digits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Control {
+    pub code: String,
+    pub value: String,
+    pub description: String,
+}
+
+impl Control {
+    /// The code and value as bytes, if well formed.
+    pub fn bytes(&self) -> Option<(u8, u8)> {
+        Some((hex_byte(&self.code)?, hex_byte(&self.value)?))
+    }
+}
+
+/// A range of run-time state an acceptance test may read, `start` to `end` exclusive, and the
+/// `evidence` that it holds run-time state only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StateRange {
+    pub start: Address,
+    pub end: Address,
+    pub evidence: String,
+}
+
+impl StateRange {
+    /// Whether the `bytes` bytes at `address` lie within the range.
+    pub fn holds(&self, address: u32, bytes: u8) -> bool {
+        let last = u64::from(address) + u64::from(bytes);
+        self.start.0 <= address && last <= u64::from(self.end.0)
+    }
+}
+
+/// `0x` and two hexadecimal digits.
+fn hex_byte(value: &str) -> Option<u8> {
+    let digits = value.strip_prefix("0x")?;
+    if digits.len() != 2 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    u8::from_str_radix(digits, 16).ok()
 }
 
 /// How an owner brings back the stock application after flashing a build of this player; a
@@ -121,6 +174,47 @@ impl CatalogEntry for Player {
             "firmware.application_sha256",
             &self.firmware.application_sha256,
         )?;
+        let mut events = BTreeMap::new();
+        for (name, control) in &self.controls {
+            check_name("controls", name)?;
+            let Some(event) = control.bytes() else {
+                return Err(EntryError::Rule {
+                    field: format!("controls.{name}"),
+                    problem: "code and value: 0x and two hexadecimal digits each".to_owned(),
+                });
+            };
+            if let Some(other) = events.insert(event, name) {
+                return Err(EntryError::Rule {
+                    field: format!("controls.{name}"),
+                    problem: format!(
+                        "the same code and value as {other}: a test pressing one would press both"
+                    ),
+                });
+            }
+            check_text(
+                &format!("controls.{name}.description"),
+                &control.description,
+            )?;
+        }
+        for (index, range) in self.state_memory.iter().enumerate() {
+            let field = format!("state_memory[{index}]");
+            let rule = |problem: &str| EntryError::Rule {
+                field: field.clone(),
+                problem: problem.to_owned(),
+            };
+            if range.start >= range.end {
+                return Err(rule("start below end"));
+            }
+            // Ranges that overlap or touch are written as one, so a read is in one range or none.
+            let earlier = &self.state_memory[..index];
+            if earlier
+                .iter()
+                .any(|other| range.start <= other.end && other.start <= range.end)
+            {
+                return Err(rule("overlaps or touches another range; write them as one"));
+            }
+            check_text(&format!("{field}.evidence"), &range.evidence)?;
+        }
         check_text("restore.official", &self.restore.official)?;
         check_text("restore.backup", &self.restore.backup)?;
         check_doc_path("restore.guide", &self.restore.guide)?;

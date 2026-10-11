@@ -58,6 +58,9 @@ pub struct FeatureImplementation {
     /// Known limits the builder shows with the feature.
     #[serde(default)]
     pub limits: Vec<String>,
+    /// The acceptance tests (`catalog/acceptance/<id>.json`) it must pass in the emulator.
+    #[serde(default)]
+    pub acceptance: Vec<String>,
     /// The screens whose labels the recipe draws itself, each in the style of a skin
     /// (`{"perform": "stock"}`): those screens must then keep that skin. A labelled screen not
     /// listed is left to the chosen skin (a skin implementation drawing that label set). Only
@@ -155,6 +158,7 @@ impl Feature {
             &implementation.recipe,
             &implementation.evidence,
             &implementation.limits,
+            &implementation.acceptance,
         )?;
         for (screen, skin) in &implementation.draws_labels {
             check_id(&format!("{field}.draws_labels"), screen)?;

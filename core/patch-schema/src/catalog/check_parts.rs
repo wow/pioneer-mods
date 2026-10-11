@@ -58,6 +58,7 @@ impl Catalog {
             }
             for implementation in implementations {
                 check_recipe(&entry, player, &implementation.recipe, recipes)?;
+                self.check_named_tests(&entry, player_id, &implementation.acceptance)?;
             }
         }
         Ok(())
@@ -100,6 +101,7 @@ impl Catalog {
                     check_label_count(&entry, &slot_ref, labels.len(), count)?;
                 }
                 check_recipe(&entry, player, &implementation.recipe, recipes)?;
+                self.check_named_tests(&entry, player_id, &implementation.acceptance)?;
                 if let Some(other) = self.other_holder(&skin.id, &implementation.recipe) {
                     return Err(inconsistent(format!(
                         "recipe {} is also named by {other}; a skin's recipes are its own, under \

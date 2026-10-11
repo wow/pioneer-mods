@@ -308,19 +308,24 @@ pub(crate) fn check_unique<'a>(
     Ok(())
 }
 
-/// The fields every implementation has: its recipe, maturity evidence and known limits.
+/// The fields every implementation has: its recipe, maturity evidence, known limits and the
+/// acceptance tests it must pass.
 pub(crate) fn check_implementation(
     field: &str,
     recipe: &str,
     evidence: &str,
     limits: &[String],
+    acceptance: &[String],
 ) -> Result<(), EntryError> {
     check_recipe_path(&format!("{field}.recipe"), recipe)?;
     check_text(&format!("{field}.evidence"), evidence)?;
     for (index, limit) in limits.iter().enumerate() {
         check_text(&format!("{field}.limits[{index}]"), limit)?;
     }
-    Ok(())
+    for test in acceptance {
+        check_id(&format!("{field}.acceptance"), test)?;
+    }
+    check_unique(&format!("{field}.acceptance"), acceptance)
 }
 
 fn checked(ok: bool, error: impl FnOnce() -> EntryError) -> Result<(), EntryError> {

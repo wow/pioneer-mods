@@ -73,6 +73,9 @@ pub struct SkinImplementation {
     pub evidence: String,
     #[serde(default)]
     pub limits: Vec<String>,
+    /// The acceptance tests (`catalog/acceptance/<id>.json`) it must pass in the emulator.
+    #[serde(default)]
+    pub acceptance: Vec<String>,
     /// The labels it draws, by slot name on its screen; none for the stock labels.
     #[serde(default, deserialize_with = "unique_keys")]
     pub labels: BTreeMap<String, Vec<String>>,
@@ -150,6 +153,7 @@ impl Skin {
             &implementation.recipe,
             &implementation.evidence,
             &implementation.limits,
+            &implementation.acceptance,
         )?;
         for (slot, labels) in &implementation.labels {
             check_name(&format!("{field}.labels"), slot)?;

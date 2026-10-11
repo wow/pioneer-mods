@@ -1,4 +1,4 @@
-# The catalog: players, screens, features and skins
+# The catalog: players, screens, features, skins and acceptance tests
 
 The catalog is the data a modular build is chosen from: which players the project supports, their
 screens, the features that change behaviour and the skins that change a screen's look, each with
@@ -7,7 +7,8 @@ one implementation (a schema-v2 recipe) per player. It implements the concepts o
 
 **Status.** The schemas, the committed XDJ-700 v1.15 catalog, the checks that need no firmware,
 resolving a profile (`patch-cli resolve`) and building one (`patch-cli build`) are implemented
-(below). No skin is committed yet.
+(below), and so is the format of acceptance tests ([acceptance.md](./acceptance.md)). No skin and
+no acceptance test is committed yet.
 
 ## Layout
 
@@ -17,6 +18,7 @@ catalog/
   screens/<player>/<screen>.json    one screen of that player, and its slots
   features/<feature>.json           a behaviour change, with an implementation per player
   skins/<skin>.json                 a look for one screen, with implementations per player
+  acceptance/<test>.json            a scripted emulator run for one player (acceptance.md)
 ```
 
 Every file is named after its `id`, and a screen lies under its player's directory, which must
@@ -48,6 +50,11 @@ letters, digits and `_` joined by `.` (`beat_loop.pad`). A slot is referred to a
   evidence shows, not necessarily everything the firmware holds: `beat_loop.lengths` names the six
   stock button lengths and 32, the one other length a button has been shown to set.
 - `screens`: the screens catalogued for it, each with its own file.
+- `controls`: the panel controls acceptance tests may press, by name, each with the `code` and
+  `value` the application receives from the panel (as the emulator delivers them) and a
+  `description`, no two with the same code and value; `state_memory`: the run-time state ranges
+  memory checks may read, none overlapping or touching another, each with its `evidence`
+  ([acceptance.md](./acceptance.md#controls-and-run-time-state)).
 - `restore`: how an owner brings back the stock application after flashing a build, which
   `patch-cli build` prints with every build: what the `official` update does over a build, the
   `backup`, and the player's flashing `guide` (`docs/<file>.md`, a file the loader checks).
@@ -82,6 +89,8 @@ a screen accepts come with the screen catalogue (design roadmap, step 3).
     needed for `stable`, but the maintainer decides: `beat-loop-16-plays-32` passed on an owner's
     unit and stays `experimental` while its lit-pad limit stands.
   - `limits`: known limits the builder shows with the feature.
+  - `acceptance`: the acceptance tests it must pass in the emulator, by id, each for its player
+    ([acceptance.md](./acceptance.md)).
   - `draws_labels`: the screens whose labels the recipe draws itself in the stock style
     (`{"perform": "stock"}`), so each such screen must keep the `stock` skin. A labelled screen
     not listed is left to the chosen skin, which must have an implementation drawing that label
@@ -135,7 +144,8 @@ file. No skin is committed yet; the format:
   may name.
 - `implementations`: per player, one per label set the skin draws (none: the stock labels), since
   each (skin, label set) pair has its own output pin. Two implementations may not draw the same
-  label set. The player must have the screen, the required slots and the screen class.
+  label set. The player must have the screen, the required slots and the screen class. Each
+  implementation may name the `acceptance` tests it must pass, as a feature's does.
 
 ## Profile
 
@@ -258,6 +268,9 @@ Each file is checked on its own, then the catalog as a whole, with no firmware:
   implementation for the player;
 - every recipe named exists, is a valid schema-v2 recipe for its player, carries the player's pins
   and pins its output; a recipe a skin names is named by no feature and no other skin;
+- every acceptance test's player exists and has the controls it presses, its touches and regions
+  lie on that player's screen, and its memory checks read only that player's run-time state
+  ranges; every test an implementation names exists for its player;
 - every player's flashing guide is a file in the repository, not a symbolic link.
 
 The loader (`patch_cli::catalog::load_catalog`) then holds the catalog to the engine: every
@@ -270,5 +283,5 @@ and is checked by `patch` and `compose`.
 ## Not yet in the format
 
 These come with the steps of the design that need them: `provides` (a feature's capabilities for
-others), `acceptance` (named emulator tests, step 2), a screen's layout data and evidence (step
-3), and skin fallbacks. A file using them is refused until then.
+others), a screen's layout data and evidence (step 3), and skin fallbacks. A file using them is
+refused until then.
