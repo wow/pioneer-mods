@@ -338,10 +338,10 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
 
 - **Art licence** (2026-10-11): community skin art is licensed under CC BY-SA 4.0; code stays
   MIT. Others may reuse and adapt a skin, crediting its authors, linking the licence and noting
-  their changes; adaptations they share carry the same licence. Applying it by role, so that each
-  file has one licence (a skin's entry and recipes CC BY-SA 4.0; feature recipes and their glyph
-  masks MIT; [Community content](#community-content)), is this document's reading, awaiting the
-  owner's confirmation.
+  their changes; adaptations they share carry the same licence. It applies by role, so that each
+  file has one licence: a skin's entry and recipes are CC BY-SA 4.0, and feature recipes and
+  their glyph masks MIT ([Community content](#community-content)). A contributor who wants
+  share-alike for a drawing ships it in a skin.
 - **Builder** (2026-10-11): the builder runs in the browser, on the owner's computer. The
   official update is read locally and never uploaded; the build runs in the page. No desktop app
   is planned. `patch-cli` stays the reference front end, the one the tests and owner suites drive.
