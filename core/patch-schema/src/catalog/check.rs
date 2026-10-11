@@ -204,6 +204,22 @@ impl Catalog {
                     problem: format!("player {} does not list it", player.id),
                 });
             }
+            let (width, height) = (player.screen_class.width, player.screen_class.height);
+            for (name, slot) in &screen.slots {
+                let elements = slot.images.iter().flat_map(|images| &images.elements);
+                if let Some(index) = elements
+                    .into_iter()
+                    .position(|e| !e.area.fits(width, height))
+                {
+                    return Err(CatalogError::Inconsistent {
+                        entry: screen_entry(screen),
+                        problem: format!(
+                            "slot {name}: element {index}'s box is not on the {width}x{height} \
+                             screen"
+                        ),
+                    });
+                }
+            }
         }
         Ok(())
     }

@@ -41,5 +41,5 @@ pub use resolution::{
     BuildError, FeatureResolution, Fragment, Resolution, ResolveError, ScreenResolution, Status,
 };
 pub use resolve::{MAX_CONFIGURATIONS, resolve};
-pub use screen::{Screen, Slot};
+pub use screen::{Screen, Slot, SlotElement, SlotImages};
 pub use skin::{Art, STOCK_SKIN, Skin, SkinImplementation, SkinLicence, SkinRequires};

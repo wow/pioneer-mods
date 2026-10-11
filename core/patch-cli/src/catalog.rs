@@ -181,6 +181,26 @@ fn check_against_engine(catalog: &Catalog, recipes: &BTreeMap<String, RecipeV2>)
             }
         }
     }
+    // A slot's images are in its player's decoded application.
+    for screen in &catalog.screens {
+        let target =
+            recipe_target(&screen.player).ok_or_else(|| unknown_release(&screen.player))?;
+        for (name, slot) in &screen.slots {
+            let Some(images) = &slot.images else { continue };
+            for offset in images.offsets() {
+                let end = u64::from(offset) + images.image_len();
+                if end > target.application_len as u64 {
+                    bail!(
+                        "screen {}/{}: slot {name}'s image at {offset:#x} ends past the \
+                         {}-byte application",
+                        screen.player,
+                        screen.id,
+                        target.application_len
+                    );
+                }
+            }
+        }
+    }
     for (path, recipe) in recipes {
         let target = recipe_target(&recipe.target.release)
             .ok_or_else(|| unknown_release(&recipe.target.release))?;

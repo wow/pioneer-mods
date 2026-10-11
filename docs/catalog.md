@@ -64,8 +64,33 @@ letters, digits and `_` joined by `.` (`beat_loop.pad`). A slot is referred to a
 [`catalog/screens/xdj700-v1.15/perform.json`](../catalog/screens/xdj700-v1.15/perform.json): an
 `id` the same for every player that has the screen (`main`, `perform`), its `player`, a `title`,
 and its `slots`: named places a skin can fill or a feature can use, each with a `count` (six BEAT
-LOOP buttons) and a `description`. Layout data and the emulator evidence that decides which edits
-a screen accepts come with the screen catalogue (design roadmap, step 3).
+LOOP buttons) and a `description`. A slot may also name its `images`, which a skin edits:
+
+```json
+"images": {
+  "width": 80, "height": 53, "pixels": "rgb565",
+  "states": ["normal", "pressed", "greyed_out", "lit", "lit_pressed", "lit_greyed_out"],
+  "elements": [
+    { "box": { "x": 116, "y": 154, "w": 80, "h": 53 },
+      "images": { "normal": "0x360240", "pressed": "0x362360", "…": "…" } }
+  ],
+  "evidence": "How the boxes and images were established, and when the images are read."
+}
+```
+
+- `width`, `height`, `pixels`: every image's size and format (`rgb565`, 16-bit little-endian; at
+  most 1 MiB an image).
+- `states`: the states each element has an image for, none twice.
+- `elements`: one per slot element, in order: its `box` on the screen (the images' size, on the
+  player's screen) and its image for each state (exactly the `states`), by decoded-application
+  offset, 2-byte aligned, inside the application. No two images overlap.
+- `evidence`: what the emulator showed: where each image is drawn, and that the images are not
+  read at start-up or in an update.
+
+The XDJ-700's PERFORM screen names its BEAT LOOP pads' 36 images (six pads, six states), the
+images the stage-7 recipe relabels. Positions are not data yet: a slot's boxes record where the
+stock application draws it, and a skin keeps them ([modular-builds.md](./modular-builds.md),
+"Extending the limits").
 
 ## Feature
 
@@ -283,5 +308,5 @@ and is checked by `patch` and `compose`.
 ## Not yet in the format
 
 These come with the steps of the design that need them: `provides` (a feature's capabilities for
-others), a screen's layout data and evidence (step 3), and skin fallbacks. A file using them is
-refused until then.
+others), a screen's layout table (positions a skin could change), and skin fallbacks. A file using
+them is refused until then.

@@ -7,6 +7,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- Screen slots may name their images (`slots.<name>.images`): the size and format, the states,
+  and per element its box on the screen and its image per state by decoded-application offset,
+  with evidence. The checks: one element per slot element, every state once, boxes the images'
+  size and on the player's screen, images aligned, not overlapping and inside the application.
+  The XDJ-700's PERFORM screen names its six BEAT LOOP pads' 36 images and boxes, measured in
+  emulation; they are the images the stage-7 recipe relabels. `docs/catalog.md`, "Screen".
 - The first acceptance tests (`catalog/acceptance/`): the BEAT LOOP pads select their lengths
   (stage 7's, named by `beat-loop-1-to-32`; stage 5's, named by `beat-loop-16-plays-32`), and the
   touched pad alone lights (stock passes; stages 5 and 7 fail it, their known limit). The XDJ-700
