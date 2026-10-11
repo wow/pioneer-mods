@@ -26,7 +26,7 @@
           { "box": { "x": 537, "y": 154, "w": 80, "h": 53 },
             "images": { "normal": "0x34f940", "pressed": "0x351a60", "greyed_out": "0x353b80", "lit": "0x355ca0", "lit_pressed": "0x357dc0", "lit_greyed_out": "0x359ee0" } }
         ],
-        "evidence": "In emulation (2026-10-12, stock v1.15, the 2DG blit log): each pad's normal, lit and greyed-out images are drawn into the screen at its box, with a colour key (the box shows through where an image holds the key colour). The pressed, lit and pressed, and lit and greyed-out images were not drawn in these runs (touches held 3 s, with and without a track); their names follow their order in the block, as for the others. The 36 images are one block (0x34F940 to 0x39A1C0), not read at start-up, in update mode, or while installing in either direction (stage-7 rehearsals, docs/xdj700-flashing.md, section 5); they are read when PERFORM is drawn."
+        "evidence": "In emulation (2026-10-12, stock v1.15, the 2DG blit log): each pad's normal, lit and greyed-out images are drawn into the screen at its box, with a colour key (the box shows through where an image holds the key colour). The pressed, lit and pressed, and lit and greyed-out images were not drawn in these runs (touches held 3 s, with and without a track); their names follow their order in the block, as for the others. The 36 images are one block (0x34F940 to 0x39A1C0) that no code reads at start-up, in update mode, or while installing in either direction (a CPU read watch in the stage-7 rehearsals, docs/xdj700-flashing.md, section 5; the display's 2D engine, which draws them, is not watched); they are drawn when PERFORM is."
       }
     }
   },

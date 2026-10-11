@@ -84,7 +84,7 @@ fn malformed_slot_images_are_refused() {
     );
     refused(
         &|i| i["pixels"] = "rgb888".into(),
-        "the only pixel format is rgb565",
+        "unknown variant `rgb888`",
     );
     refused(&|i| i["width"] = 0.into(), "not empty");
     refused(&|i| i["height"] = 8000.into(), "1 MiB at most");

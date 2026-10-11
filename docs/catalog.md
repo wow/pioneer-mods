@@ -84,8 +84,9 @@ LOOP buttons) and a `description`. A slot may also name its `images`, which a sk
 - `elements`: one per slot element, in order: its `box` on the screen (the images' size, on the
   player's screen) and its image for each state (exactly the `states`), by decoded-application
   offset, 2-byte aligned, inside the application. No two images overlap.
-- `evidence`: what the emulator showed: where each image is drawn, and that the images are not
-  read at start-up or in an update.
+- `evidence`: what the emulator showed: where each image is drawn, and that no code reads the
+  images at start-up or in an update (a CPU read watch; the 2D engine that draws them is not
+  watched).
 
 The XDJ-700's PERFORM screen names its BEAT LOOP pads' 36 images (six pads, six states), the
 images the stage-7 recipe relabels. Positions are not data yet: a slot's boxes record where the

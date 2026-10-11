@@ -6,6 +6,7 @@ use super::entry::{
     CatalogEntry, EntryError, check_id, check_name, check_player_id, check_schema_version,
     check_text, unique_keys,
 };
+use super::player::PixelFormat;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -41,7 +42,7 @@ pub struct SlotImages {
     pub width: u32,
     pub height: u32,
     /// The pixel format: `rgb565` (16-bit little-endian), the only one so far.
-    pub pixels: String,
+    pub pixels: PixelFormat,
     /// The states each element has an image for (`normal`, `pressed`, …).
     pub states: Vec<String>,
     /// One per element, in the slot's order.
@@ -81,9 +82,6 @@ impl SlotImages {
         };
         if self.width == 0 || self.height == 0 || self.image_len() > 1 << 20 {
             return Err(rule("width", "an image is 1 MiB at most, and not empty"));
-        }
-        if self.pixels != "rgb565" {
-            return Err(rule("pixels", "the only pixel format is rgb565"));
         }
         let states: BTreeSet<&str> = self.states.iter().map(String::as_str).collect();
         if states.is_empty() || states.len() != self.states.len() {
