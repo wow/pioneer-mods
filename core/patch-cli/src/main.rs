@@ -3,8 +3,8 @@ mod commands;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use commands::{
-    BuildArgs, ComposeArgs, InspectArgs, PatchArgs, PreconditionArgs, RebuildArgs, ResolveArgs,
-    build, compose, inspect, patch, precondition, rebuild, resolve,
+    AcceptArgs, BuildArgs, ComposeArgs, InspectArgs, PatchArgs, PreconditionArgs, RebuildArgs,
+    ResolveArgs, accept, build, compose, inspect, patch, precondition, rebuild, resolve,
 };
 
 #[derive(Parser, Debug)]
@@ -39,6 +39,9 @@ enum Commands {
     /// Build a profile: resolve it against the catalog and compose its fragments under its label
     /// and reported version into one update (verified, never overwrites).
     Build(BuildArgs),
+    /// Run an acceptance test on an update in the owner's local emulator: each check PASS or
+    /// FAIL (the update is never changed; the run's files are removed afterwards).
+    Accept(AcceptArgs),
 }
 
 fn main() -> Result<()> {
@@ -55,5 +58,6 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Compose(args) => compose(args),
         Commands::Resolve(args) => resolve(args),
         Commands::Build(args) => build(args),
+        Commands::Accept(args) => accept(args),
     }
 }

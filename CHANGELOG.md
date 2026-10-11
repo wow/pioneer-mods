@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- `patch-cli accept`: runs an acceptance test on an update in the owner's local emulator (QEMU,
+  not part of this repository), started headless with the update's MAIN records in an erased
+  flash image; presses and touches go to its panel socket, memory reads and frames through its
+  monitor, and each check prints PASS or FAIL with what was read. Everything that needs no
+  firmware is checked first; the run's files stay in a temporary directory. `patch_cli::accept`
+  (`run_test` over an `Emulator`, `flash_image`, `parse_ppm`). `docs/acceptance.md`, "Running a
+  test".
 - Acceptance tests (`patch_schema::catalog::AcceptanceTest`, `catalog/acceptance/<id>.json`):
   scripted emulator runs for one player that press its panel `controls`, touch its screen, wait,
   and check memory values in its run-time state ranges (`state_memory`, never the loaded
@@ -15,7 +22,7 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   implementations name the tests they must pass (`acceptance`); the catalog check holds tests to
   their player's controls, screen and state ranges. The XDJ-700 lists `usb` and `rotary_push`
   and no state range yet.
-  `docs/acceptance.md`. The runner comes next.
+  `docs/acceptance.md`.
 - `patch-cli build`: a profile resolved against the catalog (as `patch-cli resolve`) and its
   fragments composed under the profile's label and reported version (as `patch-cli compose`), with
   every check that needs no firmware before the input is read; refused when nothing is on or when

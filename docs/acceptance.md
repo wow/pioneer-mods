@@ -6,10 +6,10 @@ roadmap step 2 of [modular-builds.md](./modular-builds.md) ("Verification"). Sta
 is needed: its lengths were right, but the pad that lights follows the stock lengths, and only a
 test of the lit pad would have caught it.
 
-**Status.** The format and the checks that need no firmware are implemented: tests load with the
-catalog ([catalog.md](./catalog.md)), and implementations name the tests they must pass. The
-runner, which executes a test against an update in the emulator, comes next; no test is committed
-yet.
+**Status.** The format, the checks that need no firmware and the runner are implemented: tests
+load with the catalog ([catalog.md](./catalog.md)), implementations name the tests they must
+pass, and `patch-cli accept` runs a test on an update in the owner's emulator
+([Running a test](#running-a-test)). No test is committed yet.
 
 ## What a test may hold
 
@@ -98,6 +98,42 @@ the `evidence` that the range holds only run-time state, outside the loaded appl
 outside any copy of it the application unpacks into RAM). Nothing checks that mechanically: a range
 is added only with its evidence, and reviewed. The XDJ-700 names none yet, so its tests cannot
 check memory until a range is added with its evidence (the first tests, roadmap step 2).
+
+## Running a test
+
+`patch-cli accept` runs one test on one update in the owner's local emulator:
+
+```bash
+cargo run --release -p patch-cli -- accept \
+  --test <id> \
+  --update /path/to/XDJ700.UPD \
+  --emulator /path/to/qemu-system-sh4 \
+  [--stick /path/to/stick.img]
+```
+
+- `--update` is any update of the test's player: the official file, a stage file or a build. It
+  is read, never changed.
+- `--emulator` is the owner's emulator build (`XDJ700_QEMU` names it otherwise). The emulator is
+  not part of this repository; the runner starts it headless, with the player's machine (the
+  XDJ-700's is `xdj700`, with a 16 MiB flash), and quits it afterwards.
+- `--stick` is the owner's USB stick image, for a test with `"stick": true`; the emulator's writes
+  go to a throwaway overlay.
+
+Before anything is read or started, the test must be in the catalog, the runner must know the
+player's emulator, the emulator and any stick image must be files, and a test that needs a stick
+must be given one. The runner then lays the update's MAIN records out in an erased flash image, as
+the player's updater does, and boots it. Steps run in order:
+
+- `press` and `touch` go to the emulator's panel key socket (UDP on 127.0.0.1), and the runner
+  waits out the hold;
+- `memory` checks read the value through the emulator's monitor (`xp`, TCP on 127.0.0.1);
+- `brightest` checks take a frame (`screendump`), measure each region and compare;
+- `wait_until` reads its check again every 500 ms until it holds or its timeout passes.
+
+Each check prints one line, PASS or FAIL, with what was read (a value, or the brightness of each
+region); a failed check does not stop the run, and the command fails if any check failed. The flash
+image, frames and the emulator's log stay in a temporary directory, removed afterwards; nothing
+else is printed.
 
 ## Naming tests
 
