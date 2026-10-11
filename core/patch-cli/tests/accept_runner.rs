@@ -4,7 +4,7 @@
 #![cfg(unix)]
 
 use anyhow::{Result, bail};
-use patch_cli::accept::{Emulator, Frame, POLL_MS, run_test};
+use patch_cli::accept::{Emulator, Frame, Outcome, POLL_MS, run_test};
 use patch_schema::catalog::{AcceptanceTest, Player};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -19,6 +19,8 @@ struct Scripted {
     elapsed: u32,
     log: Vec<String>,
     fail_reads: bool,
+    /// Reads that answer before reads fail (all of them when `None`).
+    reads_left: Option<usize>,
 }
 
 impl Emulator for Scripted {
@@ -42,9 +44,10 @@ impl Emulator for Scripted {
     }
 
     fn read(&mut self, address: u32, bytes: u8) -> Result<u32> {
-        if self.fail_reads {
+        if self.fail_reads || self.reads_left == Some(0) {
             bail!("the emulator's monitor closed");
         }
+        self.reads_left = self.reads_left.map(|left| left - 1);
         self.log.push(format!("read {address:#x} {bytes}"));
         let (before, after, at) = self.memory.get(&address).copied().unwrap_or_default();
         Ok(if self.elapsed >= at { after } else { before })
@@ -54,6 +57,16 @@ impl Emulator for Scripted {
         self.log.push("frame".to_owned());
         Ok(self.frame.clone().expect("a frame"))
     }
+}
+
+/// `run_test`, checking that every line was reported as it was recorded.
+fn run(test: &AcceptanceTest, player: &Player, emulator: &mut Scripted) -> Result<Outcome> {
+    let mut reported = Vec::new();
+    let outcome = run_test(test, player, emulator, &mut |line| {
+        reported.push(line.to_owned())
+    })?;
+    assert_eq!(reported, outcome.lines);
+    Ok(outcome)
 }
 
 fn player() -> Player {
@@ -113,7 +126,7 @@ fn steps_reach_the_emulator_in_order() {
         { "touch": { "x": 3, "y": 2, "ms": 150 } },
         { "expect": { "memory": { "address": "0x100", "bytes": 2, "equals": 7 } } }
     ]);
-    let outcome = run_test(&test(steps), &player(), &mut emulator).expect("runs");
+    let outcome = run(&test(steps), &player(), &mut emulator).expect("runs");
     assert_eq!(
         emulator.log,
         [
@@ -139,7 +152,7 @@ fn a_failed_check_is_recorded_and_the_run_goes_on() {
         { "wait": { "ms": 10 } },
         { "expect": { "memory": { "address": "0x100", "bytes": 1, "equals": 3 } } }
     ]);
-    let outcome = run_test(&test(steps), &player(), &mut emulator).expect("runs");
+    let outcome = run(&test(steps), &player(), &mut emulator).expect("runs");
     assert_eq!((outcome.checks, outcome.failed), (2, 1));
     assert_eq!(
         outcome.lines,
@@ -157,7 +170,7 @@ fn wait_until_polls_until_the_check_holds_or_the_timeout() {
     emulator.memory.insert(0x100, (0, 1, 1200));
     let poll = json!({ "wait_until": { "check": { "memory": {
         "address": "0x100", "bytes": 4, "equals": 1 } }, "timeout_ms": 5000 } });
-    let outcome = run_test(&test(json!([poll])), &player(), &mut emulator).expect("runs");
+    let outcome = run(&test(json!([poll])), &player(), &mut emulator).expect("runs");
     assert_eq!(
         outcome.lines,
         [
@@ -184,7 +197,7 @@ fn wait_until_polls_until_the_check_holds_or_the_timeout() {
     let mut emulator = Scripted::default();
     let poll = json!({ "wait_until": { "check": { "memory": {
         "address": "0x100", "bytes": 4, "equals": 1 } }, "timeout_ms": 1200 } });
-    let outcome = run_test(&test(json!([poll])), &player(), &mut emulator).expect("runs");
+    let outcome = run(&test(json!([poll])), &player(), &mut emulator).expect("runs");
     assert_eq!(outcome.failed, 1);
     assert!(outcome.lines[0].ends_with("FAIL (read 0, after 1200 ms of 1200)"));
     let waits: Vec<&String> = emulator
@@ -203,7 +216,7 @@ fn brightest_compares_regions_of_one_frame_by_the_margin() {
             frame: Some(frame(left, right)),
             ..Scripted::default()
         };
-        run_test(&test(json!([brightest(margin)])), &player(), &mut emulator).expect("runs")
+        run(&test(json!([brightest(margin)])), &player(), &mut emulator).expect("runs")
     };
     let outcome = run(100, 90, 10);
     assert_eq!(outcome.failed, 0);
@@ -229,8 +242,7 @@ fn a_frame_of_another_size_or_an_emulator_error_ends_the_run() {
         }),
         ..Scripted::default()
     };
-    let error =
-        run_test(&test(json!([brightest(1)])), &player(), &mut emulator).expect_err("refused");
+    let error = run(&test(json!([brightest(1)])), &player(), &mut emulator).expect_err("refused");
     assert_eq!(
         error.to_string(),
         "the emulator's frame is 4x4, not p-1.0's 8x4 screen"
@@ -241,14 +253,38 @@ fn a_frame_of_another_size_or_an_emulator_error_ends_the_run() {
         ..Scripted::default()
     };
     let steps = json!([{ "expect": { "memory": { "address": "0x0", "bytes": 1, "equals": 0 } } }]);
-    let error = run_test(&test(steps), &player(), &mut emulator).expect_err("refused");
+    let error = run(&test(steps), &player(), &mut emulator).expect_err("refused");
     assert_eq!(error.to_string(), "the emulator's monitor closed");
 
     // A control the player lacks (the catalog check refuses it; the runner does too).
     let steps = json!([{ "press": { "control": "play" } }, brightest(1)]);
-    let error = run_test(&test(steps), &player(), &mut Scripted::default()).expect_err("refused");
+    let error = run(&test(steps), &player(), &mut Scripted::default()).expect_err("refused");
     assert_eq!(
         error.to_string(),
         "steps[0]: player p-1.0 has no control play"
+    );
+}
+
+#[test]
+fn the_lines_before_an_emulator_error_are_reported() {
+    // The first read answers, the second fails: the first check's line is already reported.
+    let mut emulator = Scripted {
+        reads_left: Some(1),
+        ..Scripted::default()
+    };
+    emulator.memory.insert(0x100, (5, 5, 0));
+    let check = json!({ "expect": { "memory": { "address": "0x100", "bytes": 1, "equals": 5 } } });
+    let mut reported = Vec::new();
+    let error = run_test(
+        &test(json!([check.clone(), check])),
+        &player(),
+        &mut emulator,
+        &mut |line| reported.push(line.to_owned()),
+    )
+    .expect_err("ended");
+    assert_eq!(error.to_string(), "the emulator's monitor closed");
+    assert_eq!(
+        reported,
+        ["steps[0] expect memory 0x00000100 (1 byte) == 5: PASS (read 5)"]
     );
 }

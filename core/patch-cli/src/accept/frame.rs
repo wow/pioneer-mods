@@ -21,8 +21,16 @@ impl Frame {
     ///
     /// # Errors
     ///
-    /// A region that is empty or not in the frame.
+    /// A frame whose pixel count is not its size, or a region that is empty or not in it.
     pub fn brightness(&self, region: &Region) -> Result<u8> {
+        if self.pixels.len() != self.width as usize * self.height as usize {
+            bail!(
+                "the frame holds {} pixels, not {}x{}",
+                self.pixels.len(),
+                self.width,
+                self.height
+            );
+        }
         if !region.fits(self.width, self.height) {
             bail!(
                 "region ({}, {}, {}x{}) is not in the {}x{} frame",

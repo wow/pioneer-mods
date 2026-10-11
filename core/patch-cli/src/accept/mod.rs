@@ -4,11 +4,16 @@
 
 mod flash;
 mod frame;
+mod host;
 mod qemu;
 
-pub use flash::flash_image;
+pub use flash::{check_release, flash_image};
 pub use frame::{Frame, parse_ppm};
-pub use qemu::{Profile, Qemu, QemuSetup, option_value, parse_xp, private_work_dir, profile};
+pub use host::{
+    catch_interrupts, check_interrupted, hmp_string, hold_host_ms, interrupted, keys_bound,
+    option_value, parse_xp, private_work_dir,
+};
+pub use qemu::{Profile, Qemu, QemuSetup, SETTLE_MS, profile};
 
 use anyhow::{Result, bail};
 use patch_schema::catalog::{AcceptanceTest, Check, Player, Step};
@@ -53,7 +58,9 @@ pub struct Outcome {
 }
 
 /// Runs `test` on `emulator` for `player`, whose controls and screen the catalog check has held
-/// the test to. A failed check is recorded and the run goes on; an emulator error ends it.
+/// the test to. Each check's line goes to `report` as it is recorded, so the lines before an
+/// emulator error are not lost. A failed check is recorded and the run goes on; an emulator error
+/// ends it.
 ///
 /// # Errors
 ///
@@ -62,6 +69,7 @@ pub fn run_test(
     test: &AcceptanceTest,
     player: &Player,
     emulator: &mut dyn Emulator,
+    report: &mut dyn FnMut(&str),
 ) -> Result<Outcome> {
     let mut outcome = Outcome::default();
     for (index, step) in test.steps.iter().enumerate() {
@@ -80,7 +88,7 @@ pub fn run_test(
             Step::Touch { x, y, ms } => emulator.touch(*x, *y, *ms)?,
             Step::Expect(check) => {
                 let (passed, seen) = evaluate(check, player, emulator)?;
-                outcome.record(index, "expect", check, passed, &seen);
+                report(outcome.record(index, "expect", check, passed, &seen));
             }
             Step::WaitUntil { check, timeout_ms } => {
                 let mut waited = 0;
@@ -94,7 +102,7 @@ pub fn run_test(
                     waited += pause;
                 };
                 let seen = format!("{seen}, after {waited} ms of {timeout_ms}");
-                outcome.record(index, "wait_until", check, passed, &seen);
+                report(outcome.record(index, "wait_until", check, passed, &seen));
             }
         }
     }
@@ -102,7 +110,14 @@ pub fn run_test(
 }
 
 impl Outcome {
-    fn record(&mut self, index: usize, kind: &str, check: &Check, passed: bool, seen: &str) {
+    fn record(
+        &mut self,
+        index: usize,
+        kind: &str,
+        check: &Check,
+        passed: bool,
+        seen: &str,
+    ) -> &str {
         self.checks += 1;
         self.failed += usize::from(!passed);
         let verdict = if passed { "PASS" } else { "FAIL" };
@@ -110,6 +125,7 @@ impl Outcome {
             "steps[{index}] {kind} {}: {verdict} ({seen})",
             describe(check)
         ));
+        self.lines.last().expect("just pushed")
     }
 }
 

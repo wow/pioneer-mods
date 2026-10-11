@@ -4,6 +4,7 @@
 
 mod common;
 
+use common::synthetic_upd::update;
 use common::{copy_catalog, write_bytes};
 use serde_json::json;
 use std::path::Path;
@@ -126,4 +127,42 @@ fn an_update_that_is_not_the_players_is_refused_before_the_emulator_starts() {
         Some(&emulator),
     );
     assert!(message.contains("the update does not parse"), "{message}");
+
+    // An XDJ-700 update that parses, but whose application does not decode: not of the release.
+    write_bytes(&update, &undecodable_update());
+    let message = refused(
+        root.path(),
+        &[
+            "--test",
+            "plain",
+            "--update",
+            update.to_str().expect("utf-8"),
+        ],
+        Some(&emulator),
+    );
+    assert!(
+        message.contains("the update's application does not decode"),
+        "{message}"
+    );
+}
+
+fn undecodable_update() -> Vec<u8> {
+    update("XDJ-700", &[(0, &[1])])
+}
+
+#[test]
+fn a_time_factor_outside_one_to_twenty_is_refused() {
+    let root = copy_catalog();
+    add_test(root.path(), "plain", false);
+    for factor in ["0", "21"] {
+        let message = refused(
+            root.path(),
+            &["--test", "plain", "--update", "u", "--time-factor", factor],
+            None,
+        );
+        assert!(
+            message.contains(&format!("invalid value '{factor}' for '--time-factor")),
+            "{message}"
+        );
+    }
 }

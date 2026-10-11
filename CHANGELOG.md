@@ -8,12 +8,14 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 
 ### Added
 - `patch-cli accept`: runs an acceptance test on an update in the owner's local emulator (QEMU,
-  not part of this repository), started headless with the update's MAIN records in an erased
-  flash image; presses and touches go to its panel socket, memory reads and frames through its
-  monitor, and each check prints PASS or FAIL with what was read. Everything that needs no
-  firmware is checked first; the run's files stay in a temporary directory. `patch_cli::accept`
-  (`run_test` over an `Emulator`, `flash_image`, `parse_ppm`). `docs/acceptance.md`, "Running a
-  test".
+  not part of this repository), started headless with the update's MAIN image in an erased
+  flash image and none of the owner's `CDJ_*` settings; presses and touches go to its panel
+  socket once it is bound, held for `--time-factor` times their length, memory reads and frames
+  go through its monitor, and each check prints PASS or FAIL with what was read as soon as it is
+  decided. Everything that needs no firmware is checked first, then that the update is of the
+  test's release (`check_release`); the run's files stay in a temporary directory, removed on
+  Ctrl-C too. `patch_cli::accept` (`run_test` over an `Emulator`, `flash_image`, `parse_ppm`).
+  `docs/acceptance.md`, "Running a test".
 - Acceptance tests (`patch_schema::catalog::AcceptanceTest`, `catalog/acceptance/<id>.json`):
   scripted emulator runs for one player that press its panel `controls`, touch its screen, wait,
   and check memory values in its run-time state ranges (`state_memory`, never the loaded

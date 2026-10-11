@@ -108,7 +108,7 @@ cargo run --release -p patch-cli -- accept \
   --test <id> \
   --update /path/to/XDJ700.UPD \
   --emulator /path/to/qemu-system-sh4 \
-  [--stick /path/to/stick.img]
+  [--stick /path/to/stick.img] [--time-factor 4]
 ```
 
 - `--update` is any update of the test's player: the official file, a stage file or a build. It
@@ -118,27 +118,40 @@ cargo run --release -p patch-cli -- accept \
   XDJ-700's is `xdj700`, with a 16 MiB flash), and quits it afterwards.
 - `--stick` is the owner's USB stick image, for a test with `"stick": true`; the emulator's writes
   go to a throwaway overlay.
+- `--time-factor` (1 to 20, default 4) is how many times slower than real time the emulator runs
+  at most. The emulator times a hold on its own clock, so the runner waits a hold of `ms` out for
+  `ms` times the factor, then 100 ms more for the release to be acted on. The XDJ-700 emulator
+  runs at about a quarter of real time; a slower computer needs a larger factor.
 
 Before anything is read or started, the test must be in the catalog, the runner must know the
 player's emulator, the emulator and any stick image must be files, and a test that needs a stick
-must be given one. The runner then lays the update's MAIN records out in an erased flash image, as
-the player's updater does, and boots it. Steps run in order:
+must be given one. The update must be of the test's release: its decoded application has the
+release's length, which every update of a release keeps (the official file, stage files, builds).
+The runner then lays the update's MAIN image out in an erased flash image, as the player's updater
+does, and boots it with none of the owner's `CDJ_*` emulator settings but the player's own. Steps
+run in order:
 
 - `press` and `touch` go to the emulator's panel key socket (UDP on 127.0.0.1; another local
   process could send it panel input too, which affects only the emulated player), and the runner
-  waits out the hold;
+  waits out the hold. The emulator binds that socket on its first panel frame, well into boot, and
+  logs it; the first press or touch waits for that line (at most five minutes), and a run whose
+  emulator could not bind the socket is refused, so no input is silently lost;
 - `memory` checks read the value through the emulator's monitor (`xp`), a Unix socket in the
   run's private directory: the monitor can read memory and run programs as the owner, so no other
   user may reach it;
-- `brightest` checks take a frame (`screendump`), measure each region and compare;
+- `brightest` checks take a frame (`screendump`), check that it has the player's screen size and
+  holds one pixel per position, measure each region and compare;
 - `wait_until` reads its check again every 500 ms until it holds or its timeout passes.
 
-Each check prints one line, PASS or FAIL, with what was read (a value, or the brightness of each
-region); a failed check does not stop the run, and the command fails if any check failed. The flash
-image, frames and the emulator's log stay in a temporary directory only the owner may enter (mode
-0700), removed afterwards; nothing else is printed. A run killed outright (`kill -9`) cannot remove
-it: its flash image, from the owner's update, then stays in the system's temporary directory until
-deleted.
+Each check prints one line as soon as it is decided, PASS or FAIL, with what was read (a value, or
+the brightness of each region); a failed check does not stop the run, and the command fails if any
+check failed. An emulator error ends the run, after the lines already printed. The flash image,
+frames and the emulator's log stay in a temporary directory only the owner may enter (mode 0700),
+removed afterwards; nothing else is printed. Ctrl-C (or SIGTERM) ends the run at the next step or
+poll, or before the emulator starts: the emulator is stopped and the directory removed. A second
+Ctrl-C ends the runner at once, like a run killed outright (`kill -9`), which cannot remove the
+directory: its flash image, from the owner's update, then stays in the system's temporary directory
+until deleted.
 
 ## Naming tests
 

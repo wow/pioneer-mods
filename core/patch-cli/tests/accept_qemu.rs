@@ -9,8 +9,8 @@ use std::path::Path;
 fn fake_emulator(dir: &Path, record: &Path) -> std::path::PathBuf {
     let script = dir.join("fake-qemu");
     let body = format!(
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nprintf 'ATA=%s KEYSOCK=%s\\n' \"$CDJ_ATA\" \
-         \"$CDJ_PANEL_KEYSOCK\" >> '{}'\nexit 3\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nprintf 'ATA=%s KEYSOCK=%s FILL=%s\\n' \
+         \"$CDJ_ATA\" \"$CDJ_PANEL_KEYSOCK\" \"${{CDJ_PANEL_FILL-unset}}\" >> '{}'\nexit 3\n",
         record.display(),
         record.display()
     );
@@ -35,8 +35,13 @@ fn the_emulator_is_started_with_quoted_paths_and_an_early_exit_is_reported() {
         work: work.clone(),
         flash: vec![0xFF; 16],
         stick: Some(stick.clone()),
+        time_factor: 1,
     };
+    // An owner's leftover emulator setting (update mode) must not reach the run.
+    // SAFETY: no other thread of this test binary reads the environment meanwhile.
+    unsafe { std::env::set_var("CDJ_PANEL_FILL", "0x14:16:17") };
     let error = Qemu::start(setup).err().expect("refused");
+    unsafe { std::env::remove_var("CDJ_PANEL_FILL") };
     assert_eq!(
         error.to_string(),
         "the emulator exited before its monitor came up (exit status: 3)"
@@ -62,12 +67,14 @@ fn the_emulator_is_started_with_quoted_paths_and_an_early_exit_is_reported() {
     ] {
         assert!(lines.contains(&expected.as_str()), "{expected}\n{args}");
     }
+    // The panel keys go to a port the runner picked; the owner's leftover setting is removed.
     let env = lines.last().expect("env line");
-    assert!(env.starts_with("ATA=1 KEYSOCK="), "{env}");
-    assert!(
-        env["ATA=1 KEYSOCK=".len()..].parse::<u16>().is_ok(),
-        "{env}"
-    );
+    let port = env
+        .strip_prefix("ATA=1 KEYSOCK=")
+        .and_then(|rest| rest.strip_suffix(" FILL=unset"));
+    // One the system handed out (ephemeral), not a fixed one.
+    let port = port.and_then(|port| port.parse::<u16>().ok());
+    assert!(port.is_some_and(|port| port > 1023), "{env}");
     // The flash image was written into the run directory.
     assert_eq!(
         std::fs::read(work.join("flash.bin")).expect("flash"),

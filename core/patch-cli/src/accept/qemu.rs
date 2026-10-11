@@ -4,8 +4,21 @@
 //! in the run's private directory, so no other user can reach it (the monitor can read memory and
 //! run programs as the owner). The flash image, frames and the emulator's log stay in
 //! the run's directory. Unix hosts only.
+//!
+//! The emulator binds its key socket on its first panel frame, well into boot, and logs it; the
+//! runner waits for that line before the first press or touch, and refuses a run whose emulator
+//! could not bind it. Holds are timed on the emulator's virtual clock, which runs slower than the
+//! host's, so the runner waits a hold out for `time_factor` times its length. The emulator runs
+//! with none of the owner's `CDJ_*` variables but the profile's.
+//!
+//! The monitor is driven as text (HMP): the prompt, the echo and the `xp` format are QEMU's. QMP
+//! would give structured replies; it is a possible later step.
 
-use super::{Emulator, Frame, parse_ppm};
+use super::host::{
+    check_interrupted, free_udp_port, hmp_string, hold_host_ms, is_timeout, keys_bound,
+    option_value,
+};
+use super::{Emulator, Frame, parse_ppm, parse_xp};
 use anyhow::{Context, Result, bail};
 use std::io::{Read, Write};
 use std::net::UdpSocket;
@@ -24,6 +37,12 @@ pub struct Profile {
     /// Environment the machine needs.
     pub env: &'static [(&'static str, &'static str)],
 }
+
+/// How long the emulator may take to bind its key socket (its first panel frame).
+const KEYS_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Waited after a hold has been waited out, for the emulator to act on the release.
+pub const SETTLE_MS: u32 = 100;
 
 /// The emulator profile of a player, if the runner knows one.
 pub fn profile(player: &str) -> Option<Profile> {
@@ -50,6 +69,9 @@ pub struct QemuSetup {
     /// The owner's USB stick image, plugged in from the start. The emulator's writes go to a
     /// throwaway overlay (`snapshot=on`); the image itself is not changed.
     pub stick: Option<PathBuf>,
+    /// How many times slower than the host the emulator runs at most: a hold of `ms` is waited
+    /// out for `ms * time_factor` host milliseconds, then [`SETTLE_MS`].
+    pub time_factor: u32,
 }
 
 /// A running emulator. Dropping it quits QEMU, or kills it.
@@ -58,6 +80,8 @@ pub struct Qemu {
     monitor: UnixStream,
     keys: UdpSocket,
     key_port: u16,
+    keys_live: bool,
+    time_factor: u32,
     work: PathBuf,
 }
 
@@ -76,6 +100,11 @@ impl Qemu {
     /// does not start, or a monitor that does not answer in time.
     pub fn start(setup: QemuSetup) -> Result<Self> {
         use std::os::unix::fs::PermissionsExt;
+        if setup.time_factor == 0 {
+            bail!("the time factor must be at least 1");
+        }
+        // A Ctrl-C while the update was read and checked: write nothing, start nothing.
+        check_interrupted()?;
         // The monitor socket goes here: no other user may enter the directory.
         let mode = std::fs::metadata(&setup.work)
             .with_context(|| format!("failed to read '{}'", setup.work.display()))?
@@ -92,9 +121,10 @@ impl Qemu {
         let flash = setup.work.join("flash.bin");
         std::fs::write(&flash, &setup.flash)
             .with_context(|| format!("failed to write '{}'", flash.display()))?;
-        let key_port = free_udp_port()?;
         // Everything that can fail goes before the spawn, so a started emulator is always reaped.
+        // The runner's own socket first, so that it cannot be given the emulator's port.
         let keys = UdpSocket::bind("127.0.0.1:0").context("failed to open the key socket")?;
+        let key_port = free_udp_port()?;
         // In the run's directory, which only the owner can enter (created mode 0700).
         let monitor_path = setup.work.join("monitor.sock");
         if monitor_path.as_os_str().len() > MAX_SOCKET_PATH {
@@ -136,6 +166,12 @@ impl Qemu {
                 ))
                 .args(["-device", "usb-storage,drive=usbstick,port=1"]);
         }
+        // None of the owner's emulator settings: they change what a run does.
+        for (name, _) in std::env::vars_os() {
+            if name.to_string_lossy().starts_with("CDJ_") {
+                command.env_remove(name);
+            }
+        }
         command
             .envs(setup.profile.env.iter().copied())
             .env("CDJ_PANEL_KEYSOCK", key_port.to_string())
@@ -161,6 +197,8 @@ impl Qemu {
             monitor,
             keys,
             key_port,
+            keys_live: false,
+            time_factor: setup.time_factor,
             work: setup.work,
         };
         qemu.until_prompt()?;
@@ -180,11 +218,16 @@ impl Qemu {
         let mut output = Vec::new();
         let mut chunk = [0u8; 4096];
         while !output.ends_with(b"(qemu) ") {
+            check_interrupted()?;
             if Instant::now() > deadline {
                 bail!("the emulator's monitor did not answer in time");
             }
             match self.monitor.read(&mut chunk) {
-                Ok(0) => bail!("the emulator's monitor closed"),
+                Ok(0) => {
+                    // Ctrl-C reaches the emulator too, which may quit first: say why.
+                    check_interrupted()?;
+                    bail!("the emulator's monitor closed");
+                }
                 Ok(n) => output.extend_from_slice(&chunk[..n]),
                 Err(error) if is_timeout(&error) => {}
                 Err(error) => return Err(error).context("failed to read the emulator's monitor"),
@@ -193,7 +236,53 @@ impl Qemu {
         Ok(String::from_utf8_lossy(&output).into_owned())
     }
 
+    /// Waits until the emulator has bound its key socket (it logs the line), once.
+    fn await_keys(&mut self) -> Result<()> {
+        if self.keys_live {
+            return Ok(());
+        }
+        let deadline = Instant::now() + KEYS_TIMEOUT;
+        loop {
+            let log = std::fs::read_to_string(self.work.join("emulator.log")).unwrap_or_default();
+            if keys_bound(&log, self.key_port)? {
+                self.keys_live = true;
+                return Ok(());
+            }
+            if Instant::now() > deadline {
+                bail!("the emulator did not bind its key socket in time (its first panel frame)");
+            }
+            self.pause(200)?;
+        }
+    }
+
+    /// Sleeps `ms` host milliseconds in short slices, ending early on an interrupt or if the
+    /// emulator exits.
+    fn pause(&mut self, ms: u64) -> Result<()> {
+        let deadline = Instant::now() + Duration::from_millis(ms);
+        loop {
+            check_interrupted()?;
+            if let Some(status) = self
+                .child
+                .try_wait()
+                .context("failed to poll the emulator")?
+            {
+                bail!("the emulator exited ({status})");
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Ok(());
+            }
+            std::thread::sleep(left.min(Duration::from_millis(100)));
+        }
+    }
+
+    /// Waits out a hold of `ms` emulated milliseconds.
+    fn hold(&mut self, ms: u32) -> Result<()> {
+        self.pause(hold_host_ms(ms, self.time_factor, SETTLE_MS))
+    }
+
     fn send_key(&mut self, message: &str) -> Result<()> {
+        self.await_keys()?;
         self.keys
             .send_to(message.as_bytes(), ("127.0.0.1", self.key_port))
             .context("failed to send to the emulator's panel")?;
@@ -204,24 +293,16 @@ impl Qemu {
 impl Emulator for Qemu {
     fn press(&mut self, code: u8, value: u8, ms: u32) -> Result<()> {
         self.send_key(&format!("{code:#04x}:{value:#04x}:{ms}"))?;
-        self.wait(ms)
+        self.hold(ms)
     }
 
     fn touch(&mut self, x: u32, y: u32, ms: u32) -> Result<()> {
         self.send_key(&format!("{x}:{y}:{ms}:tap"))?;
-        self.wait(ms)
+        self.hold(ms)
     }
 
     fn wait(&mut self, ms: u32) -> Result<()> {
-        std::thread::sleep(Duration::from_millis(u64::from(ms)));
-        if let Some(status) = self
-            .child
-            .try_wait()
-            .context("failed to poll the emulator")?
-        {
-            bail!("the emulator exited ({status})");
-        }
-        Ok(())
+        self.pause(u64::from(ms))
     }
 
     fn read(&mut self, address: u32, bytes: u8) -> Result<u32> {
@@ -237,9 +318,13 @@ impl Emulator for Qemu {
 
     fn frame(&mut self) -> Result<Frame> {
         let path = self.work.join("frame.ppm");
+        let quoted = hmp_string(&path)?;
         let _ = std::fs::remove_file(&path);
-        self.command(&format!("screendump {}", path.display()))?;
-        let bytes = std::fs::read(&path).context("the emulator wrote no frame")?;
+        let reply = self.command(&format!("screendump {quoted}"))?;
+        let bytes = std::fs::read(&path).with_context(|| {
+            let reply = reply.replace("(qemu) ", "");
+            format!("the emulator wrote no frame; it replied: {}", reply.trim())
+        })?;
         std::fs::remove_file(&path).context("failed to remove the frame")?;
         parse_ppm(&bytes)
     }
@@ -260,29 +345,13 @@ impl Drop for Qemu {
     }
 }
 
-/// The value of an `xp` reply: the line `<address>: 0x<value>`, the address being `address`.
-pub fn parse_xp(output: &str, address: u32) -> Result<u32> {
-    for line in output.lines() {
-        let Some((at, value)) = line.trim().split_once(": 0x") else {
-            continue;
-        };
-        let at = at
-            .rsplit(|c: char| !c.is_ascii_hexdigit())
-            .next()
-            .unwrap_or("");
-        let value: String = value.chars().take_while(char::is_ascii_hexdigit).collect();
-        if u64::from_str_radix(at, 16).ok() == Some(u64::from(address)) {
-            return u32::from_str_radix(&value, 16)
-                .with_context(|| format!("the emulator's reply for {address:#x} is not a value"));
-        }
-    }
-    bail!("the emulator did not report the value at {address:#x}")
-}
-
 fn connect_monitor(child: &mut Child, path: &std::path::Path) -> Result<UnixStream> {
     let deadline = Instant::now() + MONITOR_TIMEOUT;
     loop {
+        check_interrupted()?;
         if let Some(status) = child.try_wait().context("failed to poll the emulator")? {
+            // Ctrl-C reaches the emulator too, which may exit first: say why.
+            check_interrupted()?;
             bail!("the emulator exited before its monitor came up ({status})");
         }
         if let Ok(stream) = UnixStream::connect(path) {
@@ -296,42 +365,4 @@ fn connect_monitor(child: &mut Child, path: &std::path::Path) -> Result<UnixStre
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-}
-
-/// `path` as a QEMU option value: UTF-8, each comma doubled (QEMU separates options with commas).
-///
-/// # Errors
-///
-/// A path that is not UTF-8.
-pub fn option_value(path: &std::path::Path) -> Result<String> {
-    let text = path
-        .to_str()
-        .with_context(|| format!("the path '{}' is not UTF-8", path.display()))?;
-    Ok(text.replace(',', ",,"))
-}
-
-/// A new run directory only the owner may enter (mode 0700 from creation, whatever the umask),
-/// removed when dropped.
-///
-/// # Errors
-///
-/// The directory cannot be created.
-pub fn private_work_dir() -> Result<tempfile::TempDir> {
-    use std::os::unix::fs::PermissionsExt;
-    tempfile::Builder::new()
-        .permissions(std::fs::Permissions::from_mode(0o700))
-        .tempdir()
-        .context("failed to create the run's directory")
-}
-
-fn free_udp_port() -> Result<u16> {
-    let socket = UdpSocket::bind("127.0.0.1:0").context("no free UDP port")?;
-    Ok(socket.local_addr().context("no free UDP port")?.port())
-}
-
-fn is_timeout(error: &std::io::Error) -> bool {
-    matches!(
-        error.kind(),
-        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-    )
 }

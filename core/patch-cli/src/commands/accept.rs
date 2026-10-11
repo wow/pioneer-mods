@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use patch_cli::accept::{
-    Qemu, QemuSetup, flash_image, private_work_dir, profile, read_update, run_test,
+    Qemu, QemuSetup, catch_interrupts, check_release, flash_image, private_work_dir, profile,
+    read_update, run_test,
 };
 use patch_cli::catalog::load_catalog;
 use patch_core::{firmware_file_name, sha256_hex};
@@ -33,6 +34,12 @@ pub struct AcceptArgs {
     /// The repository root holding `catalog/`.
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
+
+    /// How many times slower than real time the emulator runs at most (1 to 20): a press or
+    /// touch held `ms` is waited out for `ms` times this, then 100 ms. The XDJ-700 emulator runs
+    /// at about a quarter of real time.
+    #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u32).range(1..=20))]
+    pub time_factor: u32,
 }
 
 /// Runs one acceptance test on an update in the local emulator (`docs/acceptance.md`, "Running a
@@ -40,6 +47,9 @@ pub struct AcceptArgs {
 /// FAIL. The flash image, frames and the emulator's log stay in a temporary directory, removed
 /// afterwards; the update is never changed.
 pub fn accept(args: AcceptArgs) -> Result<()> {
+    // Ctrl-C or SIGTERM ends the run between steps, so that the emulator is stopped and the
+    // run's directory removed.
+    catch_interrupts();
     let catalog = load_catalog(&args.root)?;
     let refusing = format!("refusing to run acceptance test '{}'", args.test);
     let test = catalog
@@ -80,6 +90,8 @@ pub fn accept(args: AcceptArgs) -> Result<()> {
     }
 
     let update = read_update(&args.update)?;
+    check_release(&update, &player.id)
+        .with_context(|| format!("{refusing}: '{}'", args.update.display()))?;
     let flash = flash_image(&update, profile.flash_size)
         .with_context(|| format!("{refusing}: '{}'", args.update.display()))?;
     println!("test: {} ({})", test.id, test.player);
@@ -92,13 +104,12 @@ pub fn accept(args: AcceptArgs) -> Result<()> {
         work: work.path().to_path_buf(),
         flash,
         stick: args.stick,
+        time_factor: args.time_factor,
     })?;
-    let outcome = run_test(test, player, &mut qemu);
+    // Each line prints as it is recorded: an emulator error loses none of them.
+    let outcome = run_test(test, player, &mut qemu, &mut |line| println!("{line}"));
     drop(qemu);
     let outcome = outcome?;
-    for line in &outcome.lines {
-        println!("{line}");
-    }
     if outcome.failed > 0 {
         bail!(
             "acceptance test {} failed: {} of {} checks",
