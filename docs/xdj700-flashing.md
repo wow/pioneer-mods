@@ -91,7 +91,8 @@ change. The effect:
 No data table holding this mapping was found (searches covered 8-, 16- and 32-bit values,
 strided records, and the lengths as values or as pairs), and the place where the firmware derives
 the lit pad from the loop length is not located yet, so a fix appears to need a code change. Not
-yet observed on hardware.
+yet observed on hardware. The acceptance test `beat-loop-lit-pad-follows-touch` checks it in
+emulation ([acceptance.md](./acceptance.md#the-beat-loop-tests)).
 
 A no-op rebuild's application is the official one, re-compressed, so nothing should change
 functionally in it. Stage 3 changes only the text of the application's version string. Stage 5

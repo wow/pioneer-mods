@@ -21,6 +21,48 @@ fn the_committed_catalog_loads_and_checks() {
 }
 
 #[test]
+fn the_committed_acceptance_tests_are_named_and_read_only_state_above_the_application() {
+    let loaded = load_catalog(&repo_root()).expect("committed catalog");
+    let catalog = loaded.catalog();
+    let mut ids: Vec<&str> = catalog.acceptance.iter().map(|t| t.id.as_str()).collect();
+    ids.sort_unstable();
+    assert_eq!(
+        ids,
+        [
+            "beat-loop-1-to-32-pads-select-lengths",
+            "beat-loop-16-plays-32-pads-select-lengths",
+            "beat-loop-lit-pad-follows-touch"
+        ]
+    );
+    for (feature, test) in [
+        ("beat-loop-1-to-32", "beat-loop-1-to-32-pads-select-lengths"),
+        (
+            "beat-loop-16-plays-32",
+            "beat-loop-16-plays-32-pads-select-lengths",
+        ),
+    ] {
+        let feature = catalog.feature(feature).expect("feature");
+        assert_eq!(
+            feature.implementations["xdj700-v1.15"][0].acceptance,
+            [test]
+        );
+    }
+
+    // Every run-time state range lies above the loaded application, never in it.
+    for player in &catalog.players {
+        let target = recipe_target(&player.id).expect("a release the engine knows");
+        let app_end = target.load_address + target.application_len as u64;
+        for range in &player.state_memory {
+            assert!(
+                u64::from(range.start.0) >= app_end,
+                "{player:?}",
+                player = player.id
+            );
+        }
+    }
+}
+
+#[test]
 fn each_player_carries_the_engine_pins_and_budget() {
     let loaded = load_catalog(&repo_root()).expect("committed catalog");
 

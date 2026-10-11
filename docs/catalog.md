@@ -7,8 +7,8 @@ one implementation (a schema-v2 recipe) per player. It implements the concepts o
 
 **Status.** The schemas, the committed XDJ-700 v1.15 catalog, the checks that need no firmware,
 resolving a profile (`patch-cli resolve`) and building one (`patch-cli build`) are implemented
-(below), and so is the format of acceptance tests ([acceptance.md](./acceptance.md)). No skin and
-no acceptance test is committed yet.
+(below), and so is the format of acceptance tests ([acceptance.md](./acceptance.md)), with three
+committed XDJ-700 tests. No skin is committed yet.
 
 ## Layout
 

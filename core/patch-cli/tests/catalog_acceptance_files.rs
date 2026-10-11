@@ -55,7 +55,8 @@ fn a_test_loads_and_an_implementation_names_it() {
 
     let checked = load_catalog(root.path()).expect("loads");
     let catalog = checked.catalog();
-    assert_eq!(catalog.acceptance.len(), 1);
+    // The committed tests, and this one.
+    assert_eq!(catalog.acceptance.len(), 4);
     assert!(catalog.acceptance_test("pads-select-lengths").is_some());
     let feature = catalog.feature("beat-loop-1-to-32").expect("feature");
     assert_eq!(
