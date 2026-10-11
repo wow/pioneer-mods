@@ -11,8 +11,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   (stage 7's, named by `beat-loop-1-to-32`; stage 5's, named by `beat-loop-16-plays-32`), and the
   touched pad alone lights (stock passes; stages 5 and 7 fail it, their known limit). The XDJ-700
   names its first run-time state ranges, with evidence from emulation: the current loop's length,
-  the pads' lit states and the pad touched last. The owner suite `official_accept_beat_loop` runs
-  each test on stock, stage 5 and stage 7 (`XDJ700_STICK` names the owner's stick image).
+  the pads' lit states and the pad touched last; the catalog check refuses a range that overlaps
+  the loaded application. The owner suite `official_accept_beat_loop` runs each test on stock,
+  stage 5 and stage 7 and checks the failing steps (`XDJ700_STICK` names the owner's stick image).
   `docs/acceptance.md`, "The BEAT LOOP tests".
 - `patch-cli accept`: runs an acceptance test on an update in the owner's local emulator (QEMU,
   not part of this repository), started headless with the update's MAIN image in an erased

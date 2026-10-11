@@ -36,17 +36,17 @@
     {
       "start": "0x0b6c3e3c",
       "end": "0x0b6c3e44",
-      "evidence": "The current loop's length in beats, as a fraction: the numerator, then the denominator (32 bits each). In emulation (2026-10-11; four boots of stock, stage 5 and stage 7 with the same stick): 0 and 0 before any loop; each BEAT LOOP pad touched sets it to the length the pad selects (stock 1/2 to 16, stage 5's sixth pad 32, stage 7 1 to 32), and it holds after. Above the loaded application (0x08000000 to 0x091BD888)."
+      "evidence": "The current loop's length in beats, as a fraction: the numerator, then the denominator (32 bits each). In emulation (2026-10-11; four boots of stock, stage 5 and stage 7 with the same stick): 0 and 0 before any loop; each BEAT LOOP pad touched sets it to the length the pad selects (stock 1/2 to 16, stage 5's sixth pad 32, stage 7 1 to 32), and it holds after. Above the loaded application (0x08000000 to 0x091BD788)."
     },
     {
       "start": "0x0c0e6c2c",
       "end": "0x0c0e6c44",
-      "evidence": "The six BEAT LOOP pads' lit states, left to right (32 bits each): 2 lit, 0 not. In emulation (2026-10-11; the same runs): stock lights the touched pad; stage 5 lights none for its 32-beat loop, and stage 7 the pad to the right of the touched one and none for 32, as docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\", describes. Above the loaded application (0x08000000 to 0x091BD888)."
+      "evidence": "The six BEAT LOOP pads' lit states, left to right (32 bits each): 2 lit, 0 not. In emulation (2026-10-11; the same runs): stock lights the touched pad; stage 5 lights none for its 32-beat loop, and stage 7 the pad to the right of the touched one and none for 32, as docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\", describes. Above the loaded application (0x08000000 to 0x091BD788)."
     },
     {
       "start": "0x0c0e75c0",
       "end": "0x0c0e75c4",
-      "evidence": "The index of the BEAT LOOP pad touched last, 0 to 5 from the left (32 bits): 0 before any touch. In emulation (2026-10-11; the same runs): each pad touched sets its index, on stock, stage 5 and stage 7 alike. Above the loaded application (0x08000000 to 0x091BD888)."
+      "evidence": "The index of the BEAT LOOP pad touched last, 0 to 5 from the left (32 bits): 0 before any touch. In emulation (2026-10-11; the same runs): each pad touched sets its index, on stock, stage 5 and stage 7 alike. Above the loaded application (0x08000000 to 0x091BD788)."
     }
   ],
   "restore": {

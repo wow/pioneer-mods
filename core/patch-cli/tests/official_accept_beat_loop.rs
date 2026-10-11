@@ -3,8 +3,8 @@
 //! emulator with the owner's stick image. Each build passes the test its implementation names (the
 //! lit-pad test, for stock) and fails the others at the steps its behaviour predicts (stages 5 and
 //! 7 fail the lit-pad test, their known limit). Nothing but the PASS and FAIL lines is printed,
-//! and the builds stay in a temporary directory. Nine runs, three at a time; to run locally (about
-//! fifteen minutes):
+//! and the builds stay in a temporary directory. Nine runs, three at a time (fewer on a host with
+//! fewer than six cores); to run locally (about fifteen minutes):
 //!
 //! ```text
 //! PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD XDJ700_QEMU=/path/to/qemu-system-sh4 \
@@ -99,9 +99,9 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         "beat-loop-16-plays-32-pads-select-lengths",
         "beat-loop-lit-pad-follows-touch",
     );
-    // Every build against every test. A length test polls the part of the length each touch
-    // changes, and expects the other; the lit-pad test waits for each touch to be taken, then
-    // expects the six pads' states.
+    // Every build against every test. Each poll waits for a value no earlier touch can leave (the
+    // touched pad's index; for the first pad, its length or its lit state), so the failing steps
+    // do not depend on timing.
     let runs = [
         // Stock sets 1/2 to 16 beats and lights the touched pad.
         Run {
@@ -112,12 +112,12 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         Run {
             test: lengths_32,
             update: update.clone(),
-            fails: &[23, 25, 28, 31, 34, 37],
+            fails: &[23, 26, 30, 34, 38, 42],
         },
         Run {
             test: lengths_16,
             update: update.clone(),
-            fails: &[37],
+            fails: &[42],
         },
         // Stage 5: the sixth pad sets 32 beats and lights none.
         Run {
@@ -128,12 +128,12 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         Run {
             test: lengths_32,
             update: stage5.clone(),
-            fails: &[23, 25, 28, 31, 34],
+            fails: &[23, 26, 30, 34, 38],
         },
         Run {
             test: lit,
             update: stage5,
-            fails: &[68],
+            fails: &[73],
         },
         // Stage 7: 1 to 32 beats; the pad to the right of the touched one lights, none for 32.
         Run {
@@ -144,16 +144,20 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         Run {
             test: lengths_16,
             update: stage7.clone(),
-            fails: &[23, 26, 28, 31, 34],
+            fails: &[23, 26, 30, 34, 38],
         },
         Run {
             test: lit,
             update: stage7,
-            fails: &[23, 24, 32, 33, 41, 42, 50, 51, 59, 60, 68],
+            fails: &[22, 24, 33, 34, 43, 44, 53, 54, 63, 64, 73],
         },
     ];
     let mut failures = Vec::new();
-    for batch in runs.chunks(3) {
+    // Each emulator keeps two host cores busy (the SH-4 and the DSP), and the tests' fixed boot
+    // waits assume an unloaded host: at most three at once, fewer on a smaller host.
+    let cores = std::thread::available_parallelism().map_or(2, std::num::NonZero::get);
+    let at_once = (cores / 2).clamp(1, 3);
+    for batch in runs.chunks(at_once) {
         let outputs: Vec<Output> = std::thread::scope(|scope| {
             let handles: Vec<_> = batch
                 .iter()
@@ -168,12 +172,8 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
             let failed = failed_steps(&stdout);
-            let ended = if run.fails.is_empty() {
-                output.status.success() && stdout.contains("result: PASS (")
-            } else {
-                let count = format!("failed: {} of ", run.fails.len());
-                !output.status.success() && stderr.contains(&count)
-            };
+            // A run fails exactly when a check fails; the failing steps are compared below.
+            let ended = output.status.success() == run.fails.is_empty();
             if !ended || failed != run.fails {
                 let name = run.update.file_name().expect("name").to_string_lossy();
                 failures.push(format!(
