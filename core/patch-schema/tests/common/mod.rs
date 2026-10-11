@@ -22,6 +22,7 @@ pub struct Fixture {
     pub screens: Vec<Value>,
     pub features: Vec<Value>,
     pub skins: Vec<Value>,
+    pub acceptance: Vec<Value>,
     pub recipes: BTreeMap<String, Value>,
 }
 
@@ -38,6 +39,26 @@ pub fn recipe(release: &str) -> Value {
         "target": { "release": release, "upd_sha256": UPD, "application_sha256": APP },
         "label": "Ver1.16", "reported_version": "0.12",
         "expected": { "application_sha256": APP, "upd_sha256": OUT }
+    })
+}
+
+/// A test for `p-1.0`: press USB, touch a pad, check a value and that the pad is the brightest.
+pub fn acceptance_test(id: &str) -> Value {
+    let region = |x: u32| json!({ "x": x, "y": 400, "w": 80, "h": 50 });
+    json!({
+        "schema_version": 1, "id": id, "player": "p-1.0", "description": "pads",
+        "steps": [
+            { "wait_until": {
+                "check": { "memory": { "address": "0x0c000010", "bytes": 4, "equals": 1 } },
+                "timeout_ms": 60000 } },
+            { "press": { "control": "usb" } },
+            { "touch": { "x": 40, "y": 420 } },
+            { "wait": { "ms": 500 } },
+            { "expect": { "memory": { "address": "0x0c000014", "bytes": 2, "equals": 32 } } },
+            { "expect": { "brightest": {
+                "region": region(0), "others": [region(80), region(160)], "margin": 16 } } }
+        ],
+        "maintainer": "m"
     })
 }
 
@@ -90,6 +111,8 @@ impl Fixture {
         skin_labels["labels"] = json!({ "pad": ["1", "2", "32"] });
         let skin_implementations =
             json!([implementation("recipes/p/stock-labels.json"), skin_labels]);
+        let mut plain_implementation = implementation("recipes/p/plain.json");
+        plain_implementation["acceptance"] = json!(["pads"]);
         Fixture {
             player: json!({
                 "schema_version": 1, "id": "p-1.0", "model": "P",
@@ -101,6 +124,7 @@ impl Fixture {
                     "jog_display": { "unavailable": "absent on this model", "evidence": "e" }
                 },
                 "screens": ["main", "perform"],
+                "controls": { "usb": { "code": "0x13", "value": "0x04", "description": "USB" } },
                 "restore": { "official": "o", "backup": "b", "guide": "docs/p.md" },
                 "maintainer": "m"
             }),
@@ -112,11 +136,7 @@ impl Fixture {
                 ),
             ],
             features: vec![
-                feature(
-                    "plain",
-                    "labelled",
-                    json!([implementation("recipes/p/plain.json")]),
-                ),
+                feature("plain", "labelled", json!([plain_implementation])),
                 labelled,
             ],
             skins: vec![skin(
@@ -125,6 +145,7 @@ impl Fixture {
                 json!(["pad"]),
                 skin_implementations,
             )],
+            acceptance: vec![acceptance_test("pads")],
             recipes: [
                 "plain",
                 "labelled",
@@ -144,6 +165,7 @@ impl Fixture {
             screens: parse(&self.screens),
             features: parse(&self.features),
             skins: parse(&self.skins),
+            acceptance: parse(&self.acceptance),
         }
     }
 

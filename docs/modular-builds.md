@@ -109,19 +109,20 @@ A behaviour change, declared against capability and slot names, never against a 
   "labels": { "perform.beat_loop.pad": ["1", "2", "4", "8", "16", "32"] },
   "maturity": "experimental",
   "implementations": { "xdj700-v1.15": "recipes/xdj700-v1.15/beat-loop-1-to-32.json" },
-  "acceptance": ["perform/pads-select-lengths", "perform/lit-pad-follows-touch"]
+  "acceptance": ["pads-select-lengths", "lit-pad-follows-touch"]
 }
 ```
 
 `requires` and `conflicts` are what let the builder switch a feature off with a reason. An
 implementation is a recipe fragment for one player: replacements, and later code. A feature does
 not draw: `labels` gives the text its slots should show, and the chosen skin draws it (see
-[Skin](#skin)). `acceptance` names emulator tests the implementation must pass (below).
+[Skin](#skin)). `acceptance` names emulator tests the implementation must pass (below;
+[acceptance.md](./acceptance.md)).
 
 The sketch is illustrative. Its values come from the XDJ-700 recipes, but two details show where
 the design goes further than today: `conflicts` is about meaning, not bytes (this feature and
 `beat-loop-16-plays-32` share a replacement, which composition would apply once, but they define
-different button sets), and today's stage-7 recipe would fail `perform/lit-pad-follows-touch`
+different button sets), and today's stage-7 recipe would fail `lit-pad-follows-touch`
 until the lit-pad code fix exists (its known limit).
 
 ### Skin
@@ -324,7 +325,8 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
 
 1. Schemas for player, screen, feature, skin and profile; composition of several fragments into
    one rebuild; the builder's switched-off reasons.
-2. Emulator acceptance harness: scripted, asserting tests per feature and screen.
+2. Emulator acceptance harness: scripted, asserting tests per feature and screen. The format is
+   implemented ([acceptance.md](./acceptance.md)); the runner is next.
 3. Screen catalogue for the XDJ-700: `main` and `perform`, with evidence.
 4. First per-screen skins (PERFORM, main), from original art or owner-local transforms.
 5. Code fragments, starting with the lit-pad rule.

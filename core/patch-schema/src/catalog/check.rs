@@ -2,6 +2,7 @@
 //! reference resolved, and every implementation consistent with its player and its recipe
 //! (`check_parts.rs`). Needs no firmware.
 
+use super::acceptance::AcceptanceTest;
 use super::entry::{CatalogEntry, EntryError};
 use super::feature::Feature;
 use super::player::Player;
@@ -18,6 +19,7 @@ pub struct Catalog {
     pub screens: Vec<Screen>,
     pub features: Vec<Feature>,
     pub skins: Vec<Skin>,
+    pub acceptance: Vec<AcceptanceTest>,
 }
 
 /// A catalog that passed [`Catalog::check`] with the recipes its implementations name, held so
@@ -75,6 +77,10 @@ impl Catalog {
         self.skins.iter().find(|skin| skin.id == id)
     }
 
+    pub fn acceptance_test(&self, id: &str) -> Option<&AcceptanceTest> {
+        self.acceptance.iter().find(|test| test.id == id)
+    }
+
     /// Checks the catalog against itself and against `recipes`, the recipes its implementations
     /// name, by path:
     /// - every file passes its own `validate`, and ids are unique;
@@ -86,7 +92,10 @@ impl Catalog {
     /// - each recipe is for that player, carries its pins and pins its output (every fragment of
     ///   a build must);
     /// - a recipe a skin names is named by no feature and no other skin: it is the skin's own,
-    ///   under the skin's licence.
+    ///   under the skin's licence;
+    /// - every acceptance test's player exists, has the controls it presses and a screen its
+    ///   touches and regions fit, and every test an implementation names exists for that
+    ///   implementation's player.
     ///
     /// # Errors
     ///
@@ -122,14 +131,15 @@ impl Catalog {
         for skin in &self.skins {
             self.check_skin(skin, recipes)?;
         }
-        Ok(())
+        self.check_acceptance()
     }
 
     fn check_entries(&self) -> Result<(), CatalogError> {
         validate_all(&self.players)?;
         validate_all(&self.screens)?;
         validate_all(&self.features)?;
-        validate_all(&self.skins)
+        validate_all(&self.skins)?;
+        validate_all(&self.acceptance)
     }
 
     fn check_unique(&self) -> Result<(), CatalogError> {
@@ -153,6 +163,10 @@ impl Catalog {
                 self.features.iter().map(|f| f.id.clone()).collect(),
             ),
             ("skin", self.skins.iter().map(|s| s.id.clone()).collect()),
+            (
+                "acceptance test",
+                self.acceptance.iter().map(|t| t.id.clone()).collect(),
+            ),
         ];
         for (kind, ids) in ids {
             let mut seen = BTreeSet::new();

@@ -1,0 +1,260 @@
+//! An acceptance test: a scripted emulator run for one player that drives its panel and touch
+//! screen and checks what the running application does (`catalog/acceptance/<id>.json`).
+//!
+//! A test holds no firmware and no pixels: it presses named controls, touches screen points and
+//! checks memory values at run-time addresses, or compares regions of the same screen with each
+//! other. Implementations name the tests they must pass (`acceptance`); a runner executes them
+//! against an update in the emulator (`docs/acceptance.md`).
+
+use super::entry::{
+    CatalogEntry, EntryError, check_id, check_name, check_player_id, check_schema_version,
+    check_text,
+};
+use serde::{Deserialize, Serialize};
+
+/// Most steps a test may have.
+pub const MAX_STEPS: usize = 1000;
+/// Longest single wait, or `wait_until` timeout, in milliseconds (10 minutes).
+pub const MAX_WAIT_MS: u32 = 600_000;
+/// Longest a test may wait in all, in milliseconds (one hour).
+pub const MAX_TOTAL_WAIT_MS: u64 = 3_600_000;
+/// Longest a control may be held or a touch last, in milliseconds.
+pub const MAX_HOLD_MS: u32 = 10_000;
+/// Most regions a `brightest` check compares against.
+pub const MAX_OTHER_REGIONS: usize = 16;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptanceTest {
+    pub schema_version: u32,
+    pub id: String,
+    /// The player whose application the test runs (`xdj700-v1.15`).
+    pub player: String,
+    pub description: String,
+    /// Whether the run needs the owner's USB stick image, with music, plugged in from the start.
+    #[serde(default)]
+    pub stick: bool,
+    /// What the test does, in order. At least one step checks something.
+    pub steps: Vec<Step>,
+    pub maintainer: String,
+}
+
+/// One step of a test.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum Step {
+    /// Waits `ms` milliseconds of host time.
+    Wait { ms: u32 },
+    /// Presses one of the player's panel controls ([`Player::controls`](super::Player)) and
+    /// releases it after `ms` milliseconds.
+    Press {
+        control: String,
+        #[serde(default = "default_hold_ms")]
+        ms: u32,
+    },
+    /// Touches the screen at (`x`, `y`), in screen pixels from the top left, for `ms`
+    /// milliseconds.
+    Touch {
+        x: u32,
+        y: u32,
+        #[serde(default = "default_hold_ms")]
+        ms: u32,
+    },
+    /// The check must hold now.
+    Expect(Check),
+    /// Polls the check until it holds; the test fails if it does not within `timeout_ms`.
+    WaitUntil { check: Check, timeout_ms: u32 },
+}
+
+fn default_hold_ms() -> u32 {
+    300
+}
+
+/// What a step checks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum Check {
+    /// The `bytes`-byte value at the run-time `address` of the running application, in the
+    /// emulated processor's byte order, equals `equals`.
+    Memory {
+        /// `0x` and one to eight hexadecimal digits, aligned to `bytes`.
+        address: String,
+        /// 1, 2 or 4.
+        bytes: u8,
+        equals: u32,
+    },
+    /// The mean brightness of `region` exceeds that of each of `others` by at least `margin`
+    /// (0 to 255): for example, the pad that lights. Regions of the same frame are compared with
+    /// each other; no reference image is stored.
+    Brightest {
+        region: Region,
+        others: Vec<Region>,
+        margin: u8,
+    },
+}
+
+/// A rectangle of the screen, in pixels from the top left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Region {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
+impl Region {
+    /// Whether the region is not empty and lies within a `width` x `height` screen.
+    pub fn fits(&self, width: u32, height: u32) -> bool {
+        self.w > 0
+            && self.h > 0
+            && self
+                .x
+                .checked_add(self.w)
+                .is_some_and(|right| right <= width)
+            && self
+                .y
+                .checked_add(self.h)
+                .is_some_and(|bottom| bottom <= height)
+    }
+}
+
+impl Check {
+    /// The address of a `memory` check as a number, if it is well formed.
+    pub fn address(&self) -> Option<u32> {
+        match self {
+            Check::Memory { address, .. } => parse_address(address),
+            Check::Brightest { .. } => None,
+        }
+    }
+
+    fn validate(&self, field: &str) -> Result<(), EntryError> {
+        let rule = |problem: &str| EntryError::Rule {
+            field: field.to_owned(),
+            problem: problem.to_owned(),
+        };
+        match self {
+            Check::Memory {
+                address,
+                bytes,
+                equals,
+            } => {
+                let address = parse_address(address)
+                    .ok_or_else(|| rule("address: 0x and one to eight hexadecimal digits"))?;
+                if ![1, 2, 4].contains(bytes) {
+                    return Err(rule("bytes: 1, 2 or 4"));
+                }
+                if address % u32::from(*bytes) != 0 {
+                    return Err(rule("address: aligned to bytes"));
+                }
+                if *bytes < 4 && *equals >> (8 * u32::from(*bytes)) != 0 {
+                    return Err(rule("equals: a value that fits in bytes"));
+                }
+            }
+            Check::Brightest { others, margin, .. } => {
+                if others.is_empty() || others.len() > MAX_OTHER_REGIONS {
+                    return Err(rule("others: one to 16 regions"));
+                }
+                if *margin == 0 {
+                    return Err(rule("margin: at least 1"));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The regions the check reads.
+    pub fn regions(&self) -> Vec<Region> {
+        match self {
+            Check::Memory { .. } => Vec::new(),
+            Check::Brightest { region, others, .. } => std::iter::once(*region)
+                .chain(others.iter().copied())
+                .collect(),
+        }
+    }
+}
+
+/// `0x` and one to eight hexadecimal digits.
+pub fn parse_address(value: &str) -> Option<u32> {
+    let digits = value.strip_prefix("0x")?;
+    if digits.is_empty() || digits.len() > 8 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    u32::from_str_radix(digits, 16).ok()
+}
+
+impl CatalogEntry for AcceptanceTest {
+    const KIND: &'static str = "acceptance test";
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn validate(&self) -> Result<(), EntryError> {
+        check_schema_version(self.schema_version)?;
+        check_id("id", &self.id)?;
+        check_player_id("player", &self.player)?;
+        check_text("description", &self.description)?;
+        if self.steps.is_empty() {
+            return Err(EntryError::Empty {
+                field: "steps".to_owned(),
+            });
+        }
+        let rule = |field: String, problem: &str| EntryError::Rule {
+            field,
+            problem: problem.to_owned(),
+        };
+        if self.steps.len() > MAX_STEPS {
+            return Err(rule("steps".to_owned(), "at most 1000 steps"));
+        }
+        let mut waited = 0u64;
+        let mut checks = 0usize;
+        for (index, step) in self.steps.iter().enumerate() {
+            let field = format!("steps[{index}]");
+            match step {
+                Step::Wait { ms } => {
+                    if *ms == 0 || *ms > MAX_WAIT_MS {
+                        return Err(rule(field, "wait: 1 ms to 10 minutes"));
+                    }
+                    waited += u64::from(*ms);
+                }
+                Step::Press { control, ms } => {
+                    check_name(&format!("{field}.control"), control)?;
+                    if *ms == 0 || *ms > MAX_HOLD_MS {
+                        return Err(rule(field, "press: held 1 ms to 10 s"));
+                    }
+                }
+                Step::Touch { ms, .. } => {
+                    if *ms == 0 || *ms > MAX_HOLD_MS {
+                        return Err(rule(field, "touch: held 1 ms to 10 s"));
+                    }
+                }
+                Step::Expect(check) => {
+                    check.validate(&field)?;
+                    checks += 1;
+                }
+                Step::WaitUntil { check, timeout_ms } => {
+                    check.validate(&field)?;
+                    if *timeout_ms == 0 || *timeout_ms > MAX_WAIT_MS {
+                        return Err(rule(field, "wait_until: a timeout of 1 ms to 10 minutes"));
+                    }
+                    waited += u64::from(*timeout_ms);
+                    checks += 1;
+                }
+            }
+        }
+        if checks == 0 {
+            return Err(rule(
+                "steps".to_owned(),
+                "at least one step checks something",
+            ));
+        }
+        if waited > MAX_TOTAL_WAIT_MS {
+            return Err(rule(
+                "steps".to_owned(),
+                "waits and timeouts of at most one hour",
+            ));
+        }
+        check_text("maintainer", &self.maintainer)
+    }
+}

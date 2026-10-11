@@ -20,6 +20,18 @@
     }
   },
   "screens": ["main", "perform"],
+  "controls": {
+    "usb": {
+      "code": "0x13",
+      "value": "0x04",
+      "description": "The USB source button; with a stick in, it opens the stick's browser (emulator, 2026-10-09)."
+    },
+    "rotary_push": {
+      "code": "0x11",
+      "value": "0x01",
+      "description": "Pushing the rotary selector: in the browser it opens the highlighted entry or loads the track (emulator, 2026-10-09)."
+    }
+  },
   "restore": {
     "official": "The unit accepts it over a build, which reports a lower version than 1.15, and it writes back the stock application (stages 4 and 6, on an owner's unit).",
     "backup": "The stock no-op rebuild labelled Ver1.16, built without --report-version (the stage-1b file): check its SHA-256 before flashing, since the stage files share its name and label; untested over a modified application (section 3, step 5).",

@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- Acceptance tests (`patch_schema::catalog::AcceptanceTest`, `catalog/acceptance/<id>.json`):
+  scripted emulator runs for one player that press its panel `controls`, touch its screen, wait,
+  and check memory values at run-time addresses or that one screen region is brighter than others
+  of the same frame; no firmware or pixels. Players name their panel `controls`; feature and skin
+  implementations name the tests they must pass (`acceptance`); the catalog check holds tests to
+  their player's controls and screen. The XDJ-700 lists `usb` and `rotary_push`.
+  `docs/acceptance.md`. The runner comes next.
 - `patch-cli build`: a profile resolved against the catalog (as `patch-cli resolve`) and its
   fragments composed under the profile's label and reported version (as `patch-cli compose`), with
   every check that needs no firmware before the input is read; refused when nothing is on or when

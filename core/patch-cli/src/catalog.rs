@@ -10,8 +10,8 @@ use patch_core::xdj700::{
     MAX_MAIN_GROWTH, check_label_and_version, check_recipe_v2, recipe_target, unknown_release,
 };
 use patch_schema::catalog::{
-    Catalog, CatalogEntry, CheckedCatalog, Feature, Player, Profile, Resolution, ResolveError,
-    Screen, Skin, resolve,
+    AcceptanceTest, Catalog, CatalogEntry, CheckedCatalog, Feature, Player, Profile, Resolution,
+    ResolveError, Screen, Skin, resolve,
 };
 use patch_schema::{RecipeV2, SCHEMA_VERSION_V2};
 use serde::de::DeserializeOwned;
@@ -22,13 +22,14 @@ use std::path::{Path, PathBuf};
 pub const MAX_CATALOG_FILE_LEN: u64 = 256 * 1024;
 
 /// The directories `catalog/` may hold.
-const DIRS: [&str; 4] = ["players", "screens", "features", "skins"];
+const DIRS: [&str; 5] = ["players", "screens", "features", "skins", "acceptance"];
 
 /// Names skipped wherever they appear: notes for contributors, and the file Finder leaves.
 const SKIPPED: [&str; 2] = ["README.md", ".DS_Store"];
 
 /// Loads and checks `root/catalog`: `players/<id>.json`, `screens/<player>/<screen>.json`,
-/// `features/<id>.json` and `skins/<id>.json`, each file named after its id, and the recipes the
+/// `features/<id>.json`, `skins/<id>.json` and `acceptance/<id>.json`, each file named after its
+/// id, and the recipes the
 /// implementations name (paths relative to `root`). `catalog/` must exist; a missing
 /// subdirectory is empty. Anything else (but a `README.md` or `.DS_Store`) is refused, so a
 /// misnamed file cannot be skipped silently, and so is a symbolic link anywhere under `root`
@@ -99,6 +100,11 @@ pub fn load_catalog(root: &Path) -> Result<CheckedCatalog> {
     }
     for path in json_files(&dir.join("skins"))? {
         catalog.skins.push(read_entry::<Skin>(&path)?);
+    }
+    for path in json_files(&dir.join("acceptance"))? {
+        catalog
+            .acceptance
+            .push(read_entry::<AcceptanceTest>(&path)?);
     }
     let recipes = read_recipes(root, &catalog)?;
     let refusing = || format!("refusing catalog '{}'", dir.display());

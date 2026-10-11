@@ -23,6 +23,9 @@ pub struct Player {
     pub capabilities: BTreeMap<String, Capability>,
     /// The screens catalogued for this player, each in `catalog/screens/<player>/<screen>.json`.
     pub screens: Vec<String>,
+    /// The panel controls acceptance tests may press, by name (`usb`, `rotary_push`).
+    #[serde(default, deserialize_with = "unique_keys")]
+    pub controls: BTreeMap<String, Control>,
     pub restore: Restore,
     pub maintainer: String,
 }
@@ -35,6 +38,32 @@ pub struct Firmware {
     pub file: String,
     pub upd_sha256: String,
     pub application_sha256: String,
+}
+
+/// A panel control as the panel reports it to the application: its message code and value, each
+/// `0x` and two hexadecimal digits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Control {
+    pub code: String,
+    pub value: String,
+    pub description: String,
+}
+
+impl Control {
+    /// The code and value as bytes, if well formed.
+    pub fn bytes(&self) -> Option<(u8, u8)> {
+        Some((hex_byte(&self.code)?, hex_byte(&self.value)?))
+    }
+}
+
+/// `0x` and two hexadecimal digits.
+fn hex_byte(value: &str) -> Option<u8> {
+    let digits = value.strip_prefix("0x")?;
+    if digits.len() != 2 {
+        return None;
+    }
+    u8::from_str_radix(digits, 16).ok()
 }
 
 /// How an owner brings back the stock application after flashing a build of this player; a
@@ -121,6 +150,19 @@ impl CatalogEntry for Player {
             "firmware.application_sha256",
             &self.firmware.application_sha256,
         )?;
+        for (name, control) in &self.controls {
+            check_name("controls", name)?;
+            if control.bytes().is_none() {
+                return Err(EntryError::Rule {
+                    field: format!("controls.{name}"),
+                    problem: "code and value: 0x and two hexadecimal digits each".to_owned(),
+                });
+            }
+            check_text(
+                &format!("controls.{name}.description"),
+                &control.description,
+            )?;
+        }
         check_text("restore.official", &self.restore.official)?;
         check_text("restore.backup", &self.restore.backup)?;
         check_doc_path("restore.guide", &self.restore.guide)?;
