@@ -80,9 +80,11 @@ fn refused_with(edit: impl FnOnce(&Path), problem: &str) {
 }
 
 /// Moves the last pad's normal image to `offset` (Stage 7 then edits a stock offset that no slot
-/// image covers, which is allowed).
+/// image covers, which is allowed). The Neon pads skin, which paints the image where it was, is
+/// left out: a skin paints only its slots' images.
 fn last_pad_normal_at(offset: u32) -> impl FnOnce(&Path) {
     move |root: &Path| {
+        std::fs::remove_file(root.join("catalog/skins/perform-neon-pads.json")).expect("skin");
         edit_pads(root, |i| {
             i["elements"][5]["images"]["normal"] = format!("{offset:#x}").into();
         });
@@ -163,17 +165,14 @@ fn the_neon_pads_skin_paints_every_pad_image_once_and_whole() {
         .expect("perform")
         .slots["beat_loop.pad"]
         .images
-        .clone()
+        .as_ref()
         .expect("pad images");
 
+    // The loader holds a skin's recipe to whole images of its slots (`check_skin`); this skin
+    // also paints every one of them, each once, from its own art: no erase, no glyph, and a stock
+    // colour only by position.
     let mut painted = BTreeSet::new();
     for edit in recipe["image_edits"].as_array().expect("edits") {
-        // The whole image, from the author's own art: no erase, no glyph, and a stock colour
-        // only by position.
-        assert_eq!(
-            (edit["width"].as_u64(), edit["height"].as_u64()),
-            (Some(80), Some(53))
-        );
         assert!(
             edit.get("erase").is_none() && edit.get("glyph").is_none(),
             "{edit}"

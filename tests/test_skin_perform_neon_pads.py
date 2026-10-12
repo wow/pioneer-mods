@@ -22,8 +22,8 @@ def generator() -> ModuleType:
 def test_the_committed_recipe_is_the_generators_art() -> None:
     perform = json.loads((ROOT / "catalog/screens/xdj700-v1.15/perform.json").read_text())
     committed = json.loads((ROOT / "recipes/xdj700-v1.15/skin-perform-neon-pads.json").read_text())
-    draft = generator().recipe(perform)
-    assert draft["image_edits"] == committed["image_edits"]
-    for key in ("recipe_id", "description", "target", "label", "reported_version"):
-        assert draft[key] == committed[key], key
+    module = generator()
+    draft = module.recipe(perform)
+    # Everything but the output pins, which `patch-cli precondition` completes.
+    assert module.unpinned(draft) == module.unpinned(committed)
     assert len(draft["image_edits"]) == 36

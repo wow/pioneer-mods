@@ -177,23 +177,23 @@ length; the lit-pad test waits 2 s more for the lit states to settle, then expec
 lit and the other five not. So a poll never passes on the previous touch's state, whether the build
 passes the test or not, and a failing run fails at the same steps every time:
 
-| Test | Checks | Stock | Stage 5 | Stage 7 |
-| --- | --- | --- | --- | --- |
-| `beat-loop-1-to-32-pads-select-lengths` | lengths 1, 2, 4, 8, 16, 32 | FAIL | FAIL | PASS |
-| `beat-loop-16-plays-32-pads-select-lengths` | lengths 1/2, 1, 2, 4, 8, 32 | FAIL | PASS | FAIL |
-| `beat-loop-lit-pad-follows-touch` | the touched pad lights | PASS | FAIL | FAIL |
+| Test | Checks | Stock | Stage 5 | Stage 7 | Neon pads |
+| --- | --- | --- | --- | --- | --- |
+| `beat-loop-1-to-32-pads-select-lengths` | lengths 1, 2, 4, 8, 16, 32 | FAIL | FAIL | PASS | FAIL |
+| `beat-loop-16-plays-32-pads-select-lengths` | lengths 1/2, 1, 2, 4, 8, 32 | FAIL | PASS | FAIL | FAIL |
+| `beat-loop-lit-pad-follows-touch` | the touched pad lights | PASS | FAIL | FAIL | PASS |
 
 Stage 7 names the first test and stage 5 the second. No feature names the lit-pad test yet: stock
 passes it, and stages 5 and 7 fail it, their known limit
 ([xdj700-flashing.md](./xdj700-flashing.md), "The lit BEAT LOOP pad"); a lit-pad fix would name it.
-The Neon pads skin names it: it changes only images, so the pads light as on stock (the owner
-suite runs it on the skin too).
-All nine results are the owner suite's (`official_accept_beat_loop`), in the owner's emulator with
-the official v1.15 file and the stage files built from it; for each failing run it also checks
-which steps fail. Boot and browsing are waited out for fixed times (about two and a half minutes,
-host time), which a much slower or busier host may outrun; the suite runs at most one emulator per
-two host cores, three at most, for that reason. The waits become polls when a state range shows
-that a track is loaded.
+The Neon pads skin names it: it changes only images, so the pads light and set lengths as on
+stock, and it fails the length tests at stock's steps.
+All twelve results are the owner suite's (`official_accept_beat_loop`), in the owner's emulator with
+the official v1.15 file and the stage and skin files built from it; for each failing run it also
+checks which steps fail. Boot and browsing are waited out for fixed times (about two and a half
+minutes, host time), which a much slower or busier host may outrun; the suite runs at most one
+emulator per two host cores, three at most, for that reason. The waits become polls when a state
+range shows that a track is loaded.
 
 ## Naming tests
 

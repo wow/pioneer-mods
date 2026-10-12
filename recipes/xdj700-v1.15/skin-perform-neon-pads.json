@@ -24,10 +24,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -56,10 +53,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0418"
@@ -88,10 +82,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -120,10 +111,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x07ff"
@@ -152,10 +140,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x9fff"
@@ -184,10 +169,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0410"
@@ -216,10 +198,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -248,10 +227,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0418"
@@ -280,10 +256,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -312,10 +285,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0418"
@@ -344,10 +314,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -376,10 +343,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x07ff"
@@ -408,10 +372,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x9fff"
@@ -440,10 +401,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0410"
@@ -472,10 +430,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -504,10 +459,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x07ff"
@@ -536,10 +488,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x9fff"
@@ -568,10 +517,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0410"
@@ -600,10 +546,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -632,10 +575,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0418"
@@ -664,10 +604,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -696,10 +633,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x07ff"
@@ -728,10 +662,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x9fff"
@@ -760,10 +691,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0410"
@@ -792,10 +720,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -824,10 +749,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0418"
@@ -856,10 +778,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -888,10 +807,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x07ff"
@@ -920,10 +836,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x9fff"
@@ -952,10 +865,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0410"
@@ -984,10 +894,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -1016,10 +923,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0418"
@@ -1048,10 +952,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x10a2"
@@ -1080,10 +981,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x07ff"
@@ -1112,10 +1010,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x9fff"
@@ -1144,10 +1039,7 @@
         },
         "palette": [
           {
-            "from": {
-              "x": 0,
-              "y": 0
-            }
+            "colour": "0x0000"
           },
           {
             "colour": "0x0410"
@@ -1165,7 +1057,7 @@
     }
   ],
   "expected": {
-    "application_sha256": "ef656f86b5b6b905cad99493d801a3930caa47324ae8ca7a0b36d5596d8b9dd0",
-    "upd_sha256": "05098b4f5b2c2b9ec1bb23ca7d4d774cbb817faf1d0b7ee627a7ac0d2d1b5859"
+    "application_sha256": "18d0550af20da3a525cb31b8b262db879323d1d856ca941a660767d719ad0c14",
+    "upd_sha256": "3e600645d3af0c74084608738c7c03e3844ddb757a95d0de456a04ec3b2f0526"
   }
 }

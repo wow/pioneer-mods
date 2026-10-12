@@ -301,7 +301,9 @@ Each file is checked on its own, then the catalog as a whole, with no firmware:
   counts; a skin named in `draws_labels` is built in, or exists, is for that screen and has an
   implementation for the player;
 - every recipe named exists, is a valid schema-v2 recipe for its player, carries the player's pins
-  and pins its output; a recipe a skin names is named by no feature and no other skin;
+  and pins its output; a recipe a skin names is named by no feature and no other skin, and
+  changes only images: it has no replacements, and each image edit is one whole image of a slot
+  the skin requires on its screen;
 - every acceptance test's player exists and has the controls it presses, its touches and regions
   lie on that player's screen, and its memory checks read only that player's run-time state
   ranges; every test an implementation names exists for its player;

@@ -3,9 +3,12 @@
 `recipes/xdj700-v1.15/skin-perform-neon-pads.json` from the shapes, the font and the colours below.
 
 Part of the skin, so under its licence (CC BY-SA 4.0, LICENSE-ART), like the recipe it writes.
+Run over the committed recipe after an art change, it writes a new draft; with the art unchanged,
+it leaves the recipe and its pins as they are.
 
 - The pad: a rounded rectangle filling the 80x53 image (radius 7, a 2-pixel border). The four
-  corners outside the rounding take the stock image's top-left colour, named by its position.
+  corners outside the rounding are black, as the screen around the pads is (measured in
+  emulation), so the rounding shows.
 - The labels: the stock lengths 1/2, 1, 2, 4, 8 and 16 in a 5x7 pixel font drawn for this skin
   (not copied from a font file; at 5x7, digit shapes converge on similar forms), shown at 3x.
 - The colours: our own RGB565 values, one set per state.
@@ -39,6 +42,9 @@ FONT = {
     "/": ["....#", "....#", "...#.", "..#..", ".#...", "#....", "#...."],
 }
 
+# The corners outside the rounding, in every state: black.
+CORNER = 0x0000
+
 # Fill, border and label, per state: the skin's own RGB565 colours.
 COLOURS = {
     "normal": (0x10A2, 0x07FF, 0xFFDF),
@@ -55,20 +61,11 @@ def inside_rounded(x: int, y: int, inset: int) -> bool:
     left, top, right, bottom = inset, inset, WIDTH - 1 - inset, HEIGHT - 1 - inset
     if not (left <= x <= right and top <= y <= bottom):
         return False
+    # Distance past the nearest corner centre on each axis (0 along the straight edges).
     r = RADIUS - inset
-    corners = (
-        (left + r, top + r),
-        (right - r, top + r),
-        (left + r, bottom - r),
-        (right - r, bottom - r),
-    )
-    for cx, cy in corners:
-        in_x = (x < left + r and cx == left + r) or (x > right - r and cx == right - r)
-        in_y = (y < top + r and cy == top + r) or (y > bottom - r and cy == bottom - r)
-        dx, dy = (x - cx if in_x else 0), (y - cy if in_y else 0)
-        if dx and dy and dx * dx + dy * dy > r * r:
-            return False
-    return True
+    dx = max(left + r - x, 0, x - (right - r))
+    dy = max(top + r - y, 0, y - (bottom - r))
+    return dx * dx + dy * dy <= r * r
 
 
 def label_mask(text: str) -> set[tuple[int, int]]:
@@ -88,7 +85,7 @@ def label_mask(text: str) -> set[tuple[int, int]]:
 
 
 def art(label: str) -> str:
-    """One palette digit per pixel: 0 the stock corner colour, 1 fill, 2 border, 3 label."""
+    """One palette digit per pixel: 0 the corners, 1 fill, 2 border, 3 label."""
     mask = label_mask(label)
     digits = []
     for y in range(HEIGHT):
@@ -113,9 +110,7 @@ def image_edits(perform: dict[str, Any]) -> list[dict[str, Any]]:
         pixels = art(label)
         for state in pads["states"]:
             fill, border, text = COLOURS[state]
-            palette = [{"from": {"x": 0, "y": 0}}] + [
-                {"colour": f"0x{colour:04x}"} for colour in (fill, border, text)
-            ]
+            palette = [{"colour": f"0x{colour:04x}"} for colour in (CORNER, fill, border, text)]
             state_name = state.replace("_", " ")
             edits.append(
                 {
@@ -158,9 +153,25 @@ def recipe(perform: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
+    if len(sys.argv) != 3:
+        sys.exit("usage: python3 scripts/skins/perform_neon_pads.py <app root> <out.json>")
     root, out = Path(sys.argv[1]), Path(sys.argv[2])
     perform = json.loads((root / "catalog/screens/xdj700-v1.15/perform.json").read_text())
-    out.write_text(json.dumps(recipe(perform), indent=2) + "\n")
+    draft = recipe(perform)
+    if out.exists():
+        # Regenerating over a pinned recipe: unchanged, it keeps its pins; changed, it is a new
+        # draft to pin again.
+        current = json.loads(out.read_text())
+        if unpinned(current) == unpinned(draft):
+            print(f"{out}: unchanged, pins kept")
+            return
+        print(f"{out}: the art changed; pin it again with patch-cli precondition")
+    out.write_text(json.dumps(draft, indent=2) + "\n")
+
+
+def unpinned(recipe: dict[str, Any]) -> dict[str, Any]:
+    """`recipe` without its output pins (`expected`)."""
+    return {key: value for key, value in recipe.items() if key != "expected"}
 
 
 if __name__ == "__main__":
