@@ -138,7 +138,10 @@ their values, and the slots, with as many elements as there are labels.
 A skin is a look for one `screen`. It is named for what it looks like, never after another
 product, and carries no logos. The skin `stock` (the player's own look) is built in and has no
 file. The committed skin, [`perform-neon-pads`](../catalog/skins/perform-neon-pads.json), repaints
-PERFORM's six BEAT LOOP pads in all six states with its own art and the stock labels. The format:
+PERFORM's six BEAT LOOP pads in all six states with its own art and the stock labels; its art's
+source, the generator of its recipe, is
+[`scripts/skins/perform_neon_pads.py`](../scripts/skins/perform_neon_pads.py), under the skin's
+licence. The format:
 
 ```json
 {
