@@ -11,7 +11,7 @@ use patch_core::xdj700::{
     RecipeError, VERSION_STRING_OFFSET, check_composed, compose_recipes_to, decode_section,
     main_document, precondition_hashes,
 };
-use patch_schema::{ExpectedV2, Glyph, ImageEdit, Pixel, PixelBox, RecipeV2};
+use patch_schema::{ColourSource, ExpectedV2, Glyph, ImageEdit, Pixel, PixelBox, RecipeV2};
 
 const COMPOSITION: Composition<'static> = Composition {
     label: "Ver1.16",
@@ -67,8 +67,7 @@ fn edit(offset: usize, purpose: &str) -> ImageEdit {
                 height: 2,
             },
             alpha_hex: "f8008f".to_owned(),
-            colour_from: Some(Pixel { x: 1, y: 1 }),
-            colour: None,
+            colour: ColourSource::From(Pixel { x: 1, y: 1 }),
         }),
         purpose: purpose.to_owned(),
     }

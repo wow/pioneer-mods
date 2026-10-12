@@ -1,7 +1,7 @@
 //! Painting the author's own art in an image edit (`paint`) and a glyph in the author's own colour
 //! (`glyph.colour`): the JSON forms and the static checks. Needs no firmware.
 
-use patch_schema::{ImageEdit, PaletteEntry, Pixel, Rgb565};
+use patch_schema::{ColourSource, ImageEdit, PaletteEntry, Pixel, Rgb565};
 use serde_json::{Value, json};
 
 fn edit() -> Value {
@@ -44,10 +44,7 @@ fn a_paint_names_its_palette_and_a_glyph_may_carry_the_authors_colour() {
         [paint.palette[0], paint.palette[1], paint.palette[2]]
     );
     let glyph = edit.glyph.as_ref().expect("glyph");
-    assert_eq!(
-        (glyph.colour, glyph.colour_from),
-        (Some(Rgb565(0xffff)), None)
-    );
+    assert_eq!(glyph.colour, ColourSource::Colour(Rgb565(0xffff)));
     // The rows it may change: the paint box (rows 0 and 1) and the glyph box (row 2).
     let rows: Vec<(u32, std::ops::Range<u32>)> = edit.changed_rows();
     assert_eq!(rows, [(0, 1..4), (1, 1..4), (2, 0..2)]);
@@ -81,6 +78,24 @@ fn a_paint_names_its_palette_and_a_glyph_may_carry_the_authors_colour() {
     let mut other = self::edit();
     other["paint"]["pixels_hex"] = "012211".into();
     assert!(!checked(other).expect("valid").same_edit(&edit));
+    // The same pixels from a reordered palette with an unused entry: the same paint.
+    let mut reordered = self::edit();
+    reordered["paint"]["palette"] = json!([{ "from": { "x": 0, "y": 2 } }, { "colour": "0x0001" },
+                                          "keep", { "colour": "0x1f00" }]);
+    reordered["paint"]["pixels_hex"] = "230032".into();
+    assert!(checked(reordered).expect("valid").same_edit(&edit));
+
+    // Erasing alone is an edit: it removes a stock label.
+    let mut erase_only = self::edit();
+    let object = erase_only.as_object_mut().expect("edit");
+    object.remove("paint");
+    object.remove("glyph");
+    object.insert(
+        "erase".into(),
+        json!({ "x": 1, "y": 0, "width": 2, "height": 3 }),
+    );
+    let erase_only = checked(erase_only).expect("valid");
+    assert_eq!(erase_only.changed_rows(), [(0, 1..3), (1, 1..3), (2, 1..3)]);
 }
 
 #[test]
@@ -97,7 +112,7 @@ fn malformed_paints_and_glyph_colours_are_refused() {
             object.remove("paint");
             object.remove("glyph");
         },
-        "image_edits[0] neither paints nor draws a glyph",
+        "image_edits[0] neither erases, paints nor draws a glyph",
     );
     refused(
         &|e| e["glyph"]["colour_from"] = json!({ "x": 0, "y": 0 }),
@@ -139,7 +154,7 @@ fn malformed_paints_and_glyph_colours_are_refused() {
     );
     refused(
         &|e| e["paint"]["palette"][2] = json!({ "from": { "x": 4, "y": 0 } }),
-        "paint.palette (a from pixel) does not lie inside the 4x3 image",
+        "image_edits[0].paint.palette[2].from (4, 0) does not lie inside the 4x3 image",
     );
     refused(
         &|e| e["paint"]["palette"][1] = json!({ "colour": "0x1f0" }),

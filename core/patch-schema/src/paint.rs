@@ -61,23 +61,29 @@ pub struct Paint {
 }
 
 impl Paint {
-    /// The palette entry of each pixel, row by row (`None` unless every digit is hex and names
-    /// an entry).
-    pub fn entries(&self) -> Option<Vec<PaletteEntry>> {
+    /// The palette index of each pixel, row by row (`None` unless every digit is hex). The one
+    /// place the digits are read: validation and the engine both use it.
+    pub fn indices(&self) -> Option<Vec<u8>> {
         self.pixels_hex
             .chars()
-            .map(|digit| {
-                let index = digit.to_digit(16)? as usize;
-                self.palette.get(index).copied()
-            })
+            .map(|digit| digit.to_digit(16).map(|index| index as u8))
             .collect()
     }
 
-    /// Whether `other` paints the same: the same box, palette and digits (compared without regard
-    /// to case, as [`Paint::entries`] reads them).
+    /// The palette entry of each pixel, row by row (`None` unless every digit is hex and names
+    /// an entry).
+    pub fn entries(&self) -> Option<Vec<PaletteEntry>> {
+        self.indices()?
+            .into_iter()
+            .map(|index| self.palette.get(usize::from(index)).copied())
+            .collect()
+    }
+
+    /// Whether `other` paints the same: the same box, and on every pixel the same entry, however
+    /// either palette is ordered and whatever unused entries it holds.
     pub fn same(&self, other: &Paint) -> bool {
-        (self.at, &self.palette) == (other.at, &other.palette)
-            && self.pixels_hex.eq_ignore_ascii_case(&other.pixels_hex)
+        self.at == other.at
+            && matches!((self.entries(), other.entries()), (Some(a), Some(b)) if a == b)
     }
 
     /// Static checks for an image of `width` x `height`; `index` names the edit in errors.
@@ -87,30 +93,47 @@ impl Paint {
         width: u32,
         height: u32,
     ) -> Result<(), ImageEditError> {
-        let outside = |field| ImageEditError::OutsideImage {
-            index,
-            field,
-            width,
-            height,
-            needs: "",
-        };
         if !self.at.fits(width, height) {
-            return Err(outside("paint.at"));
+            return Err(ImageEditError::OutsideImage {
+                index,
+                field: "paint.at",
+                width,
+                height,
+                needs: "",
+            });
         }
         let len = self.palette.len();
         if len == 0 || len > MAX_PALETTE {
             return Err(ImageEditError::PaletteSize { index, len });
         }
-        let inside = |p: &Pixel| p.x < width && p.y < height;
-        if self
-            .palette
-            .iter()
-            .any(|entry| matches!(entry, PaletteEntry::From(p) if !inside(p)))
-        {
-            return Err(outside("paint.palette (a from pixel)"));
+        for (entry, palette_entry) in self.palette.iter().enumerate() {
+            if let PaletteEntry::From(Pixel { x, y }) = *palette_entry
+                && (x >= width || y >= height)
+            {
+                return Err(ImageEditError::FromOutsideImage {
+                    index,
+                    entry,
+                    x,
+                    y,
+                    width,
+                    height,
+                });
+            }
+        }
+        // One pass over the digits: their count, the first that names no entry, and whether any
+        // pixel changes.
+        let (mut found, mut paints) = (0usize, false);
+        for digit in self.pixels_hex.chars() {
+            found += 1;
+            let entry = digit
+                .to_digit(16)
+                .and_then(|entry| self.palette.get(entry as usize));
+            match entry {
+                None => return Err(ImageEditError::PaintDigit { index, digit, len }),
+                Some(entry) => paints |= *entry != PaletteEntry::Keep,
+            }
         }
         let expected = u64::from(self.at.width) * u64::from(self.at.height);
-        let found = self.pixels_hex.chars().count();
         if found as u64 != expected {
             return Err(ImageEditError::PaintLength {
                 index,
@@ -118,18 +141,7 @@ impl Paint {
                 found,
             });
         }
-        if let Some(digit) = self.pixels_hex.chars().find(|c| !c.is_ascii_hexdigit()) {
-            return Err(ImageEditError::PaintDigit { index, digit, len });
-        }
-        let entries = self.entries().ok_or_else(|| {
-            let digit = self
-                .pixels_hex
-                .chars()
-                .find(|c| c.to_digit(16).is_some_and(|d| d as usize >= len))
-                .unwrap_or('?');
-            ImageEditError::PaintDigit { index, digit, len }
-        })?;
-        if entries.iter().all(|entry| *entry == PaletteEntry::Keep) {
+        if !paints {
             return Err(ImageEditError::PaintsNothing { index });
         }
         Ok(())

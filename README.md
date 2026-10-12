@@ -44,8 +44,9 @@ This repository currently includes:
   rules (also the span's edges and the window's bytes) are in [docs/recipes.md](./docs/recipes.md).
   Precondition windows of all committed recipes are disjoint, except where one recipe repeats
   another's replacement exactly, so a recipe can build on another's change. Image edits relabel
-  buttons and other RGB565 images without publishing vendor pixels: the recipe carries only
-  coordinates and its own glyph mask.
+  or repaint buttons and other RGB565 images without publishing vendor pixels: the recipe carries
+  only coordinates and the author's own art, glyph masks and colours, and names any stock colour
+  it needs by a pixel's position.
   "Verified" means checked against the input and the recipe, not safe to flash. The start-up
   and update-path code is mapped only in emulation, as a protected set kept outside this
   repository: given it, `patch` and `precondition` refuse a recipe that overlaps it, and without

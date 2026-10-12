@@ -302,8 +302,8 @@ pub(super) fn rebuild_recipe(
             }
             // Images are clear of the replacements' windows and of each other (`validate`), so
             // each still holds its stock pixels here.
-            for (edit, image) in recipe.image_edits.iter().zip(images) {
-                changed.extend(apply_image_edit(edit, image, decoded));
+            for (index, (edit, image)) in recipe.image_edits.iter().zip(images).enumerate() {
+                changed.extend(apply_image_edit(index, edit, image, decoded)?);
             }
             block.set_reported_version(decoded, &recipe.reported_version)?;
             Ok::<_, RecipeError>(changed)

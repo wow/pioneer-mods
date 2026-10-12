@@ -205,7 +205,7 @@ guess. A recipe with image edits pins its output instead:
 | `offset`, `width`, `height` | The image: `width * height` 16-bit little-endian RGB565 pixels, rows `width` pixels apart, at a decoded-application offset. At most 1 MiB. |
 | `erase` | Optional. Each row of the box is refilled by interpolating between the stock pixels just left and right of it, which removes a label from a smooth background. The box needs a column of the image on each side. |
 | `paint` | Optional. The author's own art: `at` (a box of the image), a `palette` of 1 to 16 entries, and `pixels_hex`, one hex digit per pixel of the box, row by row, naming the palette entry painted there. An entry is `"keep"` (the stock pixel stays), `{"colour": "0x1f00"}` (the author's RGB565 colour) or `{"from": {"x": 0, "y": 0}}` (the colour of that stock pixel, read before anything changes: the way to keep a colour the screen depends on, such as the key colour that lets it show through, without publishing it). |
-| `glyph` | Optional (an edit paints, draws a glyph, or both). `at` and `alpha_hex`: the author's own coverage mask, one hex digit per pixel, row by row: `0` leaves the pixel, `f` paints it fully, and the digits between blend linearly (per channel, in fifteenths, rounded). |
+| `glyph` | Optional (an edit erases, paints or draws a glyph, or several of these). `at` and `alpha_hex`: the author's own coverage mask, one hex digit per pixel, row by row: `0` leaves the pixel, `f` paints it fully, and the digits between blend linearly (per channel, in fifteenths, rounded). |
 | `glyph.colour_from` or `glyph.colour` | Exactly one. `colour_from`: the stock pixel whose colour the glyph is drawn in, read before anything changes (for a relabelled button, a pixel inside a stroke of the old label). `colour`: the author's own RGB565 colour (`0x` and four hex digits). |
 | `purpose` | Why the image changes. |
 
@@ -222,9 +222,12 @@ The rules:
 - In order: every stock colour the edit names is read, then the box is erased, the art painted and
   the glyph drawn (blended over what is there by then).
 - The glyph mask and the painted art must be the author's own drawing, never traced from vendor
-  pixels. A stock colour is named by a pixel's position, never by its value. The format cannot
-  tell an author's colour or art from a copied one: this rule rests on the author's declaration
-  ([CONTRIBUTING.md](../CONTRIBUTING.md)) and on review.
+  pixels. A stock colour is named by a pixel's position, never by its value. The engine refuses an
+  author's `colour` (a palette entry, or a glyph's where it fully covers) when more than half of
+  the pixels it paints equal the stock pixels beneath: a colour the image needs from stock goes
+  through `from` or `colour_from`. Beyond that, the format cannot tell an author's art from a
+  copied one: the rule rests on the author's declaration ([CONTRIBUTING.md](../CONTRIBUTING.md))
+  and on review.
 - Images are subject to the protected ranges and the [protected set](#the-protected-set), like
   replacements.
 - The output may differ from stock only in the edited rows: per row, the span covering the

@@ -8,7 +8,8 @@ mod common;
 use common::recipe::{Fixture, stock_application};
 use patch_core::xdj700::{RecipeChecks, VERSION_STRING_OFFSET, precondition_hashes};
 use patch_schema::{
-    ExpectedV2, Glyph, ImageEdit, Paint, PaletteEntry, Pixel, PixelBox, RecipeV2, Rgb565, blend,
+    ColourSource, ExpectedV2, Glyph, ImageEdit, Paint, PaletteEntry, Pixel, PixelBox, RecipeV2,
+    Rgb565, blend,
 };
 
 /// A 17x8 image of the synthetic application's byte pattern, at 0xd00.
@@ -131,8 +132,7 @@ fn erases_then_paints_then_draws_the_glyph_in_the_authors_colour() {
                 height: 1,
             },
             alpha_hex: "f8".to_owned(),
-            colour_from: None,
-            colour: Some(Rgb565(0xffff)),
+            colour: ColourSource::Colour(Rgb565(0xffff)),
         }),
     );
     erasing.erase = Some(PixelBox {
@@ -159,4 +159,88 @@ fn erases_then_paints_then_draws_the_glyph_in_the_authors_colour() {
     // The glyph: full coverage paints the author's colour, half blends over the painted pixel.
     assert_eq!(pixel(&output, 3, 1), 0xffff);
     assert_eq!(pixel(&output, 4, 1), blend(pixel(&stock, 0, 0), 0xffff, 8));
+}
+
+/// The draft's verdict on `edits`.
+fn draft(fixture: &Fixture, edits: Vec<ImageEdit>) -> Result<(), String> {
+    let mut recipe = fixture.recipe(Vec::new());
+    recipe.image_edits = edits;
+    recipe.expected = Some(ExpectedV2 {
+        application_sha256: Some("00".repeat(32)),
+        upd_sha256: None,
+    });
+    precondition_hashes(
+        &recipe,
+        &fixture.target(),
+        &fixture.update,
+        RecipeChecks::NONE,
+    )
+    .map(drop)
+    .map_err(|error| error.to_string())
+}
+
+/// A paint of the 3x1 box at (2, 1) with `palette` and `digits`.
+fn row(palette: Vec<PaletteEntry>, digits: &str) -> Paint {
+    Paint {
+        at: PixelBox {
+            x: 2,
+            y: 1,
+            width: 3,
+            height: 1,
+        },
+        palette,
+        pixels_hex: digits.to_owned(),
+    }
+}
+
+#[test]
+fn refuses_the_authors_colours_where_they_mostly_match_stock() {
+    let fixture = Fixture::new();
+    let stock = stock_application();
+    let under = |x: u32| Rgb565(pixel(&stock, x, 1));
+    assert_ne!(under(2), under(3));
+
+    // Entry 1 is the stock colour of (2, 1) and paints only there: 1 of 1 matches.
+    let copied = row(
+        vec![
+            PaletteEntry::Keep,
+            PaletteEntry::Colour(under(2)),
+            PaletteEntry::Colour(Rgb565(0x0841)),
+        ],
+        "122",
+    );
+    let error = draft(&fixture, vec![edit(Some(copied), None)]).expect_err("refused");
+    assert!(
+        error.contains("image_edits[0].paint.palette[1]: 1 of the 1 pixels"),
+        "{error}"
+    );
+    // The same colour over three pixels, matching only one of them: at most half, accepted.
+    let spread = row(vec![PaletteEntry::Colour(under(2))], "000");
+    draft(&fixture, vec![edit(Some(spread), None)]).expect("accepted");
+    // The same stock colour named by position is never refused.
+    let by_position = row(vec![PaletteEntry::From(Pixel { x: 2, y: 1 })], "000");
+    draft(&fixture, vec![edit(Some(by_position), None)]).expect("accepted");
+
+    // A glyph in the author's colour equal to the stock pixel it fully covers.
+    let glyph = |colour| Glyph {
+        at: PixelBox {
+            x: 3,
+            y: 1,
+            width: 2,
+            height: 1,
+        },
+        alpha_hex: "f8".to_owned(),
+        colour,
+    };
+    let error = draft(
+        &fixture,
+        vec![edit(None, Some(glyph(ColourSource::Colour(under(3)))))],
+    )
+    .expect_err("refused");
+    assert!(
+        error.contains("image_edits[0].glyph.colour: 1 of the 1 pixels"),
+        "{error}"
+    );
+    let from = ColourSource::From(Pixel { x: 3, y: 1 });
+    draft(&fixture, vec![edit(None, Some(glyph(from)))]).expect("accepted");
 }

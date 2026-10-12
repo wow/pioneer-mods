@@ -10,8 +10,9 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 - Image edits may paint the author's own art (`paint`): a box of the image, a palette of 1 to 16
   entries (`"keep"`, the author's RGB565 `colour`, or a stock pixel's colour by its position,
   `from`, read before anything changes) and one hex digit per pixel naming the entry. The glyph is
-  optional (an edit paints, draws a glyph, or both) and may be drawn in the author's own `colour`
-  instead of a stock pixel's. Order: erase, paint, glyph. Existing recipes are unchanged
+  optional (an edit erases, paints or draws a glyph, or several of these) and may be drawn in the
+  author's own `colour` instead of a stock pixel's. Order: erase, paint, glyph. An author's colour
+  that mostly equals the stock pixels it replaces is refused. Existing recipes are unchanged
   (`patch_schema::Paint`, `docs/recipes.md`, "Image edits").
 - Screen slots may name their images (`slots.<name>.images`): the size and format, the states,
   and per element its position on the screen and its image per state by decoded-application

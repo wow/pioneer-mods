@@ -1,11 +1,14 @@
 //! Image edits in schema-v2 recipes: changes to a 16-bit RGB565 image stored in the decoded
 //! application, described so that the recipe carries **no stock pixels**.
 //!
-//! An edit first erases a box: each row of the box is refilled by interpolating between the stock
-//! pixels just left and right of it, which removes a label from a smooth background. It then draws
-//! a glyph: an alpha mask the recipe's author drew (one hex digit of coverage per pixel), in the
-//! colour of one stock pixel the recipe names by its position. Everything the edit takes from the
-//! image is read from the owner's own file at patch time. No hash of the image is published:
+//! An edit erases a box, paints art, draws a glyph, or does several of these, in that order. The
+//! erase refills each row of a box by interpolating between the stock pixels just left and right
+//! of it, which removes a label from a smooth background. The paint ([`Paint`]) is the author's own
+//! art: one hex digit per pixel naming a palette entry (the author's colour, a stock pixel's colour
+//! by its position, or the stock pixel kept). The glyph is an alpha mask the author drew (one hex
+//! digit of coverage per pixel), in the author's own colour or in that of a stock pixel named by
+//! its position. Every stock colour the edit uses is read from the owner's own file at patch time,
+//! before anything changes; the recipe carries none. No hash of the image is published:
 //! anyone could check a guess at the stock pixels against it, and a rendered label can be easy to
 //! guess. The input and the stock application are pinned by SHA-256, so the image at `offset` is
 //! fixed, and a recipe with image edits must pin its output (`expected.application_sha256`), which
@@ -14,7 +17,8 @@
 //! The pixel arithmetic is fixed here so that every front end produces the same bytes:
 //! [`ImageEdit::erase_row`] and [`blend`].
 
-use crate::paint::{Paint, Rgb565};
+use crate::glyph::Glyph;
+use crate::paint::Paint;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
@@ -70,26 +74,6 @@ pub struct Pixel {
     pub y: u32,
 }
 
-/// A glyph: the author's own coverage mask, drawn in the author's own colour or in the colour of
-/// one stock pixel.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Glyph {
-    /// Where the mask goes in the image.
-    pub at: PixelBox,
-    /// One hexadecimal digit per pixel, row by row: `0` leaves the pixel as it is, `f` paints it
-    /// fully in the glyph colour, and the digits between blend linearly.
-    pub alpha_hex: String,
-    /// The stock pixel whose colour the glyph is drawn in, read before anything changes (for a
-    /// relabelled button, a pixel inside a stroke of the old label). Exactly one of this and
-    /// `colour`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub colour_from: Option<Pixel>,
-    /// The author's own colour for the glyph.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub colour: Option<Rgb565>,
-}
-
 /// Why an image edit is malformed; `index` is its position in `image_edits`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ImageEditError {
@@ -120,10 +104,20 @@ pub enum ImageEditError {
     AlphaNotHex { index: usize },
     #[error("image_edits[{index}].glyph.alpha_hex paints no pixel")]
     EmptyGlyph { index: usize },
-    #[error("image_edits[{index}] neither paints nor draws a glyph")]
+    #[error("image_edits[{index}] neither erases, paints nor draws a glyph")]
     NothingToDraw { index: usize },
-    #[error("image_edits[{index}].glyph needs exactly one of colour and colour_from")]
-    GlyphColour { index: usize },
+    #[error(
+        "image_edits[{index}].paint.palette[{entry}].from ({x}, {y}) does not lie inside the \
+         {width}x{height} image"
+    )]
+    FromOutsideImage {
+        index: usize,
+        entry: usize,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    },
     #[error("image_edits[{index}].paint.palette must hold 1 to 16 entries, not {len}")]
     PaletteSize { index: usize, len: usize },
     #[error(
@@ -178,8 +172,9 @@ impl PixelBox {
 }
 
 impl ImageEdit {
-    /// Whether `other` is the same edit: the same image, boxes, mask (its hex digits compared
-    /// without regard to case, as [`ImageEdit::alpha`] reads them) and colour pixel; only the
+    /// Whether `other` is the same edit: the same image and erase box, the same paint (on every
+    /// pixel the same entry, [`Paint::same`]) and the same glyph (box, colour, and mask, its hex
+    /// digits compared without regard to case, as [`ImageEdit::alpha`] reads them); only the
     /// purpose may differ. A composed build applies it once.
     pub fn same_edit(&self, other: &ImageEdit) -> bool {
         let same_paint = match (&self.paint, &other.paint) {
@@ -189,8 +184,7 @@ impl ImageEdit {
         };
         let same_glyph = match (&self.glyph, &other.glyph) {
             (Some(glyph), Some(other)) => {
-                (glyph.at, glyph.colour_from, glyph.colour)
-                    == (other.at, other.colour_from, other.colour)
+                (glyph.at, glyph.colour) == (other.at, other.colour)
                     && glyph.alpha_hex.eq_ignore_ascii_case(&other.alpha_hex)
             }
             (None, None) => true,
@@ -304,7 +298,7 @@ impl ImageEdit {
                 ));
             }
         }
-        if self.paint.is_none() && self.glyph.is_none() {
+        if self.erase.is_none() && self.paint.is_none() && self.glyph.is_none() {
             return Err(ImageEditError::NothingToDraw { index });
         }
         if let Some(paint) = &self.paint {
@@ -315,42 +309,6 @@ impl ImageEdit {
         }
         if self.purpose.trim().is_empty() {
             return Err(ImageEditError::EmptyPurpose { index });
-        }
-        Ok(())
-    }
-}
-
-impl ImageEdit {
-    fn validate_glyph(&self, index: usize, glyph: &Glyph) -> Result<(), ImageEditError> {
-        let outside = |field| ImageEditError::OutsideImage {
-            index,
-            field,
-            width: self.width,
-            height: self.height,
-            needs: "",
-        };
-        if !glyph.at.fits(self.width, self.height) {
-            return Err(outside("glyph.at"));
-        }
-        match (glyph.colour_from, glyph.colour) {
-            (Some(from), None) if from.x >= self.width || from.y >= self.height => {
-                return Err(outside("glyph.colour_from"));
-            }
-            (Some(_), None) | (None, Some(_)) => {}
-            _ => return Err(ImageEditError::GlyphColour { index }),
-        }
-        let expected = u64::from(glyph.at.width) * u64::from(glyph.at.height);
-        let found = glyph.alpha_hex.chars().count();
-        if found as u64 != expected {
-            return Err(ImageEditError::AlphaLength {
-                index,
-                expected,
-                found,
-            });
-        }
-        let alpha = self.alpha().ok_or(ImageEditError::AlphaNotHex { index })?;
-        if alpha.iter().all(|&a| a == 0) {
-            return Err(ImageEditError::EmptyGlyph { index });
         }
         Ok(())
     }
