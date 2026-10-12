@@ -3,13 +3,17 @@ use thiserror::Error;
 
 pub mod across;
 pub mod catalog;
+pub mod glyph;
 pub mod image;
+pub mod paint;
 pub mod pattern;
 pub mod v2;
 pub mod windows;
 
 pub use across::{WindowOverlap, check_windows_across};
-pub use image::{Glyph, ImageEdit, ImageEditError, MAX_IMAGE_BYTES, Pixel, PixelBox, blend};
+pub use glyph::{ColourSource, Glyph};
+pub use image::{ImageEdit, ImageEditError, MAX_IMAGE_BYTES, Pixel, PixelBox, blend, image_bytes};
+pub use paint::{MAX_PALETTE, Paint, PaletteEntry, Rgb565};
 pub use v2::{
     ExpectedV2, MAX_PRECONDITION_LEN, MIN_PRECONDITION_LEN, Precondition, RecipeV2, RecipeV2Error,
     Replacement, SCHEMA_VERSION_V2, SchemaVersionProbe, TargetV2, bare_version_number,

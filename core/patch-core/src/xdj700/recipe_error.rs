@@ -110,6 +110,19 @@ pub enum RecipeError {
         written: usize,
     },
 
+    #[error(
+        "image_edits[{index}].{field}: {matching} of the {painted} pixels it paints in the \
+         author's colour equal the stock pixels there, so the recipe would publish them; at most \
+         half may, so name a colour the image needs by a pixel's position (`from`, `colour_from`)"
+    )]
+    PaintMatchesStock {
+        index: usize,
+        /// The palette entry (`paint.palette[i]`) or `glyph.colour`.
+        field: String,
+        matching: usize,
+        painted: usize,
+    },
+
     /// The window's actual hash is not reported: this check cannot see other recipes' windows,
     /// and an error is easily pasted somewhere public. `patch-cli precondition` computes hashes
     /// after also checking the committed recipes.
