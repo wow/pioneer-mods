@@ -328,7 +328,8 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
 2. Emulator acceptance harness: scripted, asserting tests per feature and screen. The format is
    implemented ([acceptance.md](./acceptance.md)), and so is the runner (`patch-cli accept`), with
    the first tests: the BEAT LOOP pads' lengths and lit pad, on stock, stage 5 and stage 7.
-3. Screen catalogue for the XDJ-700: `main` and `perform`, with evidence.
+3. Screen catalogue for the XDJ-700: `main` and `perform`, with evidence. PERFORM's BEAT LOOP pads
+   name their images and boxes ([catalog.md](./catalog.md#screen)); `main` names no slot yet.
 4. First per-screen skins (PERFORM, main), from original art or owner-local transforms.
 5. Code fragments, starting with the lit-pad rule.
 6. The XDJ-1000MK2 v1.45 as the second player.

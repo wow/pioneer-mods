@@ -204,6 +204,55 @@ impl Catalog {
                     problem: format!("player {} does not list it", player.id),
                 });
             }
+            let (width, height) = (player.screen_class.width, player.screen_class.height);
+            for (name, slot) in &screen.slots {
+                let Some(images) = &slot.images else { continue };
+                for (index, element) in images.elements.iter().enumerate() {
+                    if !images.area(element).fits(width, height) {
+                        return Err(CatalogError::Inconsistent {
+                            entry: screen_entry(screen),
+                            problem: format!(
+                                "slot {name}: elements[{index}] is not on the {width}x{height} \
+                                 screen"
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+        self.check_slot_images_apart()
+    }
+
+    /// No two slot images of one player overlap, across its slots and screens: each belongs to
+    /// one slot, and so to the skins of one screen.
+    fn check_slot_images_apart(&self) -> Result<(), CatalogError> {
+        for player in &self.players {
+            let mut images = Vec::new();
+            for screen in self.screens.iter().filter(|s| s.player == player.id) {
+                for (name, slot) in &screen.slots {
+                    let Some(slot_images) = &slot.images else {
+                        continue;
+                    };
+                    for image in slot_images.images() {
+                        let start = u64::from(image.offset);
+                        let owner = format!(
+                            "{}.{name} elements[{}] {}",
+                            screen.id, image.element, image.state
+                        );
+                        images.push((start, start + slot_images.image_len(), owner));
+                    }
+                }
+            }
+            images.sort_unstable_by(|a, b| (a.0, &a.2).cmp(&(b.0, &b.2)));
+            if let Some(pair) = images.windows(2).find(|pair| pair[1].0 < pair[0].1) {
+                return Err(CatalogError::Inconsistent {
+                    entry: player_entry(&player.id),
+                    problem: format!(
+                        "the images of {} ({:#x}) and {} ({:#x}) overlap",
+                        pair[0].2, pair[0].0, pair[1].2, pair[1].0
+                    ),
+                });
+            }
         }
         Ok(())
     }

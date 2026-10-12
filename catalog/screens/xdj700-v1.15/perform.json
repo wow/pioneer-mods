@@ -6,7 +6,28 @@
   "slots": {
     "beat_loop.pad": {
       "count": 6,
-      "description": "The six BEAT LOOP buttons, left to right."
+      "description": "The six BEAT LOOP buttons, left to right.",
+      "images": {
+        "width": 80,
+        "height": 53,
+        "pixels": "rgb565",
+        "states": ["normal", "pressed", "greyed_out", "lit", "lit_pressed", "lit_greyed_out"],
+        "elements": [
+          { "at": { "x": 116, "y": 154 },
+            "images": { "normal": "0x360240", "pressed": "0x362360", "greyed_out": "0x364480", "lit": "0x3665a0", "lit_pressed": "0x3686c0", "lit_greyed_out": "0x36a7e0" } },
+          { "at": { "x": 201, "y": 154 },
+            "images": { "normal": "0x35c000", "pressed": "0x35e120", "greyed_out": "0x36c900", "lit": "0x36ea20", "lit_pressed": "0x370b40", "lit_greyed_out": "0x372c60" } },
+          { "at": { "x": 285, "y": 154 },
+            "images": { "normal": "0x374d80", "pressed": "0x376ea0", "greyed_out": "0x378fc0", "lit": "0x37b0e0", "lit_pressed": "0x37d200", "lit_greyed_out": "0x37f320" } },
+          { "at": { "x": 369, "y": 154 },
+            "images": { "normal": "0x381440", "pressed": "0x383560", "greyed_out": "0x385680", "lit": "0x3877a0", "lit_pressed": "0x3898c0", "lit_greyed_out": "0x38b9e0" } },
+          { "at": { "x": 453, "y": 154 },
+            "images": { "normal": "0x38db00", "pressed": "0x38fc20", "greyed_out": "0x391d40", "lit": "0x393e60", "lit_pressed": "0x395f80", "lit_greyed_out": "0x3980a0" } },
+          { "at": { "x": 537, "y": 154 },
+            "images": { "normal": "0x34f940", "pressed": "0x351a60", "greyed_out": "0x353b80", "lit": "0x355ca0", "lit_pressed": "0x357dc0", "lit_greyed_out": "0x359ee0" } }
+        ],
+        "evidence": "In emulation (2026-10-12, stock v1.15, the 2DG blit log): each pad's normal, lit and greyed-out images are drawn into the screen at its position, 80x53, with a colour key (the screen shows through where an image holds the key colour). The pressed, lit and pressed, and lit and greyed-out images were not drawn in these runs (touches held 3 s, with and without a track); their names follow their order in the block, as for the others. The 36 images are one block (0x34F940 to 0x39A1C0) that no code reads at start-up, in update mode, or while installing in either direction (a CPU read watch in the stage-7 rehearsals, docs/xdj700-flashing.md, section 5; the display's 2D engine, which draws them, is not watched); they are drawn when PERFORM is."
+      }
     }
   },
   "maintainer": "wow"

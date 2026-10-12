@@ -5,6 +5,7 @@ use super::entry::{
     CatalogEntry, EntryError, check_id, check_name, check_player_id, check_schema_version,
     check_text, unique_keys,
 };
+use super::screen_images::SlotImages;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -27,6 +28,9 @@ pub struct Slot {
     /// How many elements the slot has (six BEAT LOOP buttons): a feature gives one label each.
     pub count: u32,
     pub description: String,
+    /// Where the slot's elements are drawn, and from which images, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<SlotImages>,
 }
 
 impl CatalogEntry for Screen {
@@ -54,6 +58,9 @@ impl CatalogEntry for Screen {
                 });
             }
             check_text(&format!("slots.{name}.description"), &slot.description)?;
+            if let Some(images) = &slot.images {
+                images.validate(&format!("slots.{name}.images"), slot.count)?;
+            }
         }
         check_text("maintainer", &self.maintainer)
     }

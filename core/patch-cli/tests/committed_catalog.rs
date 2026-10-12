@@ -177,11 +177,13 @@ fn a_missing_recipe_or_an_inconsistent_catalog_is_refused() {
     let screen = root
         .path()
         .join("catalog/screens/xdj700-v1.15/perform.json");
-    let text = std::fs::read_to_string(&screen).expect("read");
-    write_bytes(
-        &screen,
-        text.replace("\"count\": 6", "\"count\": 5").as_bytes(),
-    );
+    // Five pads (and no images, which would be six): the features' six labels no longer fit.
+    let mut perform: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&screen).expect("read")).expect("screen");
+    let pad = &mut perform["slots"]["beat_loop.pad"];
+    pad["count"] = 5.into();
+    pad.as_object_mut().expect("slot").remove("images");
+    write_bytes(&screen, &serde_json::to_vec(&perform).expect("json"));
     let message = refusal(root.path());
     assert!(
         message.contains("6 labels for perform.beat_loop.pad, which has 5"),
