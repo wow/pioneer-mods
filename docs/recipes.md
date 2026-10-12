@@ -222,7 +222,9 @@ The rules:
 - In order: every stock colour the edit names is read, then the box is erased, the art painted and
   the glyph drawn (blended over what is there by then).
 - The glyph mask and the painted art must be the author's own drawing, never traced from vendor
-  pixels. A stock colour is named by a pixel's position, never by its value.
+  pixels. A stock colour is named by a pixel's position, never by its value. The format cannot
+  tell an author's colour or art from a copied one: this rule rests on the author's declaration
+  ([CONTRIBUTING.md](../CONTRIBUTING.md)) and on review.
 - Images are subject to the protected ranges and the [protected set](#the-protected-set), like
   replacements.
 - The output may differ from stock only in the edited rows: per row, the span covering the
