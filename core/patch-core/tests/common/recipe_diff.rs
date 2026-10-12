@@ -67,7 +67,11 @@ fn label_box_holding(recipe: &RecipeV2, offset: usize) -> Option<usize> {
         };
         let pixel = at / 2;
         let (x, y) = (pixel % u64::from(edit.width), pixel / u64::from(edit.width));
-        let boxes = [edit.erase.as_ref(), Some(&edit.glyph.at)];
+        let boxes = [
+            edit.erase.as_ref(),
+            edit.paint.as_ref().map(|paint| &paint.at),
+            edit.glyph.as_ref().map(|glyph| &glyph.at),
+        ];
         y < u64::from(edit.height)
             && boxes.into_iter().flatten().any(|pixels| {
                 u32::try_from(x).is_ok_and(|x| pixels.columns().contains(&x))

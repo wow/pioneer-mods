@@ -1,11 +1,12 @@
 //! Image edits of schema-v2 recipes on the stock application ([`patch_schema::ImageEdit`]): where
-//! an image lies and the edited pixels. The edit reads every pixel it uses from the owner's file;
-//! the recipe carries only coordinates and the author's own glyph mask, and no hash of the image
-//! (the recipe's output pin checks the edit instead).
+//! an image lies and the edited pixels. The edit reads every stock pixel it uses from the owner's
+//! file; the recipe carries only coordinates, the author's own art, mask and colours, and no hash
+//! of the image (the recipe's output pin checks the edit instead). In order: every stock colour
+//! the edit names is read, then the box is erased, the art painted and the glyph drawn.
 
 use super::recipe_checks::{bounded, out_of_bounds};
 use super::recipe_error::RecipeError;
-use patch_schema::{ImageEdit, WindowOwner, blend};
+use patch_schema::{ImageEdit, PaletteEntry, WindowOwner, blend};
 use std::ops::Range;
 
 /// The edit's image, if it lies inside an application of `application_len`.
@@ -40,8 +41,26 @@ pub(super) fn apply_image_edit(
         let i = at(x, y);
         image[i..i + 2].copy_from_slice(&pixel.to_le_bytes());
     };
-    // Read before anything changes.
-    let colour = get(image, edit.glyph.colour_from.x, edit.glyph.colour_from.y);
+    // Every stock colour the edit uses is read before anything changes.
+    let glyph_colour = edit
+        .glyph
+        .as_ref()
+        .map(|glyph| match (glyph.colour, glyph.colour_from) {
+            (Some(colour), _) => colour.0,
+            (None, Some(from)) => get(image, from.x, from.y),
+            (None, None) => unreachable!("validated glyph colour"),
+        });
+    let palette: Option<Vec<Option<u16>>> = edit.paint.as_ref().map(|paint| {
+        paint
+            .palette
+            .iter()
+            .map(|entry| match entry {
+                PaletteEntry::Keep => None,
+                PaletteEntry::Colour(colour) => Some(colour.0),
+                PaletteEntry::From(from) => Some(get(image, from.x, from.y)),
+            })
+            .collect()
+    });
     if let Some(erase) = &edit.erase {
         for y in erase.rows() {
             let left = get(image, erase.x - 1, y);
@@ -52,16 +71,31 @@ pub(super) fn apply_image_edit(
             }
         }
     }
-    let alpha = edit.alpha().expect("validated mask");
-    let glyph = edit.glyph.at;
-    for (i, &a) in alpha.iter().enumerate() {
-        if a == 0 {
-            continue;
+    if let (Some(paint), Some(palette)) = (&edit.paint, &palette) {
+        let box_width = paint.at.width as usize;
+        let digits = paint
+            .pixels_hex
+            .chars()
+            .map(|d| d.to_digit(16).expect("validated digit"));
+        for (i, digit) in digits.enumerate() {
+            if let Some(colour) = palette[digit as usize] {
+                let x = paint.at.x + (i % box_width) as u32;
+                let y = paint.at.y + (i / box_width) as u32;
+                put(image, x, y, colour);
+            }
         }
-        let x = glyph.x + (i % glyph.width as usize) as u32;
-        let y = glyph.y + (i / glyph.width as usize) as u32;
-        let pixel = blend(get(image, x, y), colour, a);
-        put(image, x, y, pixel);
+    }
+    if let (Some(glyph), Some(colour)) = (&edit.glyph, glyph_colour) {
+        let alpha = edit.alpha().expect("validated mask");
+        for (i, &a) in alpha.iter().enumerate() {
+            if a == 0 {
+                continue;
+            }
+            let x = glyph.at.x + (i % glyph.at.width as usize) as u32;
+            let y = glyph.at.y + (i / glyph.at.width as usize) as u32;
+            let pixel = blend(get(image, x, y), colour, a);
+            put(image, x, y, pixel);
+        }
     }
     edit.changed_rows()
         .into_iter()

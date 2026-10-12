@@ -58,7 +58,8 @@ fn edit(offset: usize, purpose: &str) -> ImageEdit {
             width: 6,
             height: 3,
         }),
-        glyph: Glyph {
+        paint: None,
+        glyph: Some(Glyph {
             at: PixelBox {
                 x: 5,
                 y: 3,
@@ -66,8 +67,9 @@ fn edit(offset: usize, purpose: &str) -> ImageEdit {
                 height: 2,
             },
             alpha_hex: "f8008f".to_owned(),
-            colour_from: Pixel { x: 1, y: 1 },
-        },
+            colour_from: Some(Pixel { x: 1, y: 1 }),
+            colour: None,
+        }),
         purpose: purpose.to_owned(),
     }
 }
@@ -143,7 +145,8 @@ fn an_exact_repeat_and_the_same_image_edit_are_applied_once() {
     // The same replacement and the same edit (only the purpose and the mask's letter case
     // differ), plus one of its own.
     let mut same = edit(0xd00, "b's label");
-    same.glyph.alpha_hex = same.glyph.alpha_hex.to_uppercase();
+    let glyph = same.glyph.as_mut().expect("a glyph");
+    glyph.alpha_hex = glyph.alpha_hex.to_uppercase();
     let b = with_image(&fixture, "b", same, &[0x900, 0xa00]);
 
     let composed = compose(&fixture, &[a.clone(), b]).expect("compose");

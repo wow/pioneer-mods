@@ -14,6 +14,7 @@
 //! The pixel arithmetic is fixed here so that every front end produces the same bytes:
 //! [`ImageEdit::erase_row`] and [`blend`].
 
+use crate::paint::{Paint, Rgb565};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
@@ -38,11 +39,15 @@ pub struct ImageEdit {
     pub width: u32,
     /// Image height in pixels.
     pub height: u32,
-    /// The box to erase before the glyph is drawn, if any.
+    /// The box to erase first, if any.
     #[serde(default)]
     pub erase: Option<PixelBox>,
-    /// The glyph to draw.
-    pub glyph: Glyph,
+    /// The author's own art to paint next, if any ([`Paint`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paint: Option<Paint>,
+    /// The glyph to draw last, if any. An edit paints, draws a glyph, or both.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glyph: Option<Glyph>,
     /// Why this image changes.
     pub purpose: String,
 }
@@ -65,7 +70,8 @@ pub struct Pixel {
     pub y: u32,
 }
 
-/// A glyph: the author's own coverage mask, drawn in the colour of one stock pixel.
+/// A glyph: the author's own coverage mask, drawn in the author's own colour or in the colour of
+/// one stock pixel.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Glyph {
@@ -75,8 +81,13 @@ pub struct Glyph {
     /// fully in the glyph colour, and the digits between blend linearly.
     pub alpha_hex: String,
     /// The stock pixel whose colour the glyph is drawn in, read before anything changes (for a
-    /// relabelled button, a pixel inside a stroke of the old label).
-    pub colour_from: Pixel,
+    /// relabelled button, a pixel inside a stroke of the old label). Exactly one of this and
+    /// `colour`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_from: Option<Pixel>,
+    /// The author's own colour for the glyph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Rgb565>,
 }
 
 /// Why an image edit is malformed; `index` is its position in `image_edits`.
@@ -109,6 +120,32 @@ pub enum ImageEditError {
     AlphaNotHex { index: usize },
     #[error("image_edits[{index}].glyph.alpha_hex paints no pixel")]
     EmptyGlyph { index: usize },
+    #[error("image_edits[{index}] neither paints nor draws a glyph")]
+    NothingToDraw { index: usize },
+    #[error("image_edits[{index}].glyph needs exactly one of colour and colour_from")]
+    GlyphColour { index: usize },
+    #[error("image_edits[{index}].paint.palette must hold 1 to 16 entries, not {len}")]
+    PaletteSize { index: usize, len: usize },
+    #[error(
+        "image_edits[{index}].paint.pixels_hex must hold one hex digit per painted pixel \
+         ({expected}), found {found} characters"
+    )]
+    PaintLength {
+        index: usize,
+        expected: u64,
+        found: usize,
+    },
+    #[error(
+        "image_edits[{index}].paint.pixels_hex holds {digit:?}, which names no entry of the \
+         {len}-entry palette"
+    )]
+    PaintDigit {
+        index: usize,
+        digit: char,
+        len: usize,
+    },
+    #[error("image_edits[{index}].paint keeps every pixel")]
+    PaintsNothing { index: usize },
     #[error("image_edits[{index}].purpose must not be empty")]
     EmptyPurpose { index: usize },
     #[error("image_edits[{index}] starts before the end of image_edits[{previous}]")]
@@ -121,7 +158,7 @@ pub enum ImageEditError {
 }
 
 impl PixelBox {
-    fn fits(&self, width: u32, height: u32) -> bool {
+    pub(crate) fn fits(&self, width: u32, height: u32) -> bool {
         self.width > 0
             && self.height > 0
             && u64::from(self.x) + u64::from(self.width) <= u64::from(width)
@@ -145,11 +182,24 @@ impl ImageEdit {
     /// without regard to case, as [`ImageEdit::alpha`] reads them) and colour pixel; only the
     /// purpose may differ. A composed build applies it once.
     pub fn same_edit(&self, other: &ImageEdit) -> bool {
-        let (glyph, other_glyph) = (&self.glyph, &other.glyph);
+        let same_paint = match (&self.paint, &other.paint) {
+            (Some(paint), Some(other)) => paint.same(other),
+            (None, None) => true,
+            _ => false,
+        };
+        let same_glyph = match (&self.glyph, &other.glyph) {
+            (Some(glyph), Some(other)) => {
+                (glyph.at, glyph.colour_from, glyph.colour)
+                    == (other.at, other.colour_from, other.colour)
+                    && glyph.alpha_hex.eq_ignore_ascii_case(&other.alpha_hex)
+            }
+            (None, None) => true,
+            _ => false,
+        };
         (self.offset, self.width, self.height, self.erase)
             == (other.offset, other.width, other.height, other.erase)
-            && (glyph.at, glyph.colour_from) == (other_glyph.at, other_glyph.colour_from)
-            && glyph.alpha_hex.eq_ignore_ascii_case(&other_glyph.alpha_hex)
+            && same_paint
+            && same_glyph
     }
 
     /// The image's size in bytes, or `None` if it overflows.
@@ -168,9 +218,11 @@ impl ImageEdit {
         Some(self.offset..self.offset.checked_add(self.len()?)?)
     }
 
-    /// The glyph's coverage per pixel, row by row (`None` unless the mask is valid hex).
+    /// The glyph's coverage per pixel, row by row (`None` without a glyph, or unless the mask is
+    /// valid hex).
     pub fn alpha(&self) -> Option<Vec<u8>> {
         self.glyph
+            .as_ref()?
             .alpha_hex
             .chars()
             .map(|digit| digit.to_digit(16).map(|value| value as u8))
@@ -178,10 +230,16 @@ impl ImageEdit {
     }
 
     /// For each image row the edit may change, the columns it may change: the span covering the
-    /// erase box and the glyph box on that row (so any columns between two separated boxes are
+    /// erase, paint and glyph boxes on that row (so any columns between two separated boxes are
     /// included). A validated edit only; rows in ascending order.
     pub fn changed_rows(&self) -> Vec<(u32, Range<u32>)> {
-        let boxes: Vec<PixelBox> = self.erase.iter().copied().chain([self.glyph.at]).collect();
+        let boxes: Vec<PixelBox> = self
+            .erase
+            .iter()
+            .copied()
+            .chain(self.paint.as_ref().map(|paint| paint.at))
+            .chain(self.glyph.as_ref().map(|glyph| glyph.at))
+            .collect();
         let (first, last) = boxes.iter().fold((u32::MAX, 0), |(first, last), b| {
             (first.min(b.y), last.max(b.rows().end))
         });
@@ -246,15 +304,43 @@ impl ImageEdit {
                 ));
             }
         }
-        if !self.glyph.at.fits(self.width, self.height) {
-            return Err(outside("glyph.at", ""));
+        if self.paint.is_none() && self.glyph.is_none() {
+            return Err(ImageEditError::NothingToDraw { index });
         }
-        let from = self.glyph.colour_from;
-        if from.x >= self.width || from.y >= self.height {
-            return Err(outside("glyph.colour_from", ""));
+        if let Some(paint) = &self.paint {
+            paint.validate(index, self.width, self.height)?;
         }
-        let expected = u64::from(self.glyph.at.width) * u64::from(self.glyph.at.height);
-        let found = self.glyph.alpha_hex.chars().count();
+        if let Some(glyph) = &self.glyph {
+            self.validate_glyph(index, glyph)?;
+        }
+        if self.purpose.trim().is_empty() {
+            return Err(ImageEditError::EmptyPurpose { index });
+        }
+        Ok(())
+    }
+}
+
+impl ImageEdit {
+    fn validate_glyph(&self, index: usize, glyph: &Glyph) -> Result<(), ImageEditError> {
+        let outside = |field| ImageEditError::OutsideImage {
+            index,
+            field,
+            width: self.width,
+            height: self.height,
+            needs: "",
+        };
+        if !glyph.at.fits(self.width, self.height) {
+            return Err(outside("glyph.at"));
+        }
+        match (glyph.colour_from, glyph.colour) {
+            (Some(from), None) if from.x >= self.width || from.y >= self.height => {
+                return Err(outside("glyph.colour_from"));
+            }
+            (Some(_), None) | (None, Some(_)) => {}
+            _ => return Err(ImageEditError::GlyphColour { index }),
+        }
+        let expected = u64::from(glyph.at.width) * u64::from(glyph.at.height);
+        let found = glyph.alpha_hex.chars().count();
         if found as u64 != expected {
             return Err(ImageEditError::AlphaLength {
                 index,
@@ -265,9 +351,6 @@ impl ImageEdit {
         let alpha = self.alpha().ok_or(ImageEditError::AlphaNotHex { index })?;
         if alpha.iter().all(|&a| a == 0) {
             return Err(ImageEditError::EmptyGlyph { index });
-        }
-        if self.purpose.trim().is_empty() {
-            return Err(ImageEditError::EmptyPurpose { index });
         }
         Ok(())
     }

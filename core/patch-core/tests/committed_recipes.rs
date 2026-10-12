@@ -73,10 +73,11 @@ fn each_relabelled_button_shares_one_drawing() {
     for edit in &recipe.image_edits {
         let button = edit.purpose.split_once("(pad ").expect("names its pad").1;
         let button = button.split_once(')').expect("closes").0;
-        let same = |(drawn, _): &&mut (&ImageEdit, Vec<&str>)| {
-            (drawn.erase, drawn.glyph.at, &drawn.glyph.alpha_hex)
-                == (edit.erase, edit.glyph.at, &edit.glyph.alpha_hex)
+        let glyph = |edit: &ImageEdit| {
+            let glyph = edit.glyph.as_ref().expect("stage 7 draws a glyph");
+            (edit.erase, glyph.at, glyph.alpha_hex.clone())
         };
+        let same = |(drawn, _): &&mut (&ImageEdit, Vec<&str>)| glyph(drawn) == glyph(edit);
         match drawings.iter_mut().find(same) {
             Some((_, buttons)) => buttons.push(button),
             None => drawings.push((edit, vec![button])),

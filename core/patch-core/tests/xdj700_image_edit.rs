@@ -33,7 +33,8 @@ fn edit(offset: usize) -> ImageEdit {
             width: 6,
             height: 3,
         }),
-        glyph: Glyph {
+        paint: None,
+        glyph: Some(Glyph {
             at: PixelBox {
                 x: 5,
                 y: 3,
@@ -41,8 +42,9 @@ fn edit(offset: usize) -> ImageEdit {
                 height: 2,
             },
             alpha_hex: "f8008f".to_owned(),
-            colour_from: Pixel { x: 1, y: 1 },
-        },
+            colour_from: Some(Pixel { x: 1, y: 1 }),
+            colour: None,
+        }),
         purpose: "test".to_owned(),
     }
 }
@@ -209,14 +211,15 @@ fn edits_a_flat_image() {
         width: 2,
         height: 2,
     });
-    flat.glyph.at = PixelBox {
+    let glyph = flat.glyph.as_mut().expect("a glyph");
+    glyph.at = PixelBox {
         x: 1,
         y: 1,
         width: 2,
         height: 1,
     };
-    flat.glyph.alpha_hex = "ff".to_owned();
-    flat.glyph.colour_from = Pixel { x: 0, y: 4 };
+    glyph.alpha_hex = "ff".to_owned();
+    glyph.colour_from = Some(Pixel { x: 0, y: 4 });
     let recipe = pinned(&fixture, with_edits(&fixture, vec![flat]));
 
     let output = fixture.apply(&recipe).expect("apply");
@@ -329,7 +332,7 @@ fn reads_the_glyph_colour_before_the_erase() {
     let fixture = Fixture::new();
     let stock = stock_application();
     let mut inside = edit(IMAGE);
-    inside.glyph.colour_from = Pixel { x: 6, y: 3 };
+    inside.glyph.as_mut().expect("a glyph").colour_from = Some(Pixel { x: 6, y: 3 });
     let recipe = pinned(&fixture, with_edits(&fixture, vec![inside]));
 
     let output = fixture.apply(&recipe).expect("apply");
