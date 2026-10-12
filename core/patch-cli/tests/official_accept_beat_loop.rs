@@ -1,10 +1,11 @@
 //! Owner-input test of the committed BEAT LOOP acceptance tests (`catalog/acceptance/`): stock,
-//! stage 5 and stage 7, built here from the official XDJ-700 v1.15 update, in the owner's local
-//! emulator with the owner's stick image. Each build passes the test its implementation names (the
-//! lit-pad test, for stock) and fails the others at the steps its behaviour predicts (stages 5 and
-//! 7 fail the lit-pad test, their known limit). Nothing but the PASS and FAIL lines is printed,
-//! and the builds stay in a temporary directory. Nine runs, three at a time (fewer on a host with
-//! fewer than six cores); to run locally (about fifteen minutes):
+//! stage 5, stage 7 and the Neon pads skin, built here from the official XDJ-700 v1.15 update, in
+//! the owner's local emulator with the owner's stick image. Each build passes the test its
+//! implementation names (the lit-pad test, for stock and the skin) and fails the others at the
+//! steps its behaviour predicts (stages 5 and 7 fail the lit-pad test, their known limit; the
+//! skin, which changes only images, fails the length tests where stock does). Nothing but the PASS
+//! and FAIL lines is printed, and the builds stay in a temporary directory. Twelve runs, three at
+//! a time (fewer on a host with fewer than six cores); to run locally (about fifteen minutes):
 //!
 //! ```text
 //! PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD XDJ700_QEMU=/path/to/qemu-system-sh4 \
@@ -93,6 +94,7 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
     let builds = tempfile::tempdir().expect("tempdir");
     let stage5 = stage(&update, "beat-loop-16-plays-32", builds.path());
     let stage7 = stage(&update, "beat-loop-1-to-32", builds.path());
+    let neon_pads = stage(&update, "skin-perform-neon-pads", builds.path());
 
     let (lengths_32, lengths_16, lit) = (
         "beat-loop-1-to-32-pads-select-lengths",
@@ -150,6 +152,23 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
             test: lit,
             update: stage7,
             fails: &[23, 25, 34, 35, 44, 45, 54, 55, 64, 65, 74],
+        },
+        // The Neon pads skin changes only images: the pads light (the test it names) and set
+        // lengths as on stock.
+        Run {
+            test: lit,
+            update: neon_pads.clone(),
+            fails: &[],
+        },
+        Run {
+            test: lengths_32,
+            update: neon_pads.clone(),
+            fails: &[23, 26, 30, 34, 38, 42],
+        },
+        Run {
+            test: lengths_16,
+            update: neon_pads,
+            fails: &[42],
         },
     ];
     let mut failures = Vec::new();

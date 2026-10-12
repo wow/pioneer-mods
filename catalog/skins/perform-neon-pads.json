@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "perform-neon-pads",
+  "title": "Neon pads",
+  "screen": "perform",
+  "requires": {
+    "screen_class": { "width": 800, "height": 480, "pixels": "rgb565" },
+    "slots": ["beat_loop.pad"]
+  },
+  "art": "original",
+  "authors": ["wow"],
+  "licence": "CC-BY-SA-4.0",
+  "implementations": {
+    "xdj700-v1.15": [
+      {
+        "recipe": "recipes/xdj700-v1.15/skin-perform-neon-pads.json",
+        "maturity": "experimental",
+        "evidence": "In emulation (2026-10-12): every pixel of its art is drawn as painted in the pads' normal, lit and greyed-out states, its black corners matching the screen around the pads, and the pads light and set lengths as on stock; rehearsed as an update both ways (installed over stock and restored by the official update; no code read the pad images while installing, a CPU watch). Not yet tested on hardware.",
+        "acceptance": ["beat-loop-lit-pad-follows-touch"]
+      }
+    ]
+  },
+  "maintainer": "wow"
+}

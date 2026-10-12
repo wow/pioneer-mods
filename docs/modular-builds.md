@@ -188,7 +188,9 @@ firmware port:
 
 Steps 1 to 4 are implemented as `patch-cli build` (resolution alone as `patch-cli resolve`;
 composition of given recipes as `patch-cli compose`): [catalog.md](./catalog.md),
-[recipes.md](./recipes.md), "Composing recipes". Skins are not yet.
+[recipes.md](./recipes.md), "Composing recipes". A profile chooses a skin per screen the same way
+(`"perform": "perform-neon-pads"`, the committed skin), and the catalog holds a skin's recipes to
+images only: whole images of the slots it requires, no replacements.
 
 A combination of fragments is a new update: its application yields a different compressed stream
 and needs its own test (flashing guide, section 5). So a **listed** combination is rehearsed as a
@@ -311,7 +313,7 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
   - code, and feature recipes with the glyph masks they hold (labels drawn in the stock style
     among them), are MIT;
   - a community skin, that is its catalog entry and the recipes its implementations name, with
-    the masks and art they hold, is
+    the masks and art they hold, and the scripts under `scripts/skins/` that generate its art, is
     [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The entry states it
     (`licence`) and names who made it (`authors`). A recipe a skin names is named by no feature
     and no other skin, so its licence is never in doubt.
@@ -330,7 +332,8 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
    the first tests: the BEAT LOOP pads' lengths and lit pad, on stock, stage 5 and stage 7.
 3. Screen catalogue for the XDJ-700: `main` and `perform`, with evidence. PERFORM's BEAT LOOP pads
    name their images and boxes ([catalog.md](./catalog.md#screen)); `main` names no slot yet.
-4. First per-screen skins (PERFORM, main), from original art or owner-local transforms.
+4. First per-screen skins (PERFORM, main), from original art or owner-local transforms. The first
+   is committed: Neon pads, for PERFORM's BEAT LOOP pads, with the stock labels.
 5. Code fragments, starting with the lit-pad rule.
 6. The XDJ-1000MK2 v1.45 as the second player.
 7. A builder that runs in the browser on the owner's computer (the official update never leaves

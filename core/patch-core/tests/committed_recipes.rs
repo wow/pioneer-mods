@@ -138,6 +138,7 @@ fn committed_recipes_avoid_the_protected_set() {
         "version-marker-0.10",
         "beat-loop-16-plays-32",
         "beat-loop-1-to-32",
+        "skin-perform-neon-pads",
     ] {
         assert!(
             checked.iter().any(|id| id.ends_with(known)),

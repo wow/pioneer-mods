@@ -4,6 +4,7 @@
 use super::check::{Catalog, CatalogError, feature_entry, skin_entry};
 use super::feature::Feature;
 use super::player::Player;
+use super::screen::Screen;
 use super::skin::Skin;
 use crate::v2::RecipeV2;
 use std::collections::BTreeMap;
@@ -101,6 +102,8 @@ impl Catalog {
                     check_label_count(&entry, &slot_ref, labels.len(), count)?;
                 }
                 check_recipe(&entry, player, &implementation.recipe, recipes)?;
+                check_images_only(skin, screen, &implementation.recipe, recipes)
+                    .map_err(inconsistent)?;
                 self.check_named_tests(&entry, player_id, &implementation.acceptance)?;
                 if let Some(other) = self.other_holder(&skin.id, &implementation.recipe) {
                     return Err(inconsistent(format!(
@@ -146,6 +149,45 @@ fn check_label_count(
             problem: format!("{labels} labels for {slot_ref}, which has {count} elements"),
         })
     }
+}
+
+/// A skin's recipe at `path` (which exists) changes only images, each one whole image of a slot
+/// the skin requires on its screen: a skin is art, and the pads' behaviour stays the stock one.
+fn check_images_only(
+    skin: &Skin,
+    screen: &Screen,
+    path: &str,
+    recipes: &BTreeMap<String, RecipeV2>,
+) -> Result<(), String> {
+    let recipe = &recipes[path];
+    if !recipe.replacements.is_empty() {
+        return Err(format!(
+            "recipe {path}: a skin's recipe changes only images, but it has {} replacements",
+            recipe.replacements.len()
+        ));
+    }
+    let slot_images = || {
+        (skin.requires.slots.iter())
+            .filter_map(|slot| screen.slots.get(slot)?.images.as_ref())
+            .flat_map(|images| images.images().map(move |image| (images, image.offset)))
+    };
+    for (index, edit) in recipe.image_edits.iter().enumerate() {
+        let whole = slot_images().any(|(images, offset)| {
+            edit.offset == u64::from(offset)
+                && (edit.width, edit.height) == (images.width, images.height)
+        });
+        if !whole {
+            return Err(format!(
+                "recipe {path}: image_edits[{index}] ({}x{} at {:#x}) is not a whole image of \
+                 a slot the skin requires ({})",
+                edit.width,
+                edit.height,
+                edit.offset,
+                skin.requires.slots.join(", ")
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The recipe at `path` exists, is for `player`'s release with its pins, and pins its output.

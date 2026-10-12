@@ -209,3 +209,65 @@ fn a_skins_recipes_are_its_own() {
         "{message}"
     );
 }
+
+#[test]
+fn a_skins_recipes_change_only_whole_images_of_its_slots() {
+    // The pads have two 80x53 images each; the skin's first recipe paints the first image.
+    let with_edits = |edits: Value| {
+        let mut fixture = Fixture::new();
+        let element = |x: u32, first: u32| {
+            json!({ "at": { "x": x, "y": 154 }, "images": {
+                "normal": format!("{first:#x}"), "lit": format!("{:#x}", first + 8480) } })
+        };
+        fixture.screens[1]["slots"]["pad"]["images"] = json!({
+            "width": 80, "height": 53, "pixels": "rgb565", "states": ["normal", "lit"],
+            "elements": [element(116, 0x10000), element(201, 0x10000 + 2 * 8480),
+                         element(285, 0x10000 + 4 * 8480)],
+            "evidence": "e"
+        });
+        fixture
+            .recipes
+            .get_mut("recipes/p/stock-labels.json")
+            .expect("recipe")["image_edits"] = edits;
+        fixture
+    };
+    let edit = |offset: u32, width: u32| {
+        json!({ "offset": offset, "width": width, "height": 53,
+                "erase": { "x": 0, "y": 0, "width": 2, "height": 2 }, "purpose": "p" })
+    };
+    assert_eq!(
+        with_edits(json!([edit(0x10000 + 8480, 80)])).check(),
+        Ok(())
+    );
+
+    let refused = |fixture: Fixture, problem: &str| {
+        let message = fixture.problem();
+        assert!(
+            message.starts_with("skin dark-pads: recipe recipes/p/stock-labels.json: ")
+                && message.contains(problem),
+            "{problem}: {message}"
+        );
+    };
+    // Part of an image, or past the slot's images.
+    refused(
+        with_edits(json!([edit(0x10000, 80), edit(0x10000, 40)])),
+        "image_edits[1] (40x53 at 0x10000) is not a whole image of a slot the skin requires (pad)",
+    );
+    refused(
+        with_edits(json!([edit(0x10000 + 6 * 8480, 80)])),
+        "image_edits[0] (80x53 at 0x1c6c0) is not a whole image",
+    );
+    // A recipe that changes code or a table is not a skin's.
+    let mut fixture = with_edits(json!([edit(0x10000, 80)]));
+    fixture
+        .recipes
+        .get_mut("recipes/p/stock-labels.json")
+        .expect("recipe")["replacements"] = json!([{
+        "offset": 2048, "bytes_hex": "dead",
+        "precondition": { "before": 8, "after": 24, "sha256": "ab".repeat(32) }, "purpose": "x"
+    }]);
+    refused(
+        fixture,
+        "a skin's recipe changes only images, but it has 1 replacements",
+    );
+}

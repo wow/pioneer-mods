@@ -80,9 +80,11 @@ fn refused_with(edit: impl FnOnce(&Path), problem: &str) {
 }
 
 /// Moves the last pad's normal image to `offset` (Stage 7 then edits a stock offset that no slot
-/// image covers, which is allowed).
+/// image covers, which is allowed). The Neon pads skin, which paints the image where it was, is
+/// left out: a skin paints only its slots' images.
 fn last_pad_normal_at(offset: u32) -> impl FnOnce(&Path) {
     move |root: &Path| {
+        std::fs::remove_file(root.join("catalog/skins/perform-neon-pads.json")).expect("skin");
         edit_pads(root, |i| {
             i["elements"][5]["images"]["normal"] = format!("{offset:#x}").into();
         });
@@ -145,4 +147,49 @@ fn a_recipe_edits_a_slot_image_whole_and_no_two_slot_images_overlap() {
         "the images of perform.beat_loop.copy elements[0] normal (0x360240) and \
          perform.beat_loop.pad elements[0] normal (0x360240) overlap",
     );
+}
+
+#[test]
+fn the_neon_pads_skin_paints_every_pad_image_once_and_whole() {
+    let loaded = load_catalog(&repo_root()).expect("committed catalog");
+    let catalog = loaded.catalog();
+    let skin = catalog
+        .skins
+        .iter()
+        .find(|skin| skin.id == "perform-neon-pads")
+        .expect("skin");
+    let path = &skin.implementations["xdj700-v1.15"][0].recipe;
+    let recipe = read_json(&repo_root().join(path));
+    let images = catalog
+        .screen("xdj700-v1.15", "perform")
+        .expect("perform")
+        .slots["beat_loop.pad"]
+        .images
+        .as_ref()
+        .expect("pad images");
+
+    // The loader holds a skin's recipe to whole images of its slots (`check_skin`); this skin
+    // also paints every one of them, each once, from its own art: no erase, no glyph, and a stock
+    // colour only by position.
+    let mut painted = BTreeSet::new();
+    for edit in recipe["image_edits"].as_array().expect("edits") {
+        assert!(
+            edit.get("erase").is_none() && edit.get("glyph").is_none(),
+            "{edit}"
+        );
+        let paint = &edit["paint"];
+        assert_eq!(
+            paint["at"],
+            serde_json::json!({ "x": 0, "y": 0, "width": 80, "height": 53 })
+        );
+        for entry in paint["palette"].as_array().expect("palette") {
+            assert!(
+                entry.get("colour").is_some() || entry.get("from").is_some(),
+                "{entry}"
+            );
+        }
+        assert!(painted.insert(edit["offset"].as_u64().expect("offset")));
+    }
+    let named: BTreeSet<u64> = images.images().map(|i| u64::from(i.offset)).collect();
+    assert_eq!(painted, named);
 }

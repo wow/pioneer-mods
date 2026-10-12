@@ -8,7 +8,7 @@ one implementation (a schema-v2 recipe) per player. It implements the concepts o
 **Status.** The schemas, the committed XDJ-700 v1.15 catalog, the checks that need no firmware,
 resolving a profile (`patch-cli resolve`) and building one (`patch-cli build`) are implemented
 (below), and so is the format of acceptance tests ([acceptance.md](./acceptance.md)), with three
-committed XDJ-700 tests. No skin is committed yet.
+committed XDJ-700 tests, and so is the first skin, Neon pads.
 
 ## Layout
 
@@ -137,7 +137,11 @@ their values, and the slots, with as many elements as there are labels.
 
 A skin is a look for one `screen`. It is named for what it looks like, never after another
 product, and carries no logos. The skin `stock` (the player's own look) is built in and has no
-file. No skin is committed yet; the format:
+file. The committed skin, [`perform-neon-pads`](../catalog/skins/perform-neon-pads.json), repaints
+PERFORM's six BEAT LOOP pads in all six states with its own art and the stock labels; its art's
+source, the generator of its recipe, is
+[`scripts/skins/perform_neon_pads.py`](../scripts/skins/perform_neon_pads.py), under the skin's
+licence. The format:
 
 ```json
 {
@@ -297,7 +301,9 @@ Each file is checked on its own, then the catalog as a whole, with no firmware:
   counts; a skin named in `draws_labels` is built in, or exists, is for that screen and has an
   implementation for the player;
 - every recipe named exists, is a valid schema-v2 recipe for its player, carries the player's pins
-  and pins its output; a recipe a skin names is named by no feature and no other skin;
+  and pins its output; a recipe a skin names is named by no feature and no other skin, and
+  changes only images: it has no replacements, and each image edit is one whole image of a slot
+  the skin requires on its screen;
 - every acceptance test's player exists and has the controls it presses, its touches and regions
   lie on that player's screen, and its memory checks read only that player's run-time state
   ranges; every test an implementation names exists for its player;
