@@ -71,26 +71,30 @@ LOOP buttons) and a `description`. A slot may also name its `images`, which a sk
   "width": 80, "height": 53, "pixels": "rgb565",
   "states": ["normal", "pressed", "greyed_out", "lit", "lit_pressed", "lit_greyed_out"],
   "elements": [
-    { "box": { "x": 116, "y": 154, "w": 80, "h": 53 },
+    { "at": { "x": 116, "y": 154 },
       "images": { "normal": "0x360240", "pressed": "0x362360", "…": "…" } }
   ],
-  "evidence": "How the boxes and images were established, and when the images are read."
+  "evidence": "How the positions and images were established, and when the images are read."
 }
 ```
 
 - `width`, `height`, `pixels`: every image's size and format (`rgb565`, 16-bit little-endian; at
-  most 1 MiB an image).
-- `states`: the states each element has an image for, none twice.
-- `elements`: one per slot element, in order: its `box` on the screen (the images' size, on the
-  player's screen) and its image for each state (exactly the `states`), by decoded-application
-  offset, 2-byte aligned, inside the application. No two images overlap.
+  most 1 MiB an image, the limit of a recipe's image edit).
+- `states`: the states each element has an image for, none twice, in the order tools list them.
+- `elements`: one per slot element, in order: where its top-left pixel is drawn (`at`; it covers
+  the images' size, on the player's screen, and no other element of the slot) and its image for
+  each state (exactly the `states`), by decoded-application offset, 2-byte aligned.
 - `evidence`: what the emulator showed: where each image is drawn, and that no code reads the
   images at start-up or in an update (a CPU read watch; the 2D engine that draws them is not
   watched).
 
+No two slot images of a player overlap, across its slots and screens: each belongs to one slot.
+Every image lies inside the release's decoded application and out of its protected ranges, and a
+recipe image edit that touches one is exactly that image (its offset and size).
+
 The XDJ-700's PERFORM screen names its BEAT LOOP pads' 36 images (six pads, six states), the
-images the stage-7 recipe relabels. Positions are not data yet: a slot's boxes record where the
-stock application draws it, and a skin keeps them ([modular-builds.md](./modular-builds.md),
+images the stage-7 recipe relabels. Positions are not data yet: a slot's positions record where
+the stock application draws it, and a skin keeps them ([modular-builds.md](./modular-builds.md),
 "Extending the limits").
 
 ## Feature

@@ -20,6 +20,14 @@ use std::ops::Range;
 /// Largest image an edit may name, in bytes (an 800x480 screen is 768,000).
 pub const MAX_IMAGE_BYTES: u64 = 1024 * 1024;
 
+/// The bytes of a `width` x `height` image of `bytes_per_pixel`-byte pixels, or `None` if it
+/// overflows. Recipe image edits and screen slots both measure images with it.
+pub fn image_bytes(width: u32, height: u32, bytes_per_pixel: u32) -> Option<u64> {
+    u64::from(width)
+        .checked_mul(u64::from(height))?
+        .checked_mul(u64::from(bytes_per_pixel))
+}
+
 /// An edit to one RGB565 image (16-bit little-endian pixels, rows `width` pixels apart).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -146,9 +154,7 @@ impl ImageEdit {
 
     /// The image's size in bytes, or `None` if it overflows.
     pub fn len(&self) -> Option<u64> {
-        u64::from(self.width)
-            .checked_mul(u64::from(self.height))?
-            .checked_mul(2)
+        image_bytes(self.width, self.height, 2)
     }
 
     /// Whether the image is empty (never true for a validated edit).

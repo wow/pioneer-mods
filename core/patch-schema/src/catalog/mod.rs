@@ -20,6 +20,7 @@ mod resolve;
 mod resolve_output;
 mod resolve_skins;
 mod screen;
+mod screen_images;
 mod skin;
 
 pub use acceptance::{
@@ -41,5 +42,6 @@ pub use resolution::{
     BuildError, FeatureResolution, Fragment, Resolution, ResolveError, ScreenResolution, Status,
 };
 pub use resolve::{MAX_CONFIGURATIONS, resolve};
-pub use screen::{Screen, Slot, SlotElement, SlotImages};
+pub use screen::{Screen, Slot};
+pub use screen_images::{Position, SlotElement, SlotImage, SlotImages};
 pub use skin::{Art, STOCK_SKIN, Skin, SkinImplementation, SkinLicence, SkinRequires};

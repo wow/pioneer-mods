@@ -4,6 +4,8 @@
 //! is every player and recipe against the engine's own release pins and checks. What loads here
 //! is what the engine accepts, short of the firmware itself.
 
+mod slots;
+
 use crate::recipe::{read_capped, read_recipe_versioned};
 use anyhow::{Context, Result, bail};
 use patch_core::xdj700::{
@@ -181,25 +183,12 @@ fn check_against_engine(catalog: &Catalog, recipes: &BTreeMap<String, RecipeV2>)
             }
         }
     }
-    // A slot's images are in its player's decoded application.
+    // A slot's images are in its player's decoded application, out of its protected ranges, and
+    // edited only whole.
     for screen in &catalog.screens {
         let target =
             recipe_target(&screen.player).ok_or_else(|| unknown_release(&screen.player))?;
-        for (name, slot) in &screen.slots {
-            let Some(images) = &slot.images else { continue };
-            for offset in images.offsets() {
-                let end = u64::from(offset) + images.image_len();
-                if end > target.application_len as u64 {
-                    bail!(
-                        "screen {}/{}: slot {name}'s image at {offset:#x} ends past the \
-                         {}-byte application",
-                        screen.player,
-                        screen.id,
-                        target.application_len
-                    );
-                }
-            }
-        }
+        slots::check_slot_images(screen, target, recipes)?;
     }
     for (path, recipe) in recipes {
         let target = recipe_target(&recipe.target.release)
