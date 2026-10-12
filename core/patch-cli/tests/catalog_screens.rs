@@ -146,3 +146,51 @@ fn a_recipe_edits_a_slot_image_whole_and_no_two_slot_images_overlap() {
          perform.beat_loop.pad elements[0] normal (0x360240) overlap",
     );
 }
+
+#[test]
+fn the_neon_pads_skin_paints_every_pad_image_once_and_whole() {
+    let loaded = load_catalog(&repo_root()).expect("committed catalog");
+    let catalog = loaded.catalog();
+    let skin = catalog
+        .skins
+        .iter()
+        .find(|skin| skin.id == "perform-neon-pads")
+        .expect("skin");
+    let path = &skin.implementations["xdj700-v1.15"][0].recipe;
+    let recipe = read_json(&repo_root().join(path));
+    let images = catalog
+        .screen("xdj700-v1.15", "perform")
+        .expect("perform")
+        .slots["beat_loop.pad"]
+        .images
+        .clone()
+        .expect("pad images");
+
+    let mut painted = BTreeSet::new();
+    for edit in recipe["image_edits"].as_array().expect("edits") {
+        // The whole image, from the author's own art: no erase, no glyph, and a stock colour
+        // only by position.
+        assert_eq!(
+            (edit["width"].as_u64(), edit["height"].as_u64()),
+            (Some(80), Some(53))
+        );
+        assert!(
+            edit.get("erase").is_none() && edit.get("glyph").is_none(),
+            "{edit}"
+        );
+        let paint = &edit["paint"];
+        assert_eq!(
+            paint["at"],
+            serde_json::json!({ "x": 0, "y": 0, "width": 80, "height": 53 })
+        );
+        for entry in paint["palette"].as_array().expect("palette") {
+            assert!(
+                entry.get("colour").is_some() || entry.get("from").is_some(),
+                "{entry}"
+            );
+        }
+        assert!(painted.insert(edit["offset"].as_u64().expect("offset")));
+    }
+    let named: BTreeSet<u64> = images.images().map(|i| u64::from(i.offset)).collect();
+    assert_eq!(painted, named);
+}

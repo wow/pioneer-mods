@@ -330,7 +330,8 @@ A look modelled on a larger-screen player can only be a redrawn skin at this pla
    the first tests: the BEAT LOOP pads' lengths and lit pad, on stock, stage 5 and stage 7.
 3. Screen catalogue for the XDJ-700: `main` and `perform`, with evidence. PERFORM's BEAT LOOP pads
    name their images and boxes ([catalog.md](./catalog.md#screen)); `main` names no slot yet.
-4. First per-screen skins (PERFORM, main), from original art or owner-local transforms.
+4. First per-screen skins (PERFORM, main), from original art or owner-local transforms. The first
+   is committed: Neon pads, for PERFORM's BEAT LOOP pads, with the stock labels.
 5. Code fragments, starting with the lit-pad rule.
 6. The XDJ-1000MK2 v1.45 as the second player.
 7. A builder that runs in the browser on the owner's computer (the official update never leaves

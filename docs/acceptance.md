@@ -183,9 +183,11 @@ passes the test or not, and a failing run fails at the same steps every time:
 | `beat-loop-16-plays-32-pads-select-lengths` | lengths 1/2, 1, 2, 4, 8, 32 | FAIL | PASS | FAIL |
 | `beat-loop-lit-pad-follows-touch` | the touched pad lights | PASS | FAIL | FAIL |
 
-Stage 7 names the first test and stage 5 the second. No build names the lit-pad test yet: stock
+Stage 7 names the first test and stage 5 the second. No feature names the lit-pad test yet: stock
 passes it, and stages 5 and 7 fail it, their known limit
 ([xdj700-flashing.md](./xdj700-flashing.md), "The lit BEAT LOOP pad"); a lit-pad fix would name it.
+The Neon pads skin names it: it changes only images, so the pads light as on stock (the owner
+suite runs it on the skin too).
 All nine results are the owner suite's (`official_accept_beat_loop`), in the owner's emulator with
 the official v1.15 file and the stage files built from it; for each failing run it also checks
 which steps fail. Boot and browsing are waited out for fixed times (about two and a half minutes,

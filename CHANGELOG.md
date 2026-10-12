@@ -7,6 +7,12 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- The first skin, Neon pads (`catalog/skins/perform-neon-pads.json`, CC BY-SA 4.0): PERFORM's six
+  BEAT LOOP pads in all six states, painted with its own art (dark pads with a cyan border, filled
+  cyan when lit) and the stock labels in its own digits
+  (`recipes/xdj700-v1.15/skin-perform-neon-pads.json`, 36 paint edits). In emulation every pixel
+  of its art is drawn as painted and the pads light as on stock; it names the lit-pad acceptance
+  test.
 - Image edits may paint the author's own art (`paint`): a box of the image, a palette of 1 to 16
   entries (`"keep"`, the author's RGB565 `colour`, or a stock pixel's colour by its position,
   `from`, read before anything changes) and one hex digit per pixel naming the entry. The glyph is

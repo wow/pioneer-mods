@@ -8,7 +8,7 @@ one implementation (a schema-v2 recipe) per player. It implements the concepts o
 **Status.** The schemas, the committed XDJ-700 v1.15 catalog, the checks that need no firmware,
 resolving a profile (`patch-cli resolve`) and building one (`patch-cli build`) are implemented
 (below), and so is the format of acceptance tests ([acceptance.md](./acceptance.md)), with three
-committed XDJ-700 tests. No skin is committed yet.
+committed XDJ-700 tests, and so is the first skin, Neon pads.
 
 ## Layout
 
@@ -137,7 +137,8 @@ their values, and the slots, with as many elements as there are labels.
 
 A skin is a look for one `screen`. It is named for what it looks like, never after another
 product, and carries no logos. The skin `stock` (the player's own look) is built in and has no
-file. No skin is committed yet; the format:
+file. The committed skin, [`perform-neon-pads`](../catalog/skins/perform-neon-pads.json), repaints
+PERFORM's six BEAT LOOP pads in all six states with its own art and the stock labels. The format:
 
 ```json
 {
