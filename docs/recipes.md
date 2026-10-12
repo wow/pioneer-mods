@@ -222,12 +222,13 @@ The rules:
 - In order: every stock colour the edit names is read, then the box is erased, the art painted and
   the glyph drawn (blended over what is there by then).
 - The glyph mask and the painted art must be the author's own drawing, never traced from vendor
-  pixels. A stock colour is named by a pixel's position, never by its value. The engine refuses an
-  author's `colour` (a palette entry, or a glyph's where it fully covers) when more than half of
-  the pixels it paints equal the stock pixels beneath: a colour the image needs from stock goes
-  through `from` or `colour_from`. Beyond that, the format cannot tell an author's art from a
-  copied one: the rule rests on the author's declaration ([CONTRIBUTING.md](../CONTRIBUTING.md))
-  and on review.
+  pixels. A stock colour is named by a pixel's position, never by its value. When the recipe is
+  applied to the owner's file (`patch`, `precondition`, `compose`, `build`; not in firmware-free
+  CI), the engine refuses an author's `colour` (a palette entry, or a glyph's where it fully
+  covers) when more than half of the pixels it paints equal the stock pixels beneath: a colour the
+  image needs from stock goes through `from` or `colour_from`. Beyond that, the format cannot tell
+  an author's art from a copied one: the rule rests on the author's declaration
+  ([CONTRIBUTING.md](../CONTRIBUTING.md)) and on review.
 - Images are subject to the protected ranges and the [protected set](#the-protected-set), like
   replacements.
 - The output may differ from stock only in the edited rows: per row, the span covering the
