@@ -122,10 +122,10 @@ layouts and features are planned from.
 - `title`: what the screen shows on it, or what it is; `kind`: `button`, `buttons` (a row one
   zone covers), `label`, `display` or `frame`.
 - `touch`: one per record of the screen's touch layout that acts on it: the `record`'s
-  decoded-application offset (five 32-bit words: x, y, width, height, handler), its `area` and
-  its `handler` (a run-time address, 0x08000000 on), and `when` it acts if not always
-  (`while a loop plays`). On the XDJ-700 the deck screens share one touch layout; the screen's
-  mode selects the records that act.
+  decoded-application offset (five 32-bit words: x, y, width, height, handler), its `area` and its
+  `handler` (a run-time address, from the release's load address: 0x08000000 on the XDJ-700), and
+  `when` it acts if not always (`while a loop plays`). On the XDJ-700 the deck screens share one
+  touch layout; the screen's mode selects the records that act.
 - `drawn`: one per place it is drawn: where (`at`) and the images seen there, each by offset and
   size (RGB565) with when it was first `seen`.
 - `slot`: the slot that names its images, when one does (the BEAT LOOP pads).

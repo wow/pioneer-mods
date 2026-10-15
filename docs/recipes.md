@@ -131,8 +131,11 @@ Stock values the catalogue publishes inside these windows (accepted by the owner
     published value is a small number (below `0x10000`) or a pointer into the application, the
     kinds the analyses above count as guessable.
   - Counting the windows' distinct 32-bit values outside their spans that are not zero, below
-    `0x10000`, text, application pointers or round floats: stage 7's holds 144 and stage 5's 209
-    (2026-10-15), and the map publishes none of them. Both hashes keep that protection.
+    `0x10000`, text, application pointers or round floats (narrower exclusions than the count of
+    129 above, so more values count): stage 7's holds 144 and stage 5's 209 (2026-10-15), and the
+    map publishes none of them. Both hashes keep that protection.
+  - The BEAT LOOP table's indices are the stock bytes under stage 7's and stage 5's spans, which
+    the window rules already do not count, so publishing them costs those windows nothing.
   - A later window over these records or tables counts their published words as known, and so
     holds this many fewer unknown values; the record table and the two tables stay reserved like
     the windows around them.
