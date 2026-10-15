@@ -134,7 +134,8 @@ layouts and features are planned from.
 - `slot`: the slot that names its images, when one does (the BEAT LOOP pads).
 - `tables`: tables of the application it reads, each by the first entry's `offset`, its
   `entry_bytes` (1, 2 or 4, little-endian), `stride`, stock `values` and `what` they are (the BEAT
-  LOOP and SLIP LOOP lengths, the pads' touch edges).
+  LOOP and SLIP LOOP lengths). Values that would weaken a committed recipe's window are left out
+  (the pads' touch edges: [recipes.md](./recipes.md#known-exceptions)).
 - `does`, `evidence`: what touching it does or what it shows, and how that was measured.
 
 The checks:

@@ -114,7 +114,7 @@ fn every_part_is_a_touch_record_and_application_images() {
     }
     println!("touch records checked: {zones}; images checked: {drawn}; table entries: {entries}");
     assert!(
-        zones >= 20 && drawn >= 90 && entries >= 18,
+        zones >= 20 && drawn >= 90 && entries >= 12,
         "the {RELEASE} PERFORM map is checked"
     );
 }

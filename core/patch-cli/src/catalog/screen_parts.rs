@@ -18,11 +18,11 @@ use std::ops::Range;
 
 /// Decoded-application ranges inside committed precondition windows whose stock values the
 /// catalogue may publish, as reviewed (docs/recipes.md, "Known exceptions"): the deck screens'
-/// touch records, and the BEAT LOOP and SLIP LOOP tables with the touch-zone edges. Widening this
-/// is a change review sees.
+/// touch records, and the BEAT LOOP and SLIP LOOP tables' index bytes. Widening this is a change
+/// review sees.
 const PUBLISHED_IN_WINDOWS: &[(&str, Range<u64>)] = &[
     ("xdj700-v1.15", 0xd_5d38..0xd_5f68),
-    ("xdj700-v1.15", 0xd_6220..0xd_625c),
+    ("xdj700-v1.15", 0xd_6220..0xd_6250),
 ];
 
 /// Checks `screen`'s parts against `player`, `target` and the catalog's `recipes`.

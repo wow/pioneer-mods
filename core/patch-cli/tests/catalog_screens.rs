@@ -281,14 +281,14 @@ fn a_parts_records_images_and_tables_hold_to_the_release() {
         |root| {
             let offset = format!("{:#x}", end - 1);
             edit_part(root, "beat_loop.pads", |p| {
-                p["tables"][2]["offset"] = offset.into()
+                p["tables"][1]["offset"] = offset.into()
             })
         },
-        &format!("part beat_loop.pads: tables[2] ends past the {end}-byte application"),
+        &format!("part beat_loop.pads: tables[1] ends past the {end}-byte application"),
     );
     // Stock values published only where review accepted them: a record in stage 7's window
-    // outside the touch layout, or a table entry past the edges in stage 5's window (which stage 7
-    // repeats exactly).
+    // outside the touch layout, or a table entry past the SLIP LOOP table in stage 5's window
+    // (which stage 7 repeats exactly).
     refused_with(
         set(RECORD, "0xd5700".to_owned()),
         "lies in recipe recipes/xdj700-v1.15/beat-loop-1-to-32.json's precondition window",
@@ -296,10 +296,10 @@ fn a_parts_records_images_and_tables_hold_to_the_release() {
     refused_with(
         |root| {
             edit_part(root, "beat_loop.pads", |p| {
-                p["tables"][2]["offset"] = "0xd6260".into()
+                p["tables"][1]["offset"] = "0xd6260".into()
             })
         },
-        "tables[2] (0xd6260..0xd6262) lies in recipe recipes/xdj700-v1.15/beat-loop-1-to-32.json's \
+        "tables[1] (0xd6260..0xd6261) lies in recipe recipes/xdj700-v1.15/beat-loop-1-to-32.json's \
          precondition window (0xd6234..0xd66f5)",
     );
 }
