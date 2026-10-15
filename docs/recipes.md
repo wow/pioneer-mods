@@ -120,6 +120,23 @@ repeating the replacement exactly.
   - The table's sixth entry is stage 5's replacement, repeated exactly, so it publishes nothing
     new and keeps stage 5's window.
 
+Stock values the catalogue publishes inside these windows (accepted by the owner, 2026-10-15):
+
+- **The PERFORM screen map** (`catalog/screens/xdj700-v1.15/perform.json`, `parts`) gives 20
+  records of the touch layout, decoded `0xD5D38..0xD5F68`, as their five words: a touch area
+  (x, y, width, height) and a handler's run-time address. Its BEAT LOOP pads text gives the BEAT
+  LOOP table's indices (6, 8, 9, 10, 11, 12), the SLIP LOOP table's (3, 4, 6, 8, 5, 7, decoded
+  `0xD6238`) and the touch-zone edges (83, 166, 250, 333, 416, 500, `0xD6250`).
+  - The records lie in stage 7's window and the two tables after its span in stage 5's. Every
+    published value is a small number (below `0x10000`) or a pointer into the application, the
+    kinds the analyses above count as guessable.
+  - Counting the windows' distinct 32-bit values outside their spans that are not zero, below
+    `0x10000`, text, application pointers or round floats: stage 7's holds 144 and stage 5's 209
+    (2026-10-15), and the map publishes none of them. Both hashes keep that protection.
+  - A later window over these records or tables counts their published words as known, and so
+    holds this many fewer unknown values; the record table and the two tables stay reserved like
+    the windows around them.
+
 ## Writing a recipe
 
 Write recipes against your own copy of the official file, and commit only the recipe. Never

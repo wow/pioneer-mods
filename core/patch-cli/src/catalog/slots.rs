@@ -6,7 +6,7 @@
 use anyhow::{Result, bail};
 use patch_core::xdj700::RecipeTarget;
 use patch_schema::RecipeV2;
-use patch_schema::catalog::{RUN_TIME_BASE, Screen, SlotImages, TOUCH_RECORD_LEN};
+use patch_schema::catalog::{Screen, SlotImages, TOUCH_RECORD_LEN};
 use std::collections::BTreeMap;
 
 /// Checks `screen`'s slot images against `target` and the catalog's `recipes` for its player.
@@ -64,7 +64,8 @@ pub(super) fn check_slot_images(
 }
 
 /// Checks `screen`'s parts against `target`: every layout record and image inside the decoded
-/// application, every handler inside the application as it runs (loaded at 0x08000000).
+/// application, every handler inside the application as it runs (from the release's load
+/// address).
 pub(super) fn check_parts(screen: &Screen, target: &RecipeTarget<'_>) -> Result<()> {
     let app_len = target.application_len as u64;
     for (name, part) in &screen.parts {
@@ -77,8 +78,9 @@ pub(super) fn check_parts(screen: &Screen, target: &RecipeTarget<'_>) -> Result<
                      application"
                 );
             }
-            let handler = u64::from(zone.handler.0) - u64::from(RUN_TIME_BASE);
-            if handler >= app_len {
+            let handler = u64::from(zone.handler.0);
+            let running = target.load_address..target.load_address + app_len;
+            if !running.contains(&handler) {
                 bail!(
                     "{at}: touch[{index}].handler {:#010x} is not in the application",
                     zone.handler.0

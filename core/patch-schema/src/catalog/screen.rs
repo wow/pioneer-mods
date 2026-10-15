@@ -6,7 +6,7 @@ use super::entry::{
     check_text, unique_keys,
 };
 use super::screen_images::SlotImages;
-use super::screen_parts::Part;
+use super::screen_parts::{Part, TOUCH_RECORD_LEN};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -70,6 +70,7 @@ impl CatalogEntry for Screen {
                 images.validate(&format!("slots.{name}.images"), slot.count)?;
             }
         }
+        check_records_apart(&self.parts)?;
         for (name, part) in &self.parts {
             part.validate(name)?;
             if let Some(slot) = &part.slot
@@ -83,4 +84,31 @@ impl CatalogEntry for Screen {
         }
         check_text("maintainer", &self.maintainer)
     }
+}
+
+/// No two touch zones of a screen name one layout record, or records that overlap.
+fn check_records_apart(parts: &BTreeMap<String, Part>) -> Result<(), EntryError> {
+    let mut records: Vec<(u32, &str)> = parts
+        .iter()
+        .flat_map(|(name, part)| {
+            part.touch
+                .iter()
+                .map(move |zone| (zone.record.0, name.as_str()))
+        })
+        .collect();
+    records.sort_unstable();
+    if let Some(pair) = records
+        .windows(2)
+        .find(|pair| u64::from(pair[1].0) < u64::from(pair[0].0) + u64::from(TOUCH_RECORD_LEN))
+    {
+        return Err(EntryError::Rule {
+            field: format!("parts.{}.touch", pair[1].1),
+            problem: format!(
+                "its record {:#x} overlaps part {}'s record {:#x} (a record is {TOUCH_RECORD_LEN} \
+                 bytes)",
+                pair[1].0, pair[0].1, pair[0].0
+            ),
+        });
+    }
+    Ok(())
 }

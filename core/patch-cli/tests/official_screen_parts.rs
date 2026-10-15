@@ -64,20 +64,20 @@ fn every_part_is_a_touch_record_and_application_images() {
                 let record = zone.record.0 as usize;
                 let words: Vec<u32> = (0..5).map(|k| u32_at(app, record + 4 * k)).collect();
                 let area = &zone.area;
-                assert_eq!(
-                    words,
-                    [area.x, area.y, area.w, area.h, zone.handler.0],
-                    "{}/{name}: the record at {record:#x}",
+                // Compared without printing either side: a failure names the record only.
+                assert!(
+                    words == [area.x, area.y, area.w, area.h, zone.handler.0],
+                    "{}/{name}: the record at {record:#x} differs from the map",
                     screen.id
                 );
                 zones += 1;
             }
             for place in &part.drawn {
                 for image in &place.images {
-                    assert_eq!(
-                        images.get(&image.offset.0),
-                        Some(&(image.width, image.height)),
-                        "{}/{name}: the image at {:#x}",
+                    let size = Some(&(image.width, image.height));
+                    assert!(
+                        images.get(&image.offset.0) == size,
+                        "{}/{name}: the image at {:#x} is not one of that size",
                         screen.id,
                         image.offset.0
                     );

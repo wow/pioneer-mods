@@ -9,8 +9,6 @@ use super::screen_images::Position;
 use crate::image::{MAX_IMAGE_BYTES, image_bytes};
 use serde::{Deserialize, Serialize};
 
-/// The application's run-time base: a touch handler's address is at least this.
-pub const RUN_TIME_BASE: u32 = 0x0800_0000;
 /// The size of one touch layout record ({x, y, width, height, handler}, five 32-bit words).
 pub const TOUCH_RECORD_LEN: u32 = 20;
 
@@ -54,7 +52,7 @@ pub struct TouchZone {
     pub record: Address,
     /// The area the record holds.
     pub area: Region,
-    /// The handler the record names, a run-time address.
+    /// The handler the record names, a run-time address (the release's load address on).
     pub handler: Address,
     /// When the zone acts, if not whenever the screen is shown (`while a loop plays`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -127,10 +125,10 @@ impl Part {
                     "a layout record is 4-byte aligned",
                 ));
             }
-            if zone.handler.0 < RUN_TIME_BASE || zone.handler.0 % 2 != 0 {
+            if zone.handler.0 % 2 != 0 {
                 return Err(rule(
                     format!("{field}.handler"),
-                    "a handler is an even run-time address in the application (0x08000000 on)",
+                    "a handler is an even address",
                 ));
             }
             if zone.area.w == 0 || zone.area.h == 0 {

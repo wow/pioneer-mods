@@ -82,12 +82,8 @@ fn malformed_parts_are_refused() {
         "4-byte aligned",
     );
     refused(
-        &|p| p["touch"][0]["handler"] = "0xdd0b10".into(),
-        "run-time address",
-    );
-    refused(
         &|p| p["touch"][0]["handler"] = "0x8dd0b11".into(),
-        "run-time address",
+        "a handler is an even address",
     );
     refused(
         &|p| p["touch"][0]["area"]["w"] = 0.into(),
@@ -141,4 +137,20 @@ fn a_parts_touch_areas_and_images_lie_on_its_players_screen() {
         message.contains("part rev: drawn[0].images[0] is not on the 800x480 screen"),
         "{message}"
     );
+}
+
+#[test]
+fn a_screens_touch_records_are_apart() {
+    let with_record = |record: &str| {
+        let mut other = part();
+        other["touch"][0]["record"] = record.into();
+        screen(json!({ "rev": part(), "sync": other }))
+    };
+    // REV's record is at 0xd5edc: the next record may start 20 bytes on.
+    checked(with_record("0xd5ef0")).expect("apart");
+    checked(with_record("0xd5ec8")).expect("apart");
+    for record in ["0xd5edc", "0xd5eec", "0xd5ed0"] {
+        let error = checked(with_record(record)).expect_err("refused");
+        assert!(error.contains("overlaps part"), "{record}: {error}");
+    }
 }

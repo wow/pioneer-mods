@@ -229,6 +229,15 @@ fn a_parts_records_and_images_lie_in_the_application() {
         },
         "part rev: touch[0].handler 0x091bd788 is not in the application",
     );
+    // Below the release's load address.
+    refused_with(
+        |root| {
+            edit_part(root, "rev", |p| {
+                p["touch"][0]["handler"] = "0x7fffffe".into()
+            })
+        },
+        "part rev: touch[0].handler 0x07fffffe is not in the application",
+    );
     refused_with(
         |root| {
             let offset = format!("{:#x}", end - 72 * 53 * 2 + 2);
