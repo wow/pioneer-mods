@@ -30,5 +30,434 @@
       }
     }
   },
+  "parts": {
+    "perform": {
+      "title": "PERFORM", "kind": "button",
+      "touch": [
+        { "record": "0xd5d88", "area": { "x": 642, "y": 10, "w": 134, "h": 55 }, "handler": "0x8dd072a" }
+      ],
+      "drawn": [
+        { "at": { "x": 642, "y": 10 }, "images": [
+          { "offset": "0x845a20", "width": 144, "height": 55, "seen": "PERFORM, no track loaded" },
+          { "offset": "0x849800", "width": 144, "height": 55, "seen": "PERFORM, no track loaded" },
+          { "offset": "0x84d5e0", "width": 144, "height": 55, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x8513c0", "width": 144, "height": 55, "seen": "PERFORM, a track loaded and playing" }
+        ] }
+      ],
+      "does": "Opens PERFORM from the main screen and closes it again.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "rev": {
+      "title": "REV", "kind": "button",
+      "touch": [
+        { "record": "0xd5edc", "area": { "x": 18, "y": 76, "w": 68, "h": 53 }, "handler": "0x8dd0b10" }
+      ],
+      "drawn": [
+        { "at": { "x": 18, "y": 78 }, "images": [
+          { "offset": "0x327ee0", "width": 72, "height": 53, "seen": "with SLIP on" },
+          { "offset": "0x32ba80", "width": 72, "height": 53, "seen": "after touching REV (on)" },
+          { "offset": "0x32d850", "width": 72, "height": 53, "seen": "after touching REV (on)" },
+          { "offset": "0x32f620", "width": 72, "height": 53, "seen": "PERFORM, no track loaded" }
+        ] }
+      ],
+      "does": "Plays the track in reverse while on (lit red); touch again for forward.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "beat_loop.pads": {
+      "title": "BEAT LOOP pads (1/2, 1, 2, 4, 8, 16)", "kind": "buttons",
+      "touch": [
+        { "record": "0xd5ef0", "area": { "x": 116, "y": 154, "w": 500, "h": 53 }, "handler": "0x8dd08f2" }
+      ],
+      "slot": "beat_loop.pad",
+      "does": "Six pads; touching one starts a loop of its length (the BEAT LOOP table, decoded 0xD6220: list indices 6, 8, 9, 10, 11, 12 = 1/2 to 16 beats) and it lights; touching it again keeps the loop. The zone is split into sixths (edges, decoded 0xD6250: 83, 166, 250, 333, 416, 500). With SLIP on the pads show SLIP LOOP lengths 1/8, 1/4, 1/2, 1, 1/3, 3/4 (table 0xD6238: indices 3, 4, 6, 8, 5, 7) from another set of images.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "beat_loop.label": {
+      "title": "BEAT LOOP (label)", "kind": "label",
+      "drawn": [
+        { "at": { "x": 18, "y": 154 }, "images": [
+          { "offset": "0x33b9e0", "width": 104, "height": 53, "seen": "PERFORM, no track loaded" }
+        ] }
+      ],
+      "does": "The row label; touching it does nothing on PERFORM.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "cue_loop_call.previous": {
+      "title": "CUE/LOOP CALL ◀ (LOOP 1/2X)", "kind": "button",
+      "touch": [
+        { "record": "0xd5e64", "area": { "x": 642, "y": 154, "w": 70, "h": 53 }, "handler": "0x8dd0b50", "when": "no loop playing" },
+        { "record": "0xd5ea0", "area": { "x": 642, "y": 154, "w": 70, "h": 53 }, "handler": "0x8dd0b20", "when": "while a loop plays" }
+      ],
+      "drawn": [
+        { "at": { "x": 642, "y": 154 }, "images": [
+          { "offset": "0x265180", "width": 72, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x31e9d0", "width": 72, "height": 53, "seen": "while a loop plays" },
+          { "offset": "0x322570", "width": 72, "height": 53, "seen": "after halving a loop" },
+          { "offset": "0x326110", "width": 72, "height": 53, "seen": "while a loop plays" }
+        ] }
+      ],
+      "does": "Calls the previous stored cue or loop; while a loop plays it shows 1/2X and halves the loop.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "cue_loop_call.next": {
+      "title": "CUE/LOOP CALL ▶ (LOOP 2X)", "kind": "button",
+      "touch": [
+        { "record": "0xd5e78", "area": { "x": 712, "y": 154, "w": 70, "h": 53 }, "handler": "0x8dd0b40", "when": "no loop playing" },
+        { "record": "0xd5eb4", "area": { "x": 712, "y": 154, "w": 70, "h": 53 }, "handler": "0x8dd0b30", "when": "while a loop plays" }
+      ],
+      "drawn": [
+        { "at": { "x": 712, "y": 154 }, "images": [
+          { "offset": "0x25f810", "width": 72, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x3154c0", "width": 72, "height": 53, "seen": "while a loop plays" },
+          { "offset": "0x319060", "width": 72, "height": 53, "seen": "after doubling a loop" },
+          { "offset": "0x31cc00", "width": 72, "height": 53, "seen": "while a loop plays" }
+        ] }
+      ],
+      "does": "Calls the next stored cue or loop; while a loop plays it shows 2X and doubles the loop (16 beats doubles to 32, then 64).",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "cue_loop_call.label": {
+      "title": "CUE/LOOP CALL (label)", "kind": "label",
+      "drawn": [
+        { "at": { "x": 642, "y": 114 }, "images": [
+          { "offset": "0x33e4f0", "width": 144, "height": 40, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x344520", "width": 144, "height": 40, "seen": "while a loop plays" }
+        ] }
+      ],
+      "does": "The label over the two CALL buttons; it reads LOOP while a loop plays.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "cue_loop_call.link": {
+      "title": "CALL to MEMORY line", "kind": "label",
+      "drawn": [
+        { "at": { "x": 712, "y": 207 }, "images": [
+          { "offset": "0x3370c0", "width": 72, "height": 25, "seen": "drawn from the main screen on, and on PERFORM" }
+        ] }
+      ],
+      "does": "The line joining ▶ to MEMORY / DELETE.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "hot_cue.a": {
+      "title": "HOT CUE A", "kind": "button",
+      "touch": [
+        { "record": "0xd5f04", "area": { "x": 116, "y": 232, "w": 99, "h": 63 }, "handler": "0x8dd0ba4" }
+      ],
+      "drawn": [
+        { "at": { "x": 116, "y": 232 }, "images": [
+          { "offset": "0x272230", "width": 104, "height": 63, "seen": "PERFORM, no track loaded" },
+          { "offset": "0x278890", "width": 104, "height": 63, "seen": "with SLIP on" },
+          { "offset": "0x28eee0", "width": 104, "height": 63, "seen": "touched with no track loaded" },
+          { "offset": "0x292210", "width": 104, "height": 63, "seen": "in hot cue REC mode" },
+          { "offset": "0x298870", "width": 104, "height": 63, "seen": "PERFORM, a track loaded and playing" },
+          { "offset": "0x29bba0", "width": 104, "height": 63, "seen": "after touching HOT CUE A" },
+          { "offset": "0x29eed0", "width": 104, "height": 63, "seen": "after touching REV (on)" }
+        ] }
+      ],
+      "does": "Jumps to hot cue A, or stores it at the playing position if none is stored; in REC mode it records it. Its lamp is green when stored, red in REC mode, blue with SLIP on.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "hot_cue.b": {
+      "title": "HOT CUE B", "kind": "button",
+      "touch": [
+        { "record": "0xd5f18", "area": { "x": 231, "y": 232, "w": 99, "h": 63 }, "handler": "0x8dd0bb4" }
+      ],
+      "drawn": [
+        { "at": { "x": 231, "y": 232 }, "images": [
+          { "offset": "0x2a8860", "width": 104, "height": 63, "seen": "PERFORM, no track loaded" },
+          { "offset": "0x2aeec0", "width": 104, "height": 63, "seen": "with SLIP on" },
+          { "offset": "0x2c8840", "width": 104, "height": 63, "seen": "in hot cue REC mode" }
+        ] }
+      ],
+      "does": "As HOT CUE A, for B.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "hot_cue.c": {
+      "title": "HOT CUE C", "kind": "button",
+      "touch": [
+        { "record": "0xd5f2c", "area": { "x": 345, "y": 232, "w": 99, "h": 63 }, "handler": "0x8dd0bc4" }
+      ],
+      "drawn": [
+        { "at": { "x": 345, "y": 232 }, "images": [
+          { "offset": "0x2dee90", "width": 104, "height": 63, "seen": "PERFORM, no track loaded" },
+          { "offset": "0x2e54f0", "width": 104, "height": 63, "seen": "with SLIP on" },
+          { "offset": "0x2fee70", "width": 104, "height": 63, "seen": "in hot cue REC mode" },
+          { "offset": "0x3054d0", "width": 104, "height": 63, "seen": "PERFORM, a track loaded and playing" },
+          { "offset": "0x308800", "width": 104, "height": 63, "seen": "after touching HOT CUE C" },
+          { "offset": "0x30bb30", "width": 104, "height": 63, "seen": "after touching REV (on)" }
+        ] }
+      ],
+      "does": "As HOT CUE A, for C.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "hot_cue.rec": {
+      "title": "REC", "kind": "button",
+      "touch": [
+        { "record": "0xd5f40", "area": { "x": 460, "y": 232, "w": 78, "h": 63 }, "handler": "0x8dd0bd4" }
+      ],
+      "drawn": [
+        { "at": { "x": 460, "y": 232 }, "images": [
+          { "offset": "0x251ef0", "width": 80, "height": 63, "seen": "in hot cue REC mode" },
+          { "offset": "0x254650", "width": 80, "height": 63, "seen": "in hot cue REC mode" },
+          { "offset": "0x256db0", "width": 80, "height": 63, "seen": "PERFORM, no track loaded" },
+          { "offset": "0x259510", "width": 80, "height": 63, "seen": "after leaving hot cue REC mode" }
+        ] }
+      ],
+      "does": "Switches the hot cue buttons to recording (their lamps turn red); touch again to leave.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "hot_cue.call": {
+      "title": "CALL", "kind": "button",
+      "touch": [
+        { "record": "0xd5f54", "area": { "x": 538, "y": 232, "w": 78, "h": 63 }, "handler": "0x8dd0c18" }
+      ],
+      "drawn": [
+        { "at": { "x": 538, "y": 232 }, "images": [
+          { "offset": "0x24a8d0", "width": 80, "height": 63, "seen": "PERFORM, no track loaded" },
+          { "offset": "0x24d030", "width": 80, "height": 63, "seen": "after touching CALL" }
+        ] }
+      ],
+      "does": "Calls the hot cues stored for the track.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "hot_cue.label": {
+      "title": "HOT CUE (label)", "kind": "label",
+      "drawn": [
+        { "at": { "x": 18, "y": 232 }, "images": [
+          { "offset": "0x3411f0", "width": 104, "height": 63, "seen": "PERFORM, no track loaded" }
+        ] }
+      ],
+      "does": "The row label; touching it does nothing on PERFORM.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "hot_cue.links": {
+      "title": "HOT CUE lines", "kind": "label",
+      "drawn": [
+        { "at": { "x": 216, "y": 232 }, "images": [
+          { "offset": "0x337ed0", "width": 16, "height": 63, "seen": "PERFORM, no track loaded" }
+        ] },
+        { "at": { "x": 330, "y": 232 }, "images": [
+          { "offset": "0x337ed0", "width": 16, "height": 63, "seen": "PERFORM, no track loaded" }
+        ] },
+        { "at": { "x": 445, "y": 232 }, "images": [
+          { "offset": "0x337ed0", "width": 16, "height": 63, "seen": "PERFORM, no track loaded" }
+        ] }
+      ],
+      "does": "The lines joining A, B, C and REC.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "quantize": {
+      "title": "QUANTIZE", "kind": "button",
+      "touch": [
+        { "record": "0xd5ec8", "area": { "x": 642, "y": 232, "w": 67, "h": 53 }, "handler": "0x8dd0ac4" }
+      ],
+      "drawn": [
+        { "at": { "x": 642, "y": 232 }, "images": [
+          { "offset": "0x26aaf0", "width": 72, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x26c8c0", "width": 72, "height": 53, "seen": "after touching QUANTIZE again (on)" },
+          { "offset": "0x26e690", "width": 72, "height": 53, "seen": "after touching QUANTIZE (off)" },
+          { "offset": "0x270460", "width": 72, "height": 53, "seen": "after touching QUANTIZE (off)" }
+        ] }
+      ],
+      "does": "Turns QUANTIZE on and off (lit red when on).",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "memory": {
+      "title": "MEMORY / DELETE", "kind": "button",
+      "touch": [
+        { "record": "0xd5e8c", "area": { "x": 715, "y": 232, "w": 67, "h": 53 }, "handler": "0x8dd0b60" }
+      ],
+      "drawn": [
+        { "at": { "x": 715, "y": 232 }, "images": [
+          { "offset": "0x25bc70", "width": 72, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x25da40", "width": 72, "height": 53, "seen": "after touching MEMORY" }
+        ] }
+      ],
+      "does": "Stores a memory cue at the playing position (a red marker on the waveform).",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "vinyl_brake": {
+      "title": "VINYL BRAKE", "kind": "button",
+      "touch": [
+        { "record": "0xd5dd8", "area": { "x": 18, "y": 341, "w": 68, "h": 53 }, "handler": "0x8dd0834" }
+      ],
+      "drawn": [
+        { "at": { "x": 18, "y": 341 }, "images": [
+          { "offset": "0x87e940", "width": 72, "height": 53, "seen": "after touching VINYL BRAKE (on)" },
+          { "offset": "0x880710", "width": 72, "height": 53, "seen": "after touching VINYL BRAKE (on)" },
+          { "offset": "0x886080", "width": 72, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x887e50", "width": 72, "height": 53, "seen": "after touching VINYL BRAKE again (off)" }
+        ] }
+      ],
+      "does": "Turns vinyl brake on and off (lit blue).",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "slip": {
+      "title": "SLIP", "kind": "button",
+      "touch": [
+        { "record": "0xd5dec", "area": { "x": 18, "y": 403, "w": 68, "h": 53 }, "handler": "0x8dd07f2" }
+      ],
+      "drawn": [
+        { "at": { "x": 18, "y": 403 }, "images": [
+          { "offset": "0x86bf20", "width": 72, "height": 53, "seen": "with SLIP on" },
+          { "offset": "0x86dcf0", "width": 72, "height": 53, "seen": "with SLIP on" },
+          { "offset": "0x86fac0", "width": 72, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x871890", "width": 72, "height": 53, "seen": "after turning SLIP off" }
+        ] }
+      ],
+      "does": "Turns SLIP on and off (lit blue); while on, the BEAT LOOP pads are SLIP LOOP pads and the hot cue lamps are blue.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "time": {
+      "title": "TIME / A.CUE", "kind": "button",
+      "touch": [
+        { "record": "0xd5e00", "area": { "x": 191, "y": 341, "w": 68, "h": 53 }, "handler": "0x8dd0802" }
+      ],
+      "drawn": [
+        { "at": { "x": 191, "y": 341 }, "images": [
+          { "offset": "0x87ada0", "width": 72, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x87cb70", "width": 72, "height": 53, "seen": "after touching TIME (elapsed)" }
+        ] }
+      ],
+      "does": "Switches the time display between remaining and elapsed.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "sync": {
+      "title": "SYNC", "kind": "button",
+      "touch": [
+        { "record": "0xd5e14", "area": { "x": 642, "y": 341, "w": 67, "h": 53 }, "handler": "0x8dd084c" }
+      ],
+      "drawn": [
+        { "at": { "x": 642, "y": 341 }, "images": [
+          { "offset": "0x873660", "width": 72, "height": 53, "seen": "after touching SYNC (on)" },
+          { "offset": "0x875430", "width": 72, "height": 53, "seen": "after touching SYNC (on)" },
+          { "offset": "0x877200", "width": 72, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" }
+        ] }
+      ],
+      "does": "Turns beat sync on and off (lit white when on).",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "master": {
+      "title": "MASTER", "kind": "button",
+      "touch": [
+        { "record": "0xd5e28", "area": { "x": 715, "y": 341, "w": 67, "h": 53 }, "handler": "0x8dd087e" }
+      ],
+      "drawn": [
+        { "at": { "x": 715, "y": 341 }, "images": [
+          { "offset": "0x8647e0", "width": 72, "height": 53, "seen": "PERFORM, a track loaded and playing" },
+          { "offset": "0x8665b0", "width": 72, "height": 53, "seen": "after touching MASTER" },
+          { "offset": "0x868380", "width": 72, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" }
+        ] }
+      ],
+      "does": "Makes this player the tempo master (lit orange).",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "waveform": {
+      "title": "Waveform (bottom)", "kind": "display",
+      "touch": [
+        { "record": "0xd5e3c", "area": { "x": 116, "y": 403, "w": 500, "h": 77 }, "handler": "0x8dd08c2" }
+      ],
+      "drawn": [
+        { "at": { "x": 116, "y": 443 }, "images": [
+          { "offset": "0x4792e0", "width": 504, "height": 5, "seen": "PERFORM, a track loaded and playing" }
+        ] }
+      ],
+      "does": "The whole track with its cue markers and the playing position; touching it ran its handler but changed nothing seen while the track played. The waveform itself is drawn without images; the image is the position bar under it.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+    },
+    "player": {
+      "title": "PLAYER number", "kind": "display",
+      "drawn": [
+        { "at": { "x": 18, "y": 10 }, "images": [
+          { "offset": "0x3d5200", "width": 72, "height": 55, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x3d8fe0", "width": 72, "height": 55, "seen": "drawn from the main screen on, and on PERFORM" }
+        ] }
+      ],
+      "does": "Shows the player number.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "phrase_bars": {
+      "title": "Phrase bars", "kind": "display",
+      "drawn": [
+        { "at": { "x": 258, "y": 14 }, "images": [
+          { "offset": "0x48ac10", "width": 216, "height": 20, "seen": "PERFORM, no track loaded" }
+        ] },
+        { "at": { "x": 258, "y": 35 }, "images": [
+          { "offset": "0x4954d0", "width": 216, "height": 20, "seen": "PERFORM, no track loaded" },
+          { "offset": "0x497690", "width": 216, "height": 20, "seen": "PERFORM, a track loaded and playing" },
+          { "offset": "0x4a62d0", "width": 216, "height": 20, "seen": "PERFORM, a track loaded and playing" },
+          { "offset": "0x4a8490", "width": 216, "height": 20, "seen": "PERFORM, a track loaded and playing" },
+          { "offset": "0x4aa650", "width": 216, "height": 20, "seen": "PERFORM, a track loaded and playing" }
+        ] }
+      ],
+      "does": "Two rows of four bars (orange and blue) counting bars of the phrase.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "loop_length": {
+      "title": "Loop length", "kind": "display",
+      "drawn": [
+        { "at": { "x": 618, "y": 432 }, "images": [
+          { "offset": "0x3b6fc0", "width": 24, "height": 24, "seen": "while a loop plays" }
+        ] },
+        { "at": { "x": 642, "y": 432 }, "images": [
+          { "offset": "0x3a1540", "width": 56, "height": 24, "seen": "after touching CUE/LOOP CALL ◀ during a loop" },
+          { "offset": "0x3afc40", "width": 56, "height": 24, "seen": "after halving a loop" },
+          { "offset": "0x3b2640", "width": 56, "height": 24, "seen": "while a loop plays" },
+          { "offset": "0x3f6f50", "width": 56, "height": 24, "seen": "after touching HOT CUE A" }
+        ] }
+      ],
+      "does": "The loop symbol and the playing loop length (orange while a loop plays).",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "tempo_range": {
+      "title": "Tempo range (±10)", "kind": "display",
+      "drawn": [
+        { "at": { "x": 642, "y": 403 }, "images": [
+          { "offset": "0x473ee0", "width": 56, "height": 21, "seen": "drawn from the main screen on, and on PERFORM" }
+        ] }
+      ],
+      "does": "Shows the tempo range.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "bpm": {
+      "title": "BPM", "kind": "display",
+      "drawn": [
+        { "at": { "x": 699, "y": 403 }, "images": [
+          { "offset": "0x348bf0", "width": 88, "height": 53, "seen": "drawn from the main screen on, and on PERFORM" },
+          { "offset": "0x34d4d0", "width": 88, "height": 53, "seen": "PERFORM, a track loaded and playing" }
+        ] }
+      ],
+      "does": "The box around the BPM and MASTER readout.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "frame": {
+      "title": "PERFORM frame", "kind": "frame",
+      "drawn": [
+        { "at": { "x": 9, "y": 4 }, "images": [
+          { "offset": "0x333e00", "width": 8, "height": 308, "seen": "PERFORM, no track loaded" }
+        ] },
+        { "at": { "x": 789, "y": 4 }, "images": [
+          { "offset": "0x335140", "width": 8, "height": 308, "seen": "PERFORM, no track loaded" }
+        ] },
+        { "at": { "x": 11, "y": 4 }, "images": [
+          { "offset": "0x336480", "width": 784, "height": 2, "seen": "PERFORM, no track loaded" }
+        ] },
+        { "at": { "x": 11, "y": 310 }, "images": [
+          { "offset": "0x3331c0", "width": 784, "height": 2, "seen": "PERFORM, no track loaded" }
+        ] }
+      ],
+      "does": "The purple frame around PERFORM: left, right, top and bottom edges.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    },
+    "panel": {
+      "title": "Bottom panel", "kind": "frame",
+      "drawn": [
+        { "at": { "x": 0, "y": 319 }, "images": [
+          { "offset": "0x8af060", "width": 800, "height": 161, "seen": "drawn from the main screen on, and on PERFORM" }
+        ] }
+      ],
+      "does": "The background of the bottom panel (time, tempo, waveform), shared with the main screen.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): its images were drawn at this position (the 2D engine's blit log); no code reads them at start-up (a CPU read watch)."
+    }
+  },
   "maintainer": "wow"
 }

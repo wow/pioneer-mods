@@ -193,3 +193,49 @@ fn the_neon_pads_skin_paints_every_pad_image_once_and_whole() {
     let named: BTreeSet<u64> = images.images().map(|i| u64::from(i.offset)).collect();
     assert_eq!(painted, named);
 }
+
+/// Changes the committed PERFORM screen's part `name` in a catalog copy.
+fn edit_part(root: &Path, name: &str, edit: impl FnOnce(&mut Value)) {
+    let path = root.join(PERFORM);
+    let mut screen = read_json(&path);
+    edit(&mut screen["parts"][name]);
+    write_bytes(&path, &serde_json::to_vec(&screen).expect("json"));
+}
+
+#[test]
+fn a_parts_records_and_images_lie_in_the_application() {
+    let loaded = load_catalog(&repo_root()).expect("committed catalog");
+    let perform = loaded
+        .catalog()
+        .screen("xdj700-v1.15", "perform")
+        .expect("perform");
+    let zones: usize = perform.parts.values().map(|part| part.touch.len()).sum();
+    assert!(perform.parts.len() >= 30 && zones >= 20, "the PERFORM map");
+
+    // The application is 18,601,864 bytes; it runs from 0x08000000.
+    let end = 18_601_864u32;
+    refused_with(
+        |root| {
+            edit_part(root, "rev", |p| {
+                p["touch"][0]["record"] = format!("{:#x}", end - 16).into()
+            })
+        },
+        "part rev: touch[0].record 0x11bd778 is not in the 18601864-byte application",
+    );
+    refused_with(
+        |root| {
+            let handler = format!("{:#x}", 0x0800_0000 + end);
+            edit_part(root, "rev", |p| p["touch"][0]["handler"] = handler.into());
+        },
+        "part rev: touch[0].handler 0x091bd788 is not in the application",
+    );
+    refused_with(
+        |root| {
+            let offset = format!("{:#x}", end - 72 * 53 * 2 + 2);
+            edit_part(root, "rev", |p| {
+                p["drawn"][0]["images"][0]["offset"] = offset.into()
+            });
+        },
+        "part rev: drawn[0].images[0] ends past the 18601864-byte application",
+    );
+}

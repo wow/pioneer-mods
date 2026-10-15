@@ -184,11 +184,12 @@ fn check_against_engine(catalog: &Catalog, recipes: &BTreeMap<String, RecipeV2>)
         }
     }
     // A slot's images are in its player's decoded application, out of its protected ranges, and
-    // edited only whole.
+    // edited only whole; a part's records and images are in it too.
     for screen in &catalog.screens {
         let target =
             recipe_target(&screen.player).ok_or_else(|| unknown_release(&screen.player))?;
         slots::check_slot_images(screen, target, recipes)?;
+        slots::check_parts(screen, target)?;
     }
     for (path, recipe) in recipes {
         let target = recipe_target(&recipe.target.release)

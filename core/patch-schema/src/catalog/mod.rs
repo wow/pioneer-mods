@@ -21,6 +21,7 @@ mod resolve_output;
 mod resolve_skins;
 mod screen;
 mod screen_images;
+mod screen_parts;
 mod skin;
 
 pub use acceptance::{
@@ -44,4 +45,7 @@ pub use resolution::{
 pub use resolve::{MAX_CONFIGURATIONS, resolve};
 pub use screen::{Screen, Slot};
 pub use screen_images::{Position, SlotElement, SlotImage, SlotImages};
+pub use screen_parts::{
+    Drawn, Part, PartImage, PartKind, RUN_TIME_BASE, TOUCH_RECORD_LEN, TouchZone,
+};
 pub use skin::{Art, STOCK_SKIN, Skin, SkinImplementation, SkinLicence, SkinRequires};

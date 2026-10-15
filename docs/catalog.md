@@ -97,6 +97,58 @@ images the stage-7 recipe relabels. Positions are not data yet: a slot's positio
 the stock application draws it, and a skin keeps them ([modular-builds.md](./modular-builds.md),
 "Extending the limits").
 
+### Parts
+
+A screen may map its `parts`: everything it shows, by name (`rev`, `hot_cue.a`,
+`beat_loop.pads`), each with what it is and what touching it does. The map is what skins,
+layouts and features are planned from.
+
+```json
+"rev": {
+  "title": "REV", "kind": "button",
+  "touch": [
+    { "record": "0xd5edc", "area": { "x": 18, "y": 76, "w": 68, "h": 53 }, "handler": "0x8dd0b10" }
+  ],
+  "drawn": [
+    { "at": { "x": 18, "y": 78 }, "images": [
+      { "offset": "0x808b80", "width": 72, "height": 53, "seen": "after touching REV (on)" }
+    ] }
+  ],
+  "does": "Plays the track in reverse while on (lit red); touch again for forward.",
+  "evidence": "How it was measured."
+}
+```
+
+- `title`: what the screen shows on it, or what it is; `kind`: `button`, `buttons` (a row one
+  zone covers), `label`, `display` or `frame`.
+- `touch`: one per record of the screen's touch layout that acts on it: the `record`'s
+  decoded-application offset (five 32-bit words: x, y, width, height, handler), its `area` and
+  its `handler` (a run-time address, 0x08000000 on), and `when` it acts if not always
+  (`while a loop plays`). On the XDJ-700 the deck screens share one touch layout; the screen's
+  mode selects the records that act.
+- `drawn`: one per place it is drawn: where (`at`) and the images seen there, each by offset and
+  size (RGB565) with when it was first `seen`.
+- `slot`: the slot that names its images, when one does (the BEAT LOOP pads).
+- `does`, `evidence`: what touching it does or what it shows, and how that was measured.
+
+Every touch area and image lies on the player's screen; the loader holds every record and image
+inside the release's decoded application and every handler inside the running one; an owner test
+(`official_screen_parts`) holds each record to its area and handler and each image to one of
+the application's images, with its size.
+
+What may change, by the kind of thing (XDJ-700 v1.15, measured in emulation):
+
+| Change | Where | Read at start-up |
+| --- | --- | --- |
+| A part's art, the same size | its images (an image edit) | no (PERFORM's images) |
+| Where a part is touched | its touch record (data) | no (the touch layout) |
+| Where a part is drawn | not in the touch record: moving a record moves only the touch area | not located |
+| What a part does | its handler (code), or a table it reads (the BEAT LOOP lengths) | no (PERFORM's tables) |
+
+The PERFORM screen maps 30 parts: every control it shows with and without a track, its labels,
+the phrase bars, the loop length and BPM boxes and its frame. Not yet mapped: the digits of the
+time, tempo and BPM readouts, and a few images drawn under others.
+
 ## Feature
 
 [`catalog/features/beat-loop-1-to-32.json`](../catalog/features/beat-loop-1-to-32.json):

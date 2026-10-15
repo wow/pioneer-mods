@@ -1,11 +1,12 @@
-//! A screen of one player and its slots: named places a skin can fill or a feature can use
-//! (`catalog/screens/<player>/<screen>.json`).
+//! A screen of one player, its slots (named places a skin can fill or a feature can use) and its
+//! parts (everything it shows, mapped: [`Part`]) (`catalog/screens/<player>/<screen>.json`).
 
 use super::entry::{
     CatalogEntry, EntryError, check_id, check_name, check_player_id, check_schema_version,
     check_text, unique_keys,
 };
 use super::screen_images::SlotImages;
+use super::screen_parts::Part;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -19,6 +20,13 @@ pub struct Screen {
     pub title: String,
     #[serde(default, deserialize_with = "unique_keys")]
     pub slots: BTreeMap<String, Slot>,
+    /// Its parts, by name, when mapped.
+    #[serde(
+        default,
+        deserialize_with = "unique_keys",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub parts: BTreeMap<String, Part>,
     pub maintainer: String,
 }
 
@@ -60,6 +68,17 @@ impl CatalogEntry for Screen {
             check_text(&format!("slots.{name}.description"), &slot.description)?;
             if let Some(images) = &slot.images {
                 images.validate(&format!("slots.{name}.images"), slot.count)?;
+            }
+        }
+        for (name, part) in &self.parts {
+            part.validate(name)?;
+            if let Some(slot) = &part.slot
+                && !self.slots.contains_key(slot)
+            {
+                return Err(EntryError::Rule {
+                    field: format!("parts.{name}.slot"),
+                    problem: format!("the screen has no slot {slot}"),
+                });
             }
         }
         check_text("maintainer", &self.maintainer)
