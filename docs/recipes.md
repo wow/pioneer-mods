@@ -139,6 +139,11 @@ Stock values the catalogue publishes inside these windows (accepted by the owner
   - A later window over these records or tables counts their published words as known, and so
     holds this many fewer unknown values; the record table and the two tables stay reserved like
     the windows around them.
+  - The loader holds the catalogue to this: a part's records and table entries may lie in a
+    committed window only inside the decoded ranges `0xD5D38..0xD5F68` and `0xD6220..0xD625C`
+    (`PUBLISHED_IN_WINDOWS` in `core/patch-cli/src/catalog/screen_parts.rs`), so widening them is
+    a change review sees. The owner test `official_screen_parts` checks the published values
+    against the official file.
 
 ## Writing a recipe
 

@@ -4,6 +4,7 @@
 //! is every player and recipe against the engine's own release pins and checks. What loads here
 //! is what the engine accepts, short of the firmware itself.
 
+mod screen_parts;
 mod slots;
 
 use crate::recipe::{read_capped, read_recipe_versioned};
@@ -189,7 +190,10 @@ fn check_against_engine(catalog: &Catalog, recipes: &BTreeMap<String, RecipeV2>)
         let target =
             recipe_target(&screen.player).ok_or_else(|| unknown_release(&screen.player))?;
         slots::check_slot_images(screen, target, recipes)?;
-        slots::check_parts(screen, target)?;
+        let player = catalog
+            .player(&screen.player)
+            .ok_or_else(|| unknown_release(&screen.player))?;
+        screen_parts::check_screen_parts(screen, player, target, recipes)?;
     }
     for (path, recipe) in recipes {
         let target = recipe_target(&recipe.target.release)

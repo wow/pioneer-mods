@@ -99,8 +99,9 @@ pub enum Check {
 }
 
 /// An address or offset, written `0x` and one to eight hexadecimal digits; anything else is
-/// refused when the file is read. A memory check's is a guest physical address; a slot image's is
-/// a decoded-application offset.
+/// refused when the file is read. Two kinds, a release's load address apart: a decoded-application
+/// offset (a slot or part image, a touch record, a part table) and a run-time address (a part's
+/// touch handler, from the load address). A memory check's is a guest physical address.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Address(pub u32);

@@ -1,16 +1,17 @@
 //! A screen's parts (`parts.<name>`): the buttons, labels and displays it shows, where each is
-//! touched and drawn, what touching it does, and the images it draws. The map skins, layouts and
-//! features are planned from: a part's images are art a skin may repaint, its touch zone is a
-//! layout record, and what it does is code.
+//! touched and drawn, what touching it does, the images it draws and the tables it reads. The
+//! map skins, layouts and features are planned from: a part's images are art a recipe may
+//! repaint (a skin, through a slot that names them), its touch zone is a layout record, and what
+//! it does is code or a table.
+//!
+//! These are the player-agnostic rules; the catalog holds a part to its player (screen, pixel
+//! format, touch layout shape) and the loader to its release.
 
 use super::acceptance::{Address, Region};
 use super::entry::{EntryError, check_name, check_text};
 use super::screen_images::Position;
-use crate::image::{MAX_IMAGE_BYTES, image_bytes};
 use serde::{Deserialize, Serialize};
-
-/// The size of one touch layout record ({x, y, width, height, handler}, five 32-bit words).
-pub const TOUCH_RECORD_LEN: u32 = 20;
+use std::collections::BTreeSet;
 
 /// One part of a screen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,6 +29,9 @@ pub struct Part {
     /// The slot that names its images, if one does (`beat_loop.pad`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slot: Option<String>,
+    /// Tables of the application it reads (the BEAT LOOP lengths), with their stock values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tables: Vec<PartTable>,
     /// What touching it does, or what it shows.
     pub does: String,
     pub evidence: String,
@@ -44,15 +48,16 @@ pub enum PartKind {
     Frame,
 }
 
-/// A touch zone: a record of the screen's touch layout.
+/// A touch zone: a record of the application's touch layout (its shape: the player's
+/// `touch_layout`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TouchZone {
-    /// The record's decoded-application offset ({x, y, width, height, handler}, 20 bytes).
+    /// The record's decoded-application offset.
     pub record: Address,
     /// The area the record holds.
     pub area: Region,
-    /// The handler the record names, a run-time address (the release's load address on).
+    /// The handler the record names, a run-time address (from the release's load address).
     pub handler: Address,
     /// When the zone acts, if not whenever the screen is shown (`while a loop plays`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -68,7 +73,7 @@ pub struct Drawn {
     pub images: Vec<PartImage>,
 }
 
-/// One image a part draws (RGB565, 16-bit little-endian).
+/// One image a part draws, in the player's pixel format.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PartImage {
@@ -81,16 +86,6 @@ pub struct PartImage {
 }
 
 impl PartImage {
-    /// The image's length in bytes (`u64::MAX` if it overflows, which validation refuses).
-    pub fn len(&self) -> u64 {
-        image_bytes(self.width, self.height, 2).unwrap_or(u64::MAX)
-    }
-
-    /// Whether the image has no pixel (validation refuses it).
-    pub fn is_empty(&self) -> bool {
-        self.width == 0 || self.height == 0
-    }
-
     /// The screen area it covers when drawn at `at`.
     pub fn area(&self, at: Position) -> Region {
         Region {
@@ -99,6 +94,30 @@ impl PartImage {
             w: self.width,
             h: self.height,
         }
+    }
+}
+
+/// A table of the application a part reads: one entry per value, `entry_bytes` each
+/// (little-endian), `stride` bytes apart, from `offset`. Its values are the stock ones.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PartTable {
+    /// The first entry's decoded-application offset.
+    pub offset: Address,
+    pub entry_bytes: u32,
+    pub stride: u32,
+    pub values: Vec<u32>,
+    /// What the entries are (`loop length indices, pads 1 to 6`).
+    pub what: String,
+}
+
+impl PartTable {
+    /// The decoded-application range of each entry, whose stock value the table publishes.
+    pub fn entries(&self) -> impl Iterator<Item = std::ops::Range<u64>> + '_ {
+        (0..self.values.len() as u64).map(|index| {
+            let start = u64::from(self.offset.0) + index * u64::from(self.stride);
+            start..start + u64::from(self.entry_bytes)
+        })
     }
 }
 
@@ -117,50 +136,82 @@ impl Part {
         if self.touch.is_empty() && self.drawn.is_empty() && self.slot.is_none() {
             return Err(rule(path, "a part is touched, drawn or names a slot"));
         }
+        let mut zones = BTreeSet::new();
         for (index, zone) in self.touch.iter().enumerate() {
             let field = format!("{path}.touch[{index}]");
-            if zone.record.0 % 4 != 0 {
-                return Err(rule(
-                    format!("{field}.record"),
-                    "a layout record is 4-byte aligned",
-                ));
-            }
-            if zone.handler.0 % 2 != 0 {
-                return Err(rule(
-                    format!("{field}.handler"),
-                    "a handler is an even address",
-                ));
-            }
             if zone.area.w == 0 || zone.area.h == 0 {
                 return Err(rule(format!("{field}.area"), "a touch area is not empty"));
             }
             if let Some(when) = &zone.when {
                 check_text(&format!("{field}.when"), when)?;
             }
+            let key = (
+                zone.area.x,
+                zone.area.y,
+                zone.area.w,
+                zone.area.h,
+                &zone.when,
+            );
+            if !zones.insert(key) {
+                return Err(rule(
+                    field,
+                    "another zone of the part has this area and `when`",
+                ));
+            }
         }
+        let mut places = BTreeSet::new();
         for (place, drawn) in self.drawn.iter().enumerate() {
+            let field = format!("{path}.drawn[{place}]");
+            if !places.insert((drawn.at.x, drawn.at.y)) {
+                return Err(rule(
+                    field,
+                    "another placement of the part is at this position",
+                ));
+            }
             if drawn.images.is_empty() {
                 return Err(rule(
-                    format!("{path}.drawn[{place}].images"),
+                    format!("{field}.images"),
                     "a placement names an image",
                 ));
             }
+            let mut offsets = BTreeSet::new();
             for (index, image) in drawn.images.iter().enumerate() {
-                let field = format!("{path}.drawn[{place}].images[{index}]");
-                if image.offset.0 % 2 != 0 {
-                    return Err(rule(
-                        format!("{field}.offset"),
-                        "an image is 2-byte aligned",
-                    ));
+                let field = format!("{field}.images[{index}]");
+                if image.width == 0 || image.height == 0 {
+                    return Err(rule(field, "an image has pixels"));
                 }
-                if image.is_empty() || image.len() > MAX_IMAGE_BYTES {
-                    return Err(rule(field, "an image has 1 byte to 1 MiB of pixels"));
+                if !offsets.insert(image.offset) {
+                    return Err(rule(field, "the placement names this image already"));
                 }
                 check_text(&format!("{field}.seen"), &image.seen)?;
             }
         }
         if let Some(slot) = &self.slot {
             check_name(&format!("{path}.slot"), slot)?;
+        }
+        for (index, table) in self.tables.iter().enumerate() {
+            let field = format!("{path}.tables[{index}]");
+            let bytes = table.entry_bytes;
+            if !matches!(bytes, 1 | 2 | 4) || table.stride < bytes {
+                return Err(rule(
+                    field,
+                    "an entry is 1, 2 or 4 bytes, and `stride` is at least that",
+                ));
+            }
+            if table.values.is_empty() {
+                return Err(rule(format!("{field}.values"), "a table has an entry"));
+            }
+            if table
+                .values
+                .iter()
+                .any(|&v| bytes < 4 && v >> (8 * bytes) != 0)
+            {
+                return Err(rule(
+                    format!("{field}.values"),
+                    "a value fits in `entry_bytes`",
+                ));
+            }
+            check_text(&format!("{field}.what"), &table.what)?;
         }
         Ok(())
     }

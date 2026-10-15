@@ -219,26 +219,9 @@ impl Catalog {
                     }
                 }
             }
-            for (name, part) in &screen.parts {
-                let off_screen = |what: String| CatalogError::Inconsistent {
-                    entry: screen_entry(screen),
-                    problem: format!("part {name}: {what} is not on the {width}x{height} screen"),
-                };
-                for (index, zone) in part.touch.iter().enumerate() {
-                    if !zone.area.fits(width, height) {
-                        return Err(off_screen(format!("touch[{index}]")));
-                    }
-                }
-                for (place, drawn) in part.drawn.iter().enumerate() {
-                    for (index, image) in drawn.images.iter().enumerate() {
-                        if !image.area(drawn.at).fits(width, height) {
-                            return Err(off_screen(format!("drawn[{place}].images[{index}]")));
-                        }
-                    }
-                }
-            }
         }
-        self.check_slot_images_apart()
+        self.check_slot_images_apart()?;
+        self.check_screen_parts()
     }
 
     /// No two slot images of one player overlap, across its slots and screens: each belongs to
@@ -332,7 +315,7 @@ pub(super) fn player_entry(id: &str) -> String {
     format!("player {id}")
 }
 
-fn screen_entry(screen: &Screen) -> String {
+pub(super) fn screen_entry(screen: &Screen) -> String {
     screen.name()
 }
 

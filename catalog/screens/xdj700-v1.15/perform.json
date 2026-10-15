@@ -69,8 +69,13 @@
         { "record": "0xd5ef0", "area": { "x": 116, "y": 154, "w": 500, "h": 53 }, "handler": "0x8dd08f2" }
       ],
       "slot": "beat_loop.pad",
-      "does": "Six pads; touching one starts a loop of its length (the BEAT LOOP table, decoded 0xD6220: list indices 6, 8, 9, 10, 11, 12 = 1/2 to 16 beats) and it lights; touching it again keeps the loop. The zone is split into sixths (edges, decoded 0xD6250: 83, 166, 250, 333, 416, 500). With SLIP on the pads show SLIP LOOP lengths 1/8, 1/4, 1/2, 1, 1/3, 3/4 (table 0xD6238: indices 3, 4, 6, 8, 5, 7) from another set of images.",
-      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch)."
+      "tables": [
+        { "offset": "0xd6220", "entry_bytes": 1, "stride": 4, "values": [6, 8, 9, 10, 11, 12], "what": "The BEAT LOOP table: the length each pad sets, as an index into the player's length list (6 = 1/2 beat, 8 = 1, 9 = 2, 10 = 4, 11 = 8, 12 = 16), pads 1 to 6." },
+        { "offset": "0xd6238", "entry_bytes": 1, "stride": 4, "values": [3, 4, 6, 8, 5, 7], "what": "The SLIP LOOP table, read with SLIP on: 3 = 1/8 beat, 4 = 1/4, 6 = 1/2, 8 = 1, 5 = 1/3, 7 = 3/4, pads 1 to 6." },
+        { "offset": "0xd6250", "entry_bytes": 2, "stride": 2, "values": [83, 166, 250, 333, 416, 500], "what": "The right edge of each pad's touch zone, from the row's left, pads 1 to 6 (sixths of the row)." }
+      ],
+      "does": "Six pads; touching one starts a loop of the length its BEAT LOOP table entry names, and the pad lights; touching it again keeps the loop. Each pad's touch zone is a sixth of the row. With SLIP on, the pads show and set SLIP LOOP lengths (the SLIP LOOP table) from another set of images.",
+      "evidence": "In emulation (2026-10-15, stock v1.15): touching the zone ran its handler (a breakpoint) and the frame changed as described; the record is part of the touch layout, which no code reads at start-up. Its images were drawn at this position (the 2D engine's blit log), and no code reads them at start-up (a CPU read watch). Its tables' values are the official file's (the owner test official_screen_parts)."
     },
     "beat_loop.label": {
       "title": "BEAT LOOP (label)", "kind": "label",

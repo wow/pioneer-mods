@@ -203,7 +203,7 @@ fn edit_part(root: &Path, name: &str, edit: impl FnOnce(&mut Value)) {
 }
 
 #[test]
-fn a_parts_records_and_images_lie_in_the_application() {
+fn a_parts_records_images_and_tables_hold_to_the_release() {
     let loaded = load_catalog(&repo_root()).expect("committed catalog");
     let perform = loaded
         .catalog()
@@ -212,39 +212,94 @@ fn a_parts_records_and_images_lie_in_the_application() {
     let zones: usize = perform.parts.values().map(|part| part.touch.len()).sum();
     assert!(perform.parts.len() >= 30 && zones >= 20, "the PERFORM map");
 
-    // The application is 18,601,864 bytes; it runs from 0x08000000.
-    let end = 18_601_864u32;
-    refused_with(
-        |root| {
+    let target = recipe_target("xdj700-v1.15").expect("release");
+    let end = target.application_len as u64;
+    let load = target.load_address;
+    let rev_image = 72 * 53 * 2;
+    let set = |field: &'static [&'static str], value: String| {
+        move |root: &Path| {
             edit_part(root, "rev", |p| {
-                p["touch"][0]["record"] = format!("{:#x}", end - 16).into()
-            })
-        },
-        "part rev: touch[0].record 0x11bd778 is not in the 18601864-byte application",
+                let mut slot = p;
+                for key in field {
+                    slot = match key.parse::<usize>() {
+                        Ok(index) => &mut slot[index],
+                        Err(_) => &mut slot[*key],
+                    };
+                }
+                *slot = value.into();
+            });
+        }
+    };
+    const RECORD: &[&str] = &["touch", "0", "record"];
+    const HANDLER: &[&str] = &["touch", "0", "handler"];
+    const IMAGE: &[&str] = &["drawn", "0", "images", "0", "offset"];
+
+    // Accepted at the edges: a record in the last 20 bytes, an image ending at the end, a
+    // handler at the load address.
+    assert_eq!(load_edited(set(RECORD, format!("{:#x}", end - 20))), None);
+    assert_eq!(
+        load_edited(set(IMAGE, format!("{:#x}", end - rev_image))),
+        None
+    );
+    assert_eq!(load_edited(set(HANDLER, format!("{load:#x}"))), None);
+
+    refused_with(
+        set(RECORD, format!("{:#x}", end - 16)),
+        &format!(
+            "part rev: touch[0].record {:#x} is not in the {end}-byte application",
+            end - 16
+        ),
     );
     refused_with(
-        |root| {
-            let handler = format!("{:#x}", 0x0800_0000 + end);
-            edit_part(root, "rev", |p| p["touch"][0]["handler"] = handler.into());
-        },
-        "part rev: touch[0].handler 0x091bd788 is not in the application",
+        set(HANDLER, format!("{:#x}", load + end)),
+        &format!(
+            "part rev: touch[0].handler {:#010x} is not in the application",
+            load + end
+        ),
     );
-    // Below the release's load address.
     refused_with(
-        |root| {
-            edit_part(root, "rev", |p| {
-                p["touch"][0]["handler"] = "0x7fffffe".into()
-            })
-        },
+        set(HANDLER, format!("{:#x}", load - 2)),
         "part rev: touch[0].handler 0x07fffffe is not in the application",
     );
     refused_with(
+        set(IMAGE, format!("{:#x}", end - rev_image + 2)),
+        &format!("ends past the {end}-byte application"),
+    );
+    // Held like slot images: out of the protected ranges, and edited only whole (stage 7 edits
+    // the first pad image whole; REV's image two bytes into it would be edited in part).
+    refused_with(
+        set(IMAGE, "0x100".to_owned()),
+        "overlaps the release's protected range 0x0..0x800",
+    );
+    refused_with(
+        set(IMAGE, "0x34f942".to_owned()),
+        "overlaps screen xdj700-v1.15/perform: part rev: drawn[0].images[0] at 0x34f942 \
+         (72x53) but is not that image",
+    );
+    // A table entry past the end.
+    refused_with(
         |root| {
-            let offset = format!("{:#x}", end - 72 * 53 * 2 + 2);
-            edit_part(root, "rev", |p| {
-                p["drawn"][0]["images"][0]["offset"] = offset.into()
-            });
+            let offset = format!("{:#x}", end - 1);
+            edit_part(root, "beat_loop.pads", |p| {
+                p["tables"][2]["offset"] = offset.into()
+            })
         },
-        "part rev: drawn[0].images[0] ends past the 18601864-byte application",
+        &format!("part beat_loop.pads: tables[2] ends past the {end}-byte application"),
+    );
+    // Stock values published only where review accepted them: a record in stage 7's window
+    // outside the touch layout, or a table entry past the edges in stage 5's window (which stage 7
+    // repeats exactly).
+    refused_with(
+        set(RECORD, "0xd5700".to_owned()),
+        "lies in recipe recipes/xdj700-v1.15/beat-loop-1-to-32.json's precondition window",
+    );
+    refused_with(
+        |root| {
+            edit_part(root, "beat_loop.pads", |p| {
+                p["tables"][2]["offset"] = "0xd6260".into()
+            })
+        },
+        "tables[2] (0xd6260..0xd6262) lies in recipe recipes/xdj700-v1.15/beat-loop-1-to-32.json's \
+         precondition window (0xd6234..0xd66f5)",
     );
 }

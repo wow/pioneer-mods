@@ -1,7 +1,7 @@
-//! Owner-input test of the committed screen parts against the official XDJ-700 v1.15 update: every
+//! Owner-input test of the committed XDJ-700 v1.15 screen parts against the official update: every
 //! part's touch zone is a record of the application's touch layout holding exactly its area and
-//! handler, and every image a part draws is one of the application's images, with its size. Only
-//! counts are printed. To run locally:
+//! handler, every image a part draws is one of the application's images, with its size, and every
+//! table a part reads holds its published values. Only counts are printed. To run locally:
 //!
 //! ```text
 //! PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD \
@@ -13,10 +13,11 @@ mod common;
 mod official_pins;
 
 use common::repo_root;
-use official_pins::UPD_ENV;
+use official_pins::{STOCK_APPLICATION_SHA256, UPD_ENV, UPD_SHA256};
 use patch_cli::catalog::load_catalog;
 use patch_core::upd::parse_upd;
 use patch_core::xdj700::decode_application;
+use patch_core::{read_firmware, sha256_hex};
 use std::collections::BTreeMap;
 
 /// The application's image records (measured, 2026-10-15): 1019 records of 44 bytes from decoded
@@ -26,6 +27,8 @@ const IMAGE_TABLE: usize = 0x10_0004;
 const IMAGE_RECORD_LEN: usize = 44;
 const IMAGE_COUNT: usize = 1019;
 const RESOURCE_BASE: u32 = 0x10_0000;
+/// The release whose screens this file checks.
+const RELEASE: &str = "xdj700-v1.15";
 
 fn u32_at(app: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(app[offset..offset + 4].try_into().expect("four bytes"))
@@ -42,10 +45,15 @@ fn u16_at(app: &[u8], offset: usize) -> u32 {
 fn every_part_is_a_touch_record_and_application_images() {
     let path = std::env::var_os(UPD_ENV)
         .unwrap_or_else(|| panic!("set {UPD_ENV} to an owner-supplied official XDJ700.UPD"));
-    let bytes = std::fs::read(path).expect("read the official update");
+    let (identity, bytes) = read_firmware(path.as_ref()).expect("read the official update");
+    assert_eq!(
+        identity.sha256_hex, UPD_SHA256,
+        "not the official v1.15 file"
+    );
     let container = parse_upd(&bytes).expect("parse");
     let decoded = decode_application(&container).expect("decode");
     let app = decoded.decoded();
+    assert_eq!(sha256_hex(app), STOCK_APPLICATION_SHA256);
 
     // Every image of the application, by pixel offset: its width and height.
     let images: BTreeMap<u32, (u32, u32)> = (0..IMAGE_COUNT)
@@ -57,8 +65,13 @@ fn every_part_is_a_touch_record_and_application_images() {
         .collect();
 
     let loaded = load_catalog(&repo_root()).expect("committed catalog");
-    let (mut zones, mut drawn) = (0, 0);
-    for screen in &loaded.catalog().screens {
+    let (mut zones, mut drawn, mut entries) = (0, 0, 0);
+    let screens = loaded
+        .catalog()
+        .screens
+        .iter()
+        .filter(|s| s.player == RELEASE);
+    for screen in screens {
         for (name, part) in &screen.parts {
             for zone in &part.touch {
                 let record = zone.record.0 as usize;
@@ -84,8 +97,24 @@ fn every_part_is_a_touch_record_and_application_images() {
                     drawn += 1;
                 }
             }
+            for table in &part.tables {
+                for (entry, &value) in table.entries().zip(&table.values) {
+                    let (start, end) = (entry.start as usize, entry.end as usize);
+                    let mut word = [0u8; 4];
+                    word[..end - start].copy_from_slice(&app[start..end]);
+                    assert!(
+                        u32::from_le_bytes(word) == value,
+                        "{}/{name}: the table entry at {start:#x} differs from the map",
+                        screen.id
+                    );
+                    entries += 1;
+                }
+            }
         }
     }
-    println!("touch records checked: {zones}; images checked: {drawn}");
-    assert!(zones >= 20 && drawn >= 90, "the PERFORM map is checked");
+    println!("touch records checked: {zones}; images checked: {drawn}; table entries: {entries}");
+    assert!(
+        zones >= 20 && drawn >= 90 && entries >= 18,
+        "the {RELEASE} PERFORM map is checked"
+    );
 }
