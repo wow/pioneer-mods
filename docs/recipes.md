@@ -134,13 +134,15 @@ Stock values the catalogue publishes inside these windows (accepted by the owner
   - Counting the windows' distinct 32-bit values outside their spans that are not zero, below
     `0x10000`, text, application pointers or round floats (narrower exclusions than the count of
     129 above, so more values count): stage 7's holds 144 and stage 5's 209 (2026-10-15). The
-    published bytes determine none of them, fully or in part. Both hashes keep that protection.
-  - The touch-zone edges (`0xD6250`, six 16-bit values) are not published: two to a word, they
-    make three words that count as hard to guess (three of stage 5's 209). The map names only
-    their offset.
+    published bytes determine none of them, fully or in part.
+  - Three of stage 5's 209 are guessable from the published layout, so not counted as
+    protection: the touch-zone edges (`0xD6250`, six 16-bit values, two to a word). The pads'
+    touch zone gives the row's width, the map says each zone is a sixth of it, and the slot's
+    elements show where each pad sits. Stage 5's window keeps 206 unknown values and stage 7's
+    144. The map still leaves the edges' values out and names only their offset.
   - The BEAT LOOP table's indices are the stock bytes under stage 7's and stage 5's spans, which
     the window rules already do not count, so publishing them costs those windows nothing.
-  - A later window over these records or tables counts their published words as known, and so
+  - A later window over these records, tables or edges counts their words as known, and so
     holds this many fewer unknown values; the record table and the two tables stay reserved like
     the windows around them.
   - The loader holds the catalogue to this: a part's records and table entries may lie in a
