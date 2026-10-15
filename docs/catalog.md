@@ -265,7 +265,7 @@ The owner's choices, kept apart from the catalog so that they survive a firmware
   "screens": { "perform": "stock" },
   "features": ["beat-loop-1-to-32"],
   "label": "Ver1.16",
-  "reported_version": "0.12",
+  "reported_version": "0.14",
   "maturity": "experimental"
 }
 ```
@@ -284,13 +284,13 @@ firmware and writes nothing:
 ```text
 player: xdj700-v1.15
 label: Ver1.16
-reported_version: 0.12
+reported_version: 0.14
 accepts: experimental and stable
 screen main: stock
 screen perform: stock
 feature beat-loop-1-to-32: on (experimental, recipes/xdj700-v1.15/beat-loop-1-to-32.json)
   evidence: Rehearsed in emulation, both ways; not yet tested on hardware (…)
-  limit: The lit pad follows the stock lengths: …
+  limit: It changes a list the firmware reads at start-up and during updates (…
 fragments: 1
 fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json (experimental; feature beat-loop-1-to-32)
 tier: experimental

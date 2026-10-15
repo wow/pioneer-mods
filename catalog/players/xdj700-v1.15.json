@@ -45,7 +45,7 @@
     {
       "start": "0x0c0e6c2c",
       "end": "0x0c0e6c44",
-      "evidence": "The six BEAT LOOP pads' lit states, left to right (32 bits each): 2 lit, 0 not. In emulation (2026-10-11; the same runs): stock lights the touched pad; stage 5 lights none for its 32-beat loop, and stage 7 the pad to the right of the touched one and none for 32, as docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\", describes. Above the loaded application (0x08000000 to 0x091BD788)."
+      "evidence": "The six BEAT LOOP pads' lit states, left to right (32 bits each): 2 lit, 0 not. In emulation (2026-10-11; the same runs): stock lights the touched pad; stage 5 lights none for its 32-beat loop, and stage 7 as first published (0.12) the pad to the right of the touched one and none for 32; stage 7 with its lit list (0.14, 2026-10-16) lights the touched pad, 32 included, as docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\", describes. Above the loaded application (0x08000000 to 0x091BD788)."
     },
     {
       "start": "0x0c0e75c0",

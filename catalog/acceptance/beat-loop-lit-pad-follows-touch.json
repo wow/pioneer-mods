@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "beat-loop-lit-pad-follows-touch",
   "player": "xdj700-v1.15",
-  "description": "Each BEAT LOOP pad touched, left to right, is the only one that lights. Stock passes; stages 5 and 7 do not yet (their lit-pad limit). Needs the owner's stick image, whose first track loads after USB and seven pushes of the rotary selector; the PERFORM screen is opened by touching its tab.",
+  "description": "Each BEAT LOOP pad touched, left to right, is the only one that lights. Stock and stage 7 pass; stage 5 does not (its lit-pad limit). Needs the owner's stick image, whose first track loads after USB and seven pushes of the rotary selector; the PERFORM screen is opened by touching its tab.",
   "stick": true,
   "steps": [
     {"wait": {"ms": 60000}},

@@ -181,11 +181,11 @@ passes the test or not, and a failing run fails at the same steps every time:
 | --- | --- | --- | --- | --- | --- |
 | `beat-loop-1-to-32-pads-select-lengths` | lengths 1, 2, 4, 8, 16, 32 | FAIL | FAIL | PASS | FAIL |
 | `beat-loop-16-plays-32-pads-select-lengths` | lengths 1/2, 1, 2, 4, 8, 32 | FAIL | PASS | FAIL | FAIL |
-| `beat-loop-lit-pad-follows-touch` | the touched pad lights | PASS | FAIL | FAIL | PASS |
+| `beat-loop-lit-pad-follows-touch` | the touched pad lights | PASS | FAIL | PASS | PASS |
 
-Stage 7 names the first test and stage 5 the second. No feature names the lit-pad test yet: stock
-passes it, and stages 5 and 7 fail it, their known limit
-([xdj700-flashing.md](./xdj700-flashing.md), "The lit BEAT LOOP pad"); a lit-pad fix would name it.
+Stage 7 names the first test and the lit-pad test, and stage 5 the second. Stock and stage 7 pass
+the lit-pad test (stage 7 changes the list that decides the lit pad along with its lengths); stage
+5 fails it, its known limit ([xdj700-flashing.md](./xdj700-flashing.md), "The lit BEAT LOOP pad").
 The Neon pads skin names it: it changes only images, so the pads light and set lengths as on
 stock, and it fails the length tests at stock's steps.
 All twelve results are the owner suite's (`official_accept_beat_loop`), in the owner's emulator with
@@ -199,5 +199,5 @@ range shows that a track is loaded.
 
 A feature's or skin's implementation names the tests it must pass (`acceptance`, a list of test
 ids). Each must exist and be for the implementation's player. A test an implementation does not
-pass yet is not named by it: stage 7 fails a lit-pad test until the lit-pad fix exists, and that
-result goes with its known limits.
+pass yet is not named by it: stage 5 fails the lit-pad test, and that result goes with its known
+limits.

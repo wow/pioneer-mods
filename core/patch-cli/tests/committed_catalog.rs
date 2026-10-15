@@ -34,18 +34,22 @@ fn the_committed_acceptance_tests_are_named_and_read_only_state_above_the_applic
             "beat-loop-lit-pad-follows-touch"
         ]
     );
-    for (feature, test) in [
-        ("beat-loop-1-to-32", "beat-loop-1-to-32-pads-select-lengths"),
+    // Stage 7 also passes the lit-pad test; stage 5 does not (its limit).
+    for (feature, tests) in [
+        (
+            "beat-loop-1-to-32",
+            &[
+                "beat-loop-1-to-32-pads-select-lengths",
+                "beat-loop-lit-pad-follows-touch",
+            ][..],
+        ),
         (
             "beat-loop-16-plays-32",
-            "beat-loop-16-plays-32-pads-select-lengths",
+            &["beat-loop-16-plays-32-pads-select-lengths"][..],
         ),
     ] {
         let feature = catalog.feature(feature).expect("feature");
-        assert_eq!(
-            feature.implementations["xdj700-v1.15"][0].acceptance,
-            [test]
-        );
+        assert_eq!(feature.implementations["xdj700-v1.15"][0].acceptance, tests);
     }
 }
 

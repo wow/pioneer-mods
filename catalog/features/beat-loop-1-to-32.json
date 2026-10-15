@@ -19,10 +19,13 @@
       {
         "recipe": "recipes/xdj700-v1.15/beat-loop-1-to-32.json",
         "maturity": "experimental",
-        "acceptance": ["beat-loop-1-to-32-pads-select-lengths"],
+        "acceptance": [
+          "beat-loop-1-to-32-pads-select-lengths",
+          "beat-loop-lit-pad-follows-touch"
+        ],
         "evidence": "Rehearsed in emulation, both ways; not yet tested on hardware (docs/xdj700-flashing.md, stage 7).",
         "limits": [
-          "The lit pad follows the stock lengths: the pad to the right of the touched one lights, and the 32 pad lights none (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\")."
+          "It changes a list the firmware reads at start-up and during updates (the lit pad's length codes), an exception to the data rule the owner accepted on rehearsals both ways (docs/xdj700-flashing.md, section 5)."
         ],
         "draws_labels": { "perform": "stock" }
       }

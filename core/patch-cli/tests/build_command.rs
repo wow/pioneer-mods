@@ -107,7 +107,7 @@ fn the_build_prints_its_resolution_and_names_itself_in_input_refusals() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in [
         "label: Ver1.16",
-        "reported_version: 0.12",
+        "reported_version: 0.14",
         "feature beat-loop-1-to-32: on (experimental, recipes/xdj700-v1.15/beat-loop-1-to-32.json)",
         "  evidence: Rehearsed in emulation, both ways; not yet tested on hardware",
         "fragment[0]: recipes/xdj700-v1.15/beat-loop-1-to-32.json",

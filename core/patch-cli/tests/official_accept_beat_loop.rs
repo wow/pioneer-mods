@@ -1,8 +1,8 @@
 //! Owner-input test of the committed BEAT LOOP acceptance tests (`catalog/acceptance/`): stock,
 //! stage 5, stage 7 and the Neon pads skin, built here from the official XDJ-700 v1.15 update, in
-//! the owner's local emulator with the owner's stick image. Each build passes the test its
-//! implementation names (the lit-pad test, for stock and the skin) and fails the others at the
-//! steps its behaviour predicts (stages 5 and 7 fail the lit-pad test, their known limit; the
+//! the owner's local emulator with the owner's stick image. Each build passes the tests its
+//! implementation names (the lit-pad test, for stock, stage 7 and the skin) and fails the others
+//! at the steps its behaviour predicts (stage 5 fails the lit-pad test, its known limit; the
 //! skin, which changes only images, fails the length tests where stock does). Nothing but the PASS
 //! and FAIL lines is printed, and the builds stay in a temporary directory. Twelve runs, three at
 //! a time (fewer on a host with fewer than six cores); to run locally (about fifteen minutes):
@@ -137,7 +137,7 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
             update: stage5,
             fails: &[74],
         },
-        // Stage 7: 1 to 32 beats; the pad to the right of the touched one lights, none for 32.
+        // Stage 7: 1 to 32 beats, and the touched pad lights (its lit list follows the table).
         Run {
             test: lengths_32,
             update: stage7.clone(),
@@ -151,7 +151,7 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         Run {
             test: lit,
             update: stage7,
-            fails: &[23, 25, 34, 35, 44, 45, 54, 55, 64, 65, 74],
+            fails: &[],
         },
         // The Neon pads skin changes only images: the pads light (the test it names) and set
         // lengths as on stock.

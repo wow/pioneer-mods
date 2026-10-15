@@ -119,11 +119,11 @@ not draw: `labels` gives the text its slots should show, and the chosen skin dra
 [Skin](#skin)). `acceptance` names emulator tests the implementation must pass (below;
 [acceptance.md](./acceptance.md)).
 
-The sketch is illustrative. Its values come from the XDJ-700 recipes, but two details show where
-the design goes further than today: `conflicts` is about meaning, not bytes (this feature and
+The sketch is illustrative. Its values come from the XDJ-700 recipes, and one detail shows where
+the design goes further than bytes: `conflicts` is about meaning (this feature and
 `beat-loop-16-plays-32` share a replacement, which composition would apply once, but they define
-different button sets), and today's stage-7 recipe would fail `lit-pad-follows-touch`
-until the lit-pad code fix exists (its known limit).
+different button sets). Stage 7 passes `lit-pad-follows-touch` since its lit list follows its
+table; stage 5 does not (its known limit).
 
 ### Skin
 
@@ -162,7 +162,7 @@ firmware port:
   "screens": { "main": "stock", "perform": "perform-dark-pads" },
   "features": ["beat-loop-1-to-32"],
   "label": "Ver1.16",
-  "reported_version": "0.12"
+  "reported_version": "0.14"
 }
 ```
 
@@ -263,10 +263,10 @@ Gate:
 
 ### 3. Code changes
 
-Some features cannot be expressed as data. Stage 7's lit pad appears to be chosen by code from the
-loop length (no data table holding the mapping was found). Code fragments would place new code in
-verified unused areas (the three `0xFF` runs already checked at run time) and divert to it from
-short hooks.
+Some features cannot be expressed as data. (Stage 7's lit pad, once thought to be one, turned
+out to be data: a list of length codes, which stage 7 now changes.) Code fragments would place
+new code in verified unused areas (the three `0xFF` runs already checked at run time) and divert
+to it from short hooks.
 
 Gate, per fragment:
 1. The hook and the new code lie outside the protected set; the hook is not reached before the
@@ -274,8 +274,7 @@ Gate, per fragment:
 2. The unused areas stay unused by stock in every rehearsal.
 3. Acceptance tests cover the behaviour; rehearsals pass both ways; then a hardware stage.
 
-The first candidate is the lit-pad rule, so that stage 7's lighting follows the pad that was
-touched.
+No candidate is planned yet: the lit-pad rule, the first, turned out to be data (stage 7).
 
 ### 4. Same length (image sizes)
 

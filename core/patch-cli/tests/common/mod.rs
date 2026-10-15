@@ -40,11 +40,11 @@ fn copy_tree(from: &Path, to: &Path) {
 }
 
 /// A profile for the committed XDJ-700 v1.15 player choosing `features` under `Ver1.16` and
-/// `0.12` (stage 7's own), accepting `maturity`; tests change other fields in place.
+/// `0.14` (stage 7's own), accepting `maturity`; tests change other fields in place.
 pub fn profile(features: &[&str], maturity: &str) -> Value {
     json!({
         "schema_version": 1, "player": "xdj700-v1.15", "features": features,
-        "label": "Ver1.16", "reported_version": "0.12", "maturity": maturity
+        "label": "Ver1.16", "reported_version": "0.14", "maturity": maturity
     })
 }
 

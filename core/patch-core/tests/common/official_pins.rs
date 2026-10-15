@@ -89,19 +89,23 @@ pub const STAGE5_UPD_SHA256: &str =
     "144f4b557127a7eec2d5d2f5fadee0e6585f05a83af321097876a0edca345e12";
 
 /// Stage 7: BEAT LOOP 1, 2, 4, 8, 16, 32, built with `patch` from the committed recipe below. Its
-/// application reports `0.12` and differs from stock in the version string, the first byte of
-/// each entry of the BEAT LOOP button table (the sixth as in stage 5), and the label boxes of the
-/// six buttons' 36 images; labelled `Ver1.16`.
+/// application reports `0.14` and differs from stock in the version string, the first byte of
+/// each entry of the lit pad's list of length codes and of the BEAT LOOP button table (the
+/// table's sixth as in stage 5), and the label boxes of the six buttons' 36 images; labelled
+/// `Ver1.16`. (Until 2026-10-16 stage 7 reported `0.12`, without the list: `259c75da…`.)
+/// The decoded offset of the list of length codes that decides which BEAT LOOP pad lights, one
+/// 4-byte entry per pad.
+pub const LIT_CODES_OFFSET: usize = 0xd5470;
 pub const STAGE7_RECIPE: &str = "xdj700-v1.15/beat-loop-1-to-32.json";
-pub const STAGE7_REPORTED_VERSION: &str = "0.12";
+pub const STAGE7_REPORTED_VERSION: &str = "0.14";
 pub const STAGE7_APPLICATION_SHA256: &str =
-    "e3581ea660afc7c1317dcd79f7076d089a1da41c6750df5342623fb2362c0593";
-pub const STAGE7_MAIN_LEN: usize = 7_250_308;
+    "aabdbf0619bddb12b29b4a5c3b9b0606a0c8df9fffe2da16e347e4e70b2ec855";
+pub const STAGE7_MAIN_LEN: usize = 7_250_316;
 pub const STAGE7_MAIN_SHA256: &str =
-    "f3951bef380ee59c070e613c2876297b85d9e1c9e29be6aa3db72647d1ae8ee4";
-pub const STAGE7_UPD_LEN: usize = 17_367_457;
+    "4ae184acb0215a02f2923f0f5d49428d06da2c1b4b33878ca82f1044cd77d19a";
+pub const STAGE7_UPD_LEN: usize = 17_367_473;
 pub const STAGE7_UPD_SHA256: &str =
-    "259c75daa04356d2be433ea731ed38b20fbc8cdea12e4fe14fe1dda353befa58";
+    "0d433b79d04f32c8835b78dc799305c831af5765039ac922b856d25c0119888c";
 
 /// A committed recipe's stage file: its pinned identities, and the offsets outside the edited
 /// images at which its application differs from stock.
@@ -123,7 +127,8 @@ pub const VERSION_TEXT: std::ops::Range<usize> = VERSION..VERSION + 4;
 
 /// The stage files the committed recipes reproduce: the version marker (stage 3, hardware-tested),
 /// the beat-loop experiment (stage 5: also the table's last entry) and BEAT LOOP 1, 2, 4, 8, 16, 32
-/// (stage 7: the first byte of each of the table's six entries, besides its images).
+/// (stage 7: the first byte of each of the lit list's and the table's six entries, besides its
+/// images).
 pub const STAGES: [Stage; 3] = [
     Stage {
         recipe: STAGE3_RECIPE,
@@ -156,6 +161,12 @@ pub const STAGES: [Stage; 3] = [
         changed_outside_images: &[
             VERSION,
             VERSION + 3,
+            LIT_CODES_OFFSET,
+            LIT_CODES_OFFSET + 4,
+            LIT_CODES_OFFSET + 8,
+            LIT_CODES_OFFSET + 12,
+            LIT_CODES_OFFSET + 16,
+            LIT_CODES_OFFSET + 20,
             BEAT_LOOP_TABLE_OFFSET,
             BEAT_LOOP_TABLE_OFFSET + 4,
             BEAT_LOOP_TABLE_OFFSET + 8,
