@@ -43,6 +43,8 @@ letters, digits and `_` joined by `.` (`beat_loop.pad`). A slot is referred to a
   `application_sha256`), the same as its recipes' `target`. A test checks them against the
   engine's own pins.
 - `screen_class`: `width`, `height` and `pixels` (`rgb565`), what a skin is drawn for.
+- `touch_layout` (optional): the shape of the application's touch layout records that screen
+  parts name: `record_bytes`, `record_alignment`, `handler_alignment` and `evidence`.
 - `budgets.compressed_main_growth_bytes`: the engine's bound on the compressed MAIN image's
   growth (checked against it).
 - `capabilities`: named facts about the stock firmware. Each gives the `values` established for
@@ -96,6 +98,77 @@ The XDJ-700's PERFORM screen names its BEAT LOOP pads' 36 images (six pads, six 
 images the stage-7 recipe relabels. Positions are not data yet: a slot's positions record where
 the stock application draws it, and a skin keeps them ([modular-builds.md](./modular-builds.md),
 "Extending the limits").
+
+### Parts
+
+A screen may map its `parts`: everything it shows, by name (`rev`, `hot_cue.a`,
+`beat_loop.pads`), each with what it is and what touching it does. The map is what skins,
+layouts and features are planned from.
+
+```json
+"rev": {
+  "title": "REV", "kind": "button",
+  "touch": [
+    { "record": "0xd5edc", "area": { "x": 18, "y": 76, "w": 68, "h": 53 }, "handler": "0x8dd0b10" }
+  ],
+  "drawn": [
+    { "at": { "x": 18, "y": 78 }, "images": [
+      { "offset": "0x32ba80", "width": 72, "height": 53, "seen": "after touching REV (on)" }
+    ] }
+  ],
+  "does": "Plays the track in reverse while on (lit red); touch again for forward.",
+  "evidence": "How it was measured."
+}
+```
+
+- `title`: what the screen shows on it, or what it is; `kind`: `button`, `buttons` (a row one
+  zone covers), `label`, `display` or `frame`.
+- `touch`: one per record of the application's touch layout that acts on it: the `record`'s
+  decoded-application offset, its `area` and its `handler` (a run-time address, from the
+  release's load address: 0x08000000 on the XDJ-700), and `when` it acts if not always
+  (`while a loop plays`). The record's shape is the player's `touch_layout` (on the XDJ-700, five
+  32-bit words: x, y, width, height, handler). The deck screens share one touch layout; the
+  screen's mode selects the records that act.
+- `drawn`: one per place it is drawn: where (`at`) and the images seen there, each by offset and
+  size (in the player's pixel format) with when it was first `seen`.
+- `slot`: the slot that names its images, when one does (the BEAT LOOP pads).
+- `tables`: tables of the application it reads, each by the first entry's `offset`, its
+  `entry_bytes` (1, 2 or 4, little-endian), `stride`, stock `values` and `what` they are (the BEAT
+  LOOP and SLIP LOOP lengths). Values that would weaken a committed recipe's window are left out
+  (the pads' touch edges: [recipes.md](./recipes.md#known-exceptions)).
+- `does`, `evidence`: what touching it does or what it shows, and how that was measured.
+
+The checks:
+
+- each part: a zone, placement or image at most once; tables well formed;
+- against its player: every touch area and image on the screen, records and handlers aligned as
+  its `touch_layout` says, images in its pixel format (at most 1 MiB); a player whose screens
+  have touch zones describes its touch layout; across its screens, two zones that name
+  overlapping records name the same record and describe it alike (never within one screen);
+- against the release (the loader): every record, image and table inside the decoded
+  application; every handler inside the running application (a bounds check: the owner test
+  holds each to its record); part images held like slot images (out of the protected ranges,
+  edited only whole); and the stock values a part publishes (its records and tables) kept out of
+  the committed recipes' precondition windows except in the ranges review accepted
+  ([recipes.md](./recipes.md#known-exceptions));
+- an owner test (`official_screen_parts`) holds each record to its area and handler, each image
+  to one of the application's images with its size, and each table to its values.
+
+A part's images are art a recipe may repaint; a skin repaints images a slot names (its recipes
+edit only whole images of the slots it requires), so a part a skin should repaint gets a slot.
+
+What may change, by the kind of thing (XDJ-700 v1.15, measured in emulation):
+
+| Change | Where | Read at start-up |
+| --- | --- | --- |
+| A part's art, the same size | its images (an image edit; a skin through a slot) | no (PERFORM's images) |
+| Where a part is touched | its touch record (data) | no (the touch layout) |
+| Where a part is drawn | not in the touch record: moving a record moves only the touch area | not located |
+| What a part does | its handler (code), or a table it reads (the BEAT LOOP lengths) | no (PERFORM's tables) |
+
+The PERFORM screen maps 30 parts: every control it shows with and without a track, its labels,
+the phrase bars, the loop length and BPM boxes and its frame. Not yet mapped: the digits of the
+time, tempo and BPM readouts, and a few images drawn under others.
 
 ## Feature
 

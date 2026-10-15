@@ -8,6 +8,10 @@
     "application_sha256": "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939"
   },
   "screen_class": { "width": 800, "height": 480, "pixels": "rgb565" },
+  "touch_layout": {
+    "record_bytes": 20, "record_alignment": 4, "handler_alignment": 2,
+    "evidence": "The deck screens' touch layout (decoded 0xD5D38): records of five 32-bit words, x, y, width, height and the handler's run-time address, read by the touch dispatcher; SH-4 code is 2-byte aligned. In emulation (2026-10-15): touching each zone ran the handler its record names (breakpoints), and a record poked after boot moved the zone."
+  },
   "budgets": { "compressed_main_growth_bytes": 262144 },
   "capabilities": {
     "beat_loop.button_count": {

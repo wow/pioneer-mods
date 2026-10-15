@@ -11,6 +11,7 @@ mod acceptance;
 mod check;
 mod check_acceptance;
 mod check_parts;
+mod check_screen_parts;
 mod entry;
 mod feature;
 mod player;
@@ -21,6 +22,7 @@ mod resolve_output;
 mod resolve_skins;
 mod screen;
 mod screen_images;
+mod screen_parts;
 mod skin;
 
 pub use acceptance::{
@@ -36,6 +38,7 @@ pub use entry::{
 pub use feature::{Feature, FeatureImplementation, Requires};
 pub use player::{
     Budgets, Capability, Control, Firmware, PixelFormat, Player, Restore, ScreenClass, StateRange,
+    TouchLayout,
 };
 pub use profile::Profile;
 pub use resolution::{
@@ -44,4 +47,5 @@ pub use resolution::{
 pub use resolve::{MAX_CONFIGURATIONS, resolve};
 pub use screen::{Screen, Slot};
 pub use screen_images::{Position, SlotElement, SlotImage, SlotImages};
+pub use screen_parts::{Drawn, Part, PartImage, PartKind, PartTable, TouchZone};
 pub use skin::{Art, STOCK_SKIN, Skin, SkinImplementation, SkinLicence, SkinRequires};

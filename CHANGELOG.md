@@ -7,6 +7,11 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
 ## [Unreleased]
 
 ### Added
+- The PERFORM screen map (`catalog/screens/xdj700-v1.15/perform.json`, `parts`): its 30 parts,
+  each with its touch zone (the touch layout record, area and handler), where it is drawn and the
+  images it draws, and what touching it does, measured in emulation. Screens may now map their
+  `parts`; the loader holds records and images inside the application, and an owner test holds
+  each record and image to the official file.
 - The first skin, Neon pads (`catalog/skins/perform-neon-pads.json`, CC BY-SA 4.0): PERFORM's six
   BEAT LOOP pads in all six states, painted with its own art (dark pads with a cyan border, filled
   cyan when lit) and the stock labels in its own digits

@@ -13,48 +13,69 @@ pub(super) fn check_slot_images(
     target: &RecipeTarget<'_>,
     recipes: &BTreeMap<String, RecipeV2>,
 ) -> Result<()> {
-    let app_len = target.application_len as u64;
     for (name, slot) in &screen.slots {
         let Some(images) = &slot.images else { continue };
         let owner = format!("screen {}/{}: slot {name}", screen.player, screen.id);
         for image in images.images() {
             let (start, end) = span(images, image.offset);
             let at = format!("{owner}'s image at {start:#x}");
-            if end > app_len {
-                bail!("{at} ends past the {app_len}-byte application");
-            }
-            if let Some(range) = target
-                .protected
-                .iter()
-                .find(|range| start < range.end as u64 && (range.start as u64) < end)
-            {
+            check_image(
+                &at,
+                (start, end),
+                (images.width, images.height),
+                target,
+                recipes,
+                &screen.player,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Checks one image (`at` names it) of `start..end` and `size` against `target` and the catalog's
+/// `recipes` for `release`: inside the decoded application, out of its protected ranges, and edited
+/// only whole.
+pub(super) fn check_image(
+    at: &str,
+    (start, end): (u64, u64),
+    size: (u32, u32),
+    target: &RecipeTarget<'_>,
+    recipes: &BTreeMap<String, RecipeV2>,
+    release: &str,
+) -> Result<()> {
+    let app_len = target.application_len as u64;
+    if end > app_len {
+        bail!("{at} ends past the {app_len}-byte application");
+    }
+    if let Some(range) = target
+        .protected
+        .iter()
+        .find(|range| start < range.end as u64 && (range.start as u64) < end)
+    {
+        bail!(
+            "{at} overlaps the release's protected range {:#x}..{:#x}",
+            range.start,
+            range.end
+        );
+    }
+    for (path, recipe) in recipes {
+        if recipe.target.release != release {
+            continue;
+        }
+        for (index, edit) in recipe.image_edits.iter().enumerate() {
+            let edit_end = edit.offset.saturating_add(edit.len().unwrap_or(u64::MAX));
+            let overlaps = edit.offset < end && start < edit_end;
+            let same = edit.offset == start && (edit.width, edit.height) == size;
+            if overlaps && !same {
                 bail!(
-                    "{at} overlaps the release's protected range {:#x}..{:#x}",
-                    range.start,
-                    range.end
+                    "recipe {path}: image_edits[{index}] ({}x{} at {:#x}) overlaps {at} ({}x{}) \
+                     but is not that image",
+                    edit.width,
+                    edit.height,
+                    edit.offset,
+                    size.0,
+                    size.1
                 );
-            }
-            for (path, recipe) in recipes {
-                if recipe.target.release != screen.player {
-                    continue;
-                }
-                for (index, edit) in recipe.image_edits.iter().enumerate() {
-                    let edit_end = edit.offset.saturating_add(edit.len().unwrap_or(u64::MAX));
-                    let overlaps = edit.offset < end && start < edit_end;
-                    let same = edit.offset == start
-                        && (edit.width, edit.height) == (images.width, images.height);
-                    if overlaps && !same {
-                        bail!(
-                            "recipe {path}: image_edits[{index}] ({}x{} at {:#x}) overlaps {at} \
-                             ({}x{}) but is not that image",
-                            edit.width,
-                            edit.height,
-                            edit.offset,
-                            images.width,
-                            images.height
-                        );
-                    }
-                }
             }
         }
     }

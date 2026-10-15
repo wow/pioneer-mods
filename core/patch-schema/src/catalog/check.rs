@@ -220,7 +220,8 @@ impl Catalog {
                 }
             }
         }
-        self.check_slot_images_apart()
+        self.check_slot_images_apart()?;
+        self.check_screen_parts()
     }
 
     /// No two slot images of one player overlap, across its slots and screens: each belongs to
@@ -314,7 +315,7 @@ pub(super) fn player_entry(id: &str) -> String {
     format!("player {id}")
 }
 
-fn screen_entry(screen: &Screen) -> String {
+pub(super) fn screen_entry(screen: &Screen) -> String {
     screen.name()
 }
 

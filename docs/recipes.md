@@ -120,6 +120,37 @@ repeating the replacement exactly.
   - The table's sixth entry is stage 5's replacement, repeated exactly, so it publishes nothing
     new and keeps stage 5's window.
 
+Stock values the catalogue publishes inside these windows (accepted by the owner, 2026-10-15):
+
+- **The PERFORM screen map** (`catalog/screens/xdj700-v1.15/perform.json`, `parts`) gives 20
+  records of the touch layout, decoded `0xD5D38..0xD5F68`, as their five words: a touch area
+  (x, y, width, height) and a handler's run-time address. Its BEAT LOOP pads' `tables` give the
+  BEAT LOOP table's indices (6, 8, 9, 10, 11, 12, decoded `0xD6220`) and the SLIP LOOP table's (3,
+  4, 6, 8, 5, 7, `0xD6238`), one byte of each 4-byte entry.
+  - The records lie in stage 7's window and the two tables after its span in stage 5's (which
+    stage 7 repeats). Counted as the window rules do, by aligned 32-bit words: every word the
+    published bytes determine is below `0x10000` or a pointer into the application, the kinds the
+    analyses above count as guessable.
+  - Counting the windows' distinct 32-bit values outside their spans that are not zero, below
+    `0x10000`, text, application pointers or round floats (narrower exclusions than the count of
+    129 above, so more values count): stage 7's holds 144 and stage 5's 209 (2026-10-15). The
+    published bytes determine none of them, fully or in part.
+  - Three of stage 5's 209 are guessable from the published layout, so not counted as
+    protection: the touch-zone edges (`0xD6250`, six 16-bit values, two to a word). The pads'
+    touch zone gives the row's width, the map says each zone is a sixth of it, and the slot's
+    elements show where each pad sits. Stage 5's window keeps 206 unknown values and stage 7's
+    144. The map still leaves the edges' values out and names only their offset.
+  - The BEAT LOOP table's indices are the stock bytes under stage 7's and stage 5's spans, which
+    the window rules already do not count, so publishing them costs those windows nothing.
+  - A later window over these records, tables or edges counts their words as known, and so
+    holds this many fewer unknown values; the record table and the two tables stay reserved like
+    the windows around them.
+  - The loader holds the catalogue to this: a part's records and table entries may lie in a
+    committed window only inside the decoded ranges `0xD5D38..0xD5F68` and `0xD6220..0xD6250`
+    (`PUBLISHED_IN_WINDOWS` in `core/patch-cli/src/catalog/screen_parts.rs`), so widening them is
+    a change review sees. The owner test `official_screen_parts` checks the published values
+    against the official file.
+
 ## Writing a recipe
 
 Write recipes against your own copy of the official file, and commit only the recipe. Never

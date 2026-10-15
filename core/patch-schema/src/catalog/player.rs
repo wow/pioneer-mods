@@ -18,6 +18,9 @@ pub struct Player {
     pub model: String,
     pub firmware: Firmware,
     pub screen_class: ScreenClass,
+    /// The shape of the application's touch layout records, which screen parts name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub touch_layout: Option<TouchLayout>,
     pub budgets: Budgets,
     /// Named facts about the stock firmware ([`Capability`]).
     #[serde(default, deserialize_with = "unique_keys")]
@@ -101,6 +104,17 @@ pub struct Restore {
     pub backup: String,
     /// The player's flashing guide, relative to the repository root (`docs/<file>.md`).
     pub guide: String,
+}
+
+/// The shape of a touch layout record ({x, y, width, height, handler} on the XDJ-700): its size,
+/// its alignment in the application, and its handler's alignment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TouchLayout {
+    pub record_bytes: u32,
+    pub record_alignment: u32,
+    pub handler_alignment: u32,
+    pub evidence: String,
 }
 
 /// The display a skin is drawn for.
@@ -227,6 +241,19 @@ impl CatalogEntry for Player {
         check_text("restore.official", &self.restore.official)?;
         check_text("restore.backup", &self.restore.backup)?;
         check_doc_path("restore.guide", &self.restore.guide)?;
+        if let Some(layout) = &self.touch_layout {
+            let aligned = |a: u32| a.is_power_of_two();
+            if layout.record_bytes == 0
+                || !aligned(layout.record_alignment)
+                || !aligned(layout.handler_alignment)
+            {
+                return Err(EntryError::Rule {
+                    field: "touch_layout".to_owned(),
+                    problem: "a record has bytes, and alignments are powers of two".to_owned(),
+                });
+            }
+            check_text("touch_layout.evidence", &layout.evidence)?;
+        }
         if self.screen_class.width == 0 || self.screen_class.height == 0 {
             return Err(EntryError::Rule {
                 field: "screen_class".to_owned(),
