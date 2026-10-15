@@ -68,8 +68,10 @@ fn profiles_build_the_stage_files() {
         "'s own output, under its own label and reported version",
         &format!("output_sha256_hex: {STAGE7_UPD_SHA256}"),
         "the output is the recipe's own pinned update; ",
-        "restore: the official update (XDJ700.UPD, the input), over this build reporting 0.12: \
-         The unit accepts it",
+        &format!(
+            "restore: the official update (XDJ700.UPD, the input), over this build reporting \
+             {STAGE7_REPORTED_VERSION}: The unit accepts it"
+        ),
         "restore_backup: The stock no-op rebuild labelled Ver1.16",
         "restore_guide: docs/xdj700-flashing.md",
     ] {

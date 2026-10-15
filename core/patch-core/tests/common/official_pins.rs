@@ -88,14 +88,15 @@ pub const STAGE5_UPD_LEN: usize = 17_368_527;
 pub const STAGE5_UPD_SHA256: &str =
     "144f4b557127a7eec2d5d2f5fadee0e6585f05a83af321097876a0edca345e12";
 
+/// The decoded offset of the list of length codes that decides which BEAT LOOP pad lights, one
+/// 4-byte entry per pad, which stage 7 changes.
+pub const LIT_CODES_OFFSET: usize = 0xd5470;
+
 /// Stage 7: BEAT LOOP 1, 2, 4, 8, 16, 32, built with `patch` from the committed recipe below. Its
 /// application reports `0.14` and differs from stock in the version string, the first byte of
 /// each entry of the lit pad's list of length codes and of the BEAT LOOP button table (the
 /// table's sixth as in stage 5), and the label boxes of the six buttons' 36 images; labelled
 /// `Ver1.16`. (Until 2026-10-16 stage 7 reported `0.12`, without the list: `259c75da…`.)
-/// The decoded offset of the list of length codes that decides which BEAT LOOP pad lights, one
-/// 4-byte entry per pad.
-pub const LIT_CODES_OFFSET: usize = 0xd5470;
 pub const STAGE7_RECIPE: &str = "xdj700-v1.15/beat-loop-1-to-32.json";
 pub const STAGE7_REPORTED_VERSION: &str = "0.14";
 pub const STAGE7_APPLICATION_SHA256: &str =

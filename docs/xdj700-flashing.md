@@ -50,7 +50,7 @@ What this means:
   application only.
 - **A modified application reports a version lower than 1.15**: `patch-cli rebuild --report-version`
   (for example `0.10`) or a schema-v2 recipe's `reported_version` with `patch` (stage 5: `0.11`,
-  stage 7: `0.12`). Both refuse 1.15 or higher. The unit then reports that version, so **the
+  stage 7: `0.14`). Both refuse 1.15 or higher. The unit then reports that version, so **the
   official v1.15 file is written over it and restores the stock application with the vendor's own
   file**. *(Observed on an owner's unit: stages 3 and 4, 2026-10-08, `Ver0.10 -> Ver1.15` progressed
   for about 3 minutes and UTILITY returned to `1.15`; stages 5 and 6, 2026-10-09, the unit went from
@@ -231,17 +231,17 @@ expected outcome (section 2). **Photograph the MAIN line**: its left-hand versio
 reports. While the unit runs the stock application it should be `Ver1.15` (section 1): at stages 1b,
 2, 3, 5 and 7 (at stages 5 and 7, after a restore to stock: `MAIN Ver1.15 -> Ver1.16`). At stage 4,
 after stage 3, it should be `Ver0.10`, at stage 6, after stage 5, `Ver0.11`, and at stage 8, after
-stage 7, `Ver0.12`. Report anything else.
+stage 7, `Ver0.14`. Report anything else.
 
 Then check each of these:
 - the update completed with no error message;
 - the UTILITY screen (hold MENU/UTILITY for over a second) shows a version; write it down. After a
   no-op rebuild or stages 4, 6 and 8 it shows `1.15` (section 1), after stage 3 `0.10`, after
-  stage 5 `0.11`, after stage 7 `0.12`. All are expected;
+  stage 5 `0.11`, after stage 7 `0.14`. All are expected;
 - three cold boots reach the normal screen;
 - browsing, playback, cue and loop behave as before (after stage 5, except the BEAT LOOP 16
   button, which should give 32 beats; after stage 7, except the BEAT LOOP pads, which should
-  read and give 1, 2, 4, 8, 16 and 32 beats, with the lit pad one to the right and none for 32;
+  read and give 1, 2, 4, 8, 16 and 32 beats, and the touched pad lights, the 32 pad included;
   see [the lit BEAT LOOP pad](#the-lit-beat-loop-pad-stages-5-and-7)).
 
 ## 5. Recovery: what protects the unit, and what does not
@@ -333,10 +333,12 @@ compressed, so a flash offset does not map to a run-time address.
     of length codes that decides which BEAT LOOP pad lights (decoded `0xD5470`, the first byte of
     each of its six entries), and two instructions of protected code read that list from
     power-on on (about 12,500 times each in the first 100 seconds, to the main screen) and
-    throughout an install (about 70,000 reads, in both directions). Its values only decide which
-    pad lights, and no loop plays at start-up or during an update. In the rehearsals every other
-    check passed both ways, including with stage 7's own application running the install, and
-    the table and the images were again not read. The owner accepted the change on that
+    throughout an install (about 70,000 reads, in both directions). *In emulation*, changing
+    its values changed only which pad lit: over twelve steps (each pad, 2X and 1/2X), the 40
+    deck-status words read after each step differed between the old and the new stage 7 only in
+    the pads' lit states. No loop plays at start-up or during an update. In the rehearsals every
+    other check passed both ways, including with stage 7's own application running the install,
+    and the table and the images were again not read. The owner accepted the change on that
     evidence; every other recipe still meets the rule;
   - **rehearse every new stage file in emulation before it is offered.** The rehearsal builds
     a flash from the file the unit runs, installs the new file through the application's own

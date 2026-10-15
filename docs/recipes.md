@@ -132,6 +132,8 @@ repeating the replacement exactly.
     four most common values filling 49 percent, close to the limit of half.
   - Of the 4,075 bytes outside the span, 39 percent are zero and 29 percent printable text.
     Guessing both still leaves the other 32 percent (1,281 bytes), which hold those 237 values.
+    The span's stock values are not counted: as for the table's span, they can be guessed from
+    what the recipes and the PERFORM map publish.
   - Stage 5 cannot carry this change too: a window around its one entry would either lie after
     it, where no size passes, or overlap this one.
 
