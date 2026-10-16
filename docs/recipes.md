@@ -119,6 +119,30 @@ repeating the replacement exactly.
     the zeros still leaves the other 41 percent (1,244 bytes), which hold those 129 values.
   - The table's sixth entry is stage 5's replacement, repeated exactly, so it publishes nothing
     new and keeps stage 5's window.
+- **`xdj700-v1.15/beat-loop-1-to-32.json`, the lit list:** decoded `0xD4485..0xD5485`: the 4,075
+  bytes before the list of length codes that decides which BEAT LOOP pad lights, and the span
+  over its six entries (`--` keeps the bytes between their first bytes).
+  - The list is data, so any window lies over data. After it, a window must end before the
+    button table's window (`0xD5668`), and over that stretch no size passes the value check (50
+    percent at best), so the window lies before the list.
+  - Windows from 1,024 bytes pass, but hold few values: at 1,024 bytes the four most common
+    values fill 38 percent, and the window holds 25 distinct 32-bit values that are neither zero,
+    small numbers, text, pointers nor round floats. The window takes the largest size a
+    precondition allows (4,096 bytes in all), which holds the most: 237 such values, with the
+    four most common values filling 49 percent, close to the limit of half.
+  - Of the 4,075 bytes outside the span, 39 percent are zero and 29 percent printable text.
+    Guessing both still leaves the other 32 percent (1,281 bytes), which hold those 237 values.
+    The span's stock values are not counted: as for the table's span, they can be guessed from
+    what the recipes and the PERFORM map publish.
+  - Stage 5 cannot carry this change too: a window around its one entry would either lie after
+    it, where no size passes, or overlap this one.
+  - What lies between this window and the table's: the SLIP LOOP pads' lit list, right after this
+    one (decoded `0xD5488`, six 4-byte entries, read by the same code; *in emulation*, with SLIP
+    on, the pad whose entry matches the slip loop's code lights). A recipe changing it could take
+    only a window after it, up to the table's window: 448 to 459 bytes pass (48.8 percent at
+    best), holding 13 values that are neither zero, small numbers, text, pointers nor round
+    floats. A SLIP LOOP length feature would have that thin window, or would change this recipe's
+    lit-list replacement to cover both lists, a change review would weigh against this hash.
 
 Stock values the catalogue publishes inside these windows (accepted by the owner, 2026-10-15):
 
@@ -127,21 +151,21 @@ Stock values the catalogue publishes inside these windows (accepted by the owner
   (x, y, width, height) and a handler's run-time address. Its BEAT LOOP pads' `tables` give the
   BEAT LOOP table's indices (6, 8, 9, 10, 11, 12, decoded `0xD6220`) and the SLIP LOOP table's (3,
   4, 6, 8, 5, 7, `0xD6238`), one byte of each 4-byte entry.
-  - The records lie in stage 7's window and the two tables after its span in stage 5's (which
-    stage 7 repeats). Counted as the window rules do, by aligned 32-bit words: every word the
+  - The records lie in stage 7's table window and the two tables after its span in stage 5's
+    (which stage 7 repeats). Counted as the window rules do, by aligned 32-bit words: every word the
     published bytes determine is below `0x10000` or a pointer into the application, the kinds the
     analyses above count as guessable.
   - Counting the windows' distinct 32-bit values outside their spans that are not zero, below
-    `0x10000`, text, application pointers or round floats (narrower exclusions than the count of
-    129 above, so more values count): stage 7's holds 144 and stage 5's 209 (2026-10-15). The
-    published bytes determine none of them, fully or in part.
+    `0x10000`, text, application pointers or round floats (narrower exclusions than the count of 129
+    above, so more values count): stage 7's table window holds 144 and stage 5's 209 (2026-10-15).
+    The published bytes determine none of them, fully or in part.
   - Three of stage 5's 209 are guessable from the published layout, so not counted as
     protection: the touch-zone edges (`0xD6250`, six 16-bit values, two to a word). The pads'
     touch zone gives the row's width, the map says each zone is a sixth of it, and the slot's
     elements show where each pad sits. Stage 5's window keeps 206 unknown values and stage 7's
-    144. The map still leaves the edges' values out and names only their offset.
-  - The BEAT LOOP table's indices are the stock bytes under stage 7's and stage 5's spans, which
-    the window rules already do not count, so publishing them costs those windows nothing.
+    table window 144. The map still leaves the edges' values out and names only their offset.
+  - The BEAT LOOP table's indices are the stock bytes under stage 7's table span and stage 5's span,
+    which the window rules already do not count, so publishing them costs those windows nothing.
   - A later window over these records, tables or edges counts their words as known, and so
     holds this many fewer unknown values; the record table and the two tables stay reserved like
     the windows around them.
@@ -310,14 +334,14 @@ into place.
 - **Report a version lower than 1.15** (the engine enforces this). The official v1.15 update then
   restores stock. This was observed on an owner's unit for a version-only change (the
   flashing guide's stages 3 and 4).
-- **Stay out of start-up and the update path.** An application that crashes before its own
-  update mode starts, or whose updater no longer works, cannot be recovered by software. Follow
-  the rules for every modification in the flashing guide, section 5, which is their
-  authoritative statement: windows outside the protected set measured in emulation, replaced
-  bytes not read during start-up or an update, and an emulator rehearsal before a file is
-  offered. Its addresses are run-time addresses, `0x08000000` plus a recipe's `offset`. The
-  engine always enforces the header (`[0, 0x800)`), and the protected set when it is given
-  ([below](#the-protected-set)); the data rule and the rehearsal remain the maintainer's.
+- **Stay out of start-up and the update path.** An application that crashes before its own update
+  mode starts, or whose updater no longer works, cannot be recovered by software. Follow the rules
+  for every modification in the flashing guide, section 5, which is their authoritative statement:
+  windows outside the protected set measured in emulation, replaced bytes not read during start-up
+  or an update (one exception, accepted by the owner: stage 7's lit list), and an emulator rehearsal
+  before a file is offered. Its addresses are run-time addresses, `0x08000000` plus a recipe's
+  `offset`. The engine always enforces the header (`[0, 0x800)`), and the protected set when it is
+  given ([below](#the-protected-set)); the data rule and the rehearsal remain the maintainer's.
 - **Same length only.** Growing the application (for example appending code) is not supported
   until the memory after the application is understood.
 - **Test on hardware in stages**, as the flashing guide describes, and record the result.
@@ -392,7 +416,7 @@ runs the window rules) and check those identities.
 | --- | --- | --- |
 | `xdj700-v1.15/version-marker-0.10.json` | Only the reported version, `0.10`. The unit shows `0.10` on UTILITY. | The hardware-tested stage-3 file, `84cbd263…` |
 | `xdj700-v1.15/beat-loop-16-plays-32.json` | **Experimental; passed on an owner's unit (2026-10-09).** The BEAT LOOP button labelled 16 sets a 32-beat loop (its label still reads 16); reports `0.11`. One table entry changes: the length list the player uses already holds 32 beats, and the button table selects it instead of 16. While that loop plays no pad lights, in emulation ([the lit BEAT LOOP pad](./xdj700-flashing.md#the-lit-beat-loop-pad-stages-5-and-7)). | Stage 5, `144f4b55…` |
-| `xdj700-v1.15/beat-loop-1-to-32.json` | **Experimental; rehearsed in emulation, not yet tested on hardware.** The PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16; reports `0.12`. Each button selects the length the button after it selected, and the last one 32 beats (the table's last entry as in stage 5, repeated exactly), and each button's six images are relabelled with the project's own digits (36 image edits). Known limit: the pad to the right of the touched pad lights, none for 32, in emulation ([the lit BEAT LOOP pad](./xdj700-flashing.md#the-lit-beat-loop-pad-stages-5-and-7)). | Stage 7, `259c75da…` |
+| `xdj700-v1.15/beat-loop-1-to-32.json` | **Experimental; rehearsed in emulation, not yet tested on hardware.** The PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16; reports `0.14`. Each button selects the length the button after it selected, and the last one 32 beats (the table's last entry as in stage 5, repeated exactly), and each button's six images are relabelled with the project's own digits (36 image edits). The list of length codes that decides which pad lights is set to the same lengths, so the touched pad lights, 32 included, in emulation ([the lit BEAT LOOP pad](./xdj700-flashing.md#the-lit-beat-loop-pad-stages-5-and-7)); protected code reads that list at start-up and during updates, an exception the owner accepted ([flashing guide, section 5](./xdj700-flashing.md#5-recovery-what-protects-the-unit-and-what-does-not)). | Stage 7, `0d433b79…` |
 | `xdj700-v1.15/skin-perform-neon-pads.json` | **Experimental; rehearsed in emulation, not yet tested on hardware.** The Neon pads skin (CC BY-SA 4.0): the PERFORM screen's six BEAT LOOP pads, in all six states, painted with the skin's own art and the stock labels in its own digits (36 paint edits); reports `0.13`. Images only: the pads' behaviour is stock. | `3e600645…` |
 
 ```bash
@@ -436,7 +460,7 @@ to case). Every refusal names the files of the recipes it is about. Then:
 The result has no pin of its own: it is checked through its recipes' pins. **A combination is a
 new update:** rehearse it both ways in emulation before flashing; unless it is a listed
 combination it is experimental at most. Composing stage 3 with stage 5 (as above) reproduces the
-stage-5 file, and stage 5 with stage 7 (`--report-version 0.12`) the stage-7 file, byte for byte,
+stage-5 file, and stage 5 with stage 7 (`--report-version 0.14`) the stage-7 file, byte for byte,
 as the owner-input tests check.
 
 ## Schema v1

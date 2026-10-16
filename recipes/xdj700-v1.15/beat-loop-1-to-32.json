@@ -1,15 +1,25 @@
 {
   "schema_version": 2,
   "recipe_id": "xdj700-v1.15-beat-loop-1-to-32",
-  "description": "Experimental: the PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16: each button selects the length the button after it selected, the last one 32 beats (as in stage 5), and each button's six images are relabelled with the project's own digits. The application reports version 0.12, so the official v1.15 update is expected to restore stock (observed for stages 3 to 6 on an owner's unit; rehearsed in emulation for this file). Rehearsed in emulation, not yet tested on hardware. For staged hardware testing (docs/xdj700-flashing.md, stage 7). Known limit: the pad to the right of the touched pad lights, and the 32 pad lights none (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\").",
+  "description": "Experimental: the PERFORM screen's six BEAT LOOP buttons read and set 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16: each button selects the length the button after it selected, the last one 32 beats (as in stage 5), and each button's six images are relabelled with the project's own digits. The application reports version 0.14, so the official v1.15 update is expected to restore stock (observed for stages 3 to 6 on an owner's unit; rehearsed in emulation for this file). Rehearsed in emulation, not yet tested on hardware. For staged hardware testing (docs/xdj700-flashing.md, stage 7). The pad that lights is the one whose length plays: the list of length codes the firmware compares with the playing loop is set to the new lengths (in emulation; docs/xdj700-flashing.md, \"The lit BEAT LOOP pad\"). Protected code reads that list at start-up and during updates, an exception the owner accepted on rehearsals both ways.",
   "target": {
     "release": "xdj700-v1.15",
     "upd_sha256": "73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c",
     "application_sha256": "1875381b56d065a2b0a97a63b64ead5ce71397c521b7a62713c5bb4a0e055939"
   },
   "label": "Ver1.16",
-  "reported_version": "0.12",
+  "reported_version": "0.14",
   "replacements": [
+    {
+      "offset": 873584,
+      "bytes_hex": "0c------0d------0e------0f------10------11",
+      "precondition": {
+        "before": 4075,
+        "after": 0,
+        "sha256": "62b9c5f59318f0834ec7aeb426056a40b90b56c81e52b1c702d883eac22d42d9"
+      },
+      "purpose": "The six-entry list of length codes that decides which BEAT LOOP pad lights: a pad lights when the playing loop's code equals its entry. The entries become the codes of 1, 2, 4, 8, 16 and 32 beats, the lengths the button table below gives the pads, so the pad that set the playing length lights (each 4-byte entry's first byte; `--` keeps the stock bytes between them, unpublished). Two instructions of protected code read the list at start-up and during updates; the owner accepted that on rehearsals both ways (docs/xdj700-flashing.md, section 5). The window lies over data before the list (docs/recipes.md, Known exceptions)."
+    },
     {
       "offset": 877088,
       "bytes_hex": "08------09------0a------0b------0c",
@@ -934,7 +944,7 @@
     }
   ],
   "expected": {
-    "application_sha256": "e3581ea660afc7c1317dcd79f7076d089a1da41c6750df5342623fb2362c0593",
-    "upd_sha256": "259c75daa04356d2be433ea731ed38b20fbc8cdea12e4fe14fe1dda353befa58"
+    "application_sha256": "aabdbf0619bddb12b29b4a5c3b9b0606a0c8df9fffe2da16e347e4e70b2ec855",
+    "upd_sha256": "0d433b79d04f32c8835b78dc799305c831af5765039ac922b856d25c0119888c"
   }
 }

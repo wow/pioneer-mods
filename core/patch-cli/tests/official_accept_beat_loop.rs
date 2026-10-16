@@ -1,11 +1,13 @@
 //! Owner-input test of the committed BEAT LOOP acceptance tests (`catalog/acceptance/`): stock,
 //! stage 5, stage 7 and the Neon pads skin, built here from the official XDJ-700 v1.15 update, in
-//! the owner's local emulator with the owner's stick image. Each build passes the test its
-//! implementation names (the lit-pad test, for stock and the skin) and fails the others at the
-//! steps its behaviour predicts (stages 5 and 7 fail the lit-pad test, their known limit; the
-//! skin, which changes only images, fails the length tests where stock does). Nothing but the PASS
-//! and FAIL lines is printed, and the builds stay in a temporary directory. Twelve runs, three at
-//! a time (fewer on a host with fewer than six cores); to run locally (about fifteen minutes):
+//! the owner's local emulator with the owner's stick image. Each build passes the tests its
+//! implementation names (the lit-pad test, for stock, stage 7 and the skin) and fails the others
+//! at the steps its behaviour predicts (stage 5 fails the lit-pad test, its known limit; the
+//! skin, which changes only images, fails the length tests where stock does). Stage 7 as first
+//! published, without its lit list, is the lit-pad test's failing control: it shows that the
+//! checks that the other pads stay unlit can fail. Nothing but the PASS and FAIL lines is printed,
+//! and the builds stay in a temporary directory. Thirteen runs, three at a time (fewer on a host
+//! with fewer than six cores); to run locally (about twenty minutes):
 //!
 //! ```text
 //! PIONEER_XDJ700_V115_UPD=/path/to/XDJ700.UPD XDJ700_QEMU=/path/to/qemu-system-sh4 \
@@ -22,7 +24,10 @@ mod common;
 mod official_pins;
 
 use common::repo_root;
-use official_pins::UPD_ENV;
+use official_pins::{
+    LIT_CODES_OFFSET, STAGE7_FIRST_APPLICATION_SHA256, STAGE7_FIRST_REPORTED_VERSION,
+    STAGE7_FIRST_UPD_SHA256, UPD_ENV,
+};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -40,10 +45,39 @@ fn cli() -> Command {
 
 /// Builds the stage file of `recipe` from the official update into `dir`.
 fn stage(update: &Path, recipe: &str, dir: &Path) -> PathBuf {
-    let output_path = dir.join(format!("{recipe}.UPD"));
+    let path = repo_root().join(format!("recipes/xdj700-v1.15/{recipe}.json"));
+    build(update, &path, recipe, dir)
+}
+
+/// Builds stage 7 as first published into `dir`: the committed recipe without its first
+/// replacement (the lit list), reporting `0.12`, pinned to that file. The lit-pad test's failing
+/// control: its pads light the stock way.
+fn stage7_first(update: &Path, dir: &Path) -> PathBuf {
+    let path = repo_root().join("recipes/xdj700-v1.15/beat-loop-1-to-32.json");
+    let text = std::fs::read_to_string(&path).expect("read the stage-7 recipe");
+    let mut recipe: serde_json::Value = serde_json::from_str(&text).expect("recipe");
+    let replacements = recipe["replacements"].as_array_mut().expect("replacements");
+    let lit = replacements.remove(0);
+    assert_eq!(
+        lit["offset"], LIT_CODES_OFFSET,
+        "the first replacement is the lit list"
+    );
+    recipe["reported_version"] = STAGE7_FIRST_REPORTED_VERSION.into();
+    recipe["expected"] = serde_json::json!({
+        "application_sha256": STAGE7_FIRST_APPLICATION_SHA256,
+        "upd_sha256": STAGE7_FIRST_UPD_SHA256,
+    });
+    let first = dir.join("beat-loop-1-to-32-first.json");
+    std::fs::write(&first, serde_json::to_vec(&recipe).expect("json")).expect("write");
+    build(update, &first, "beat-loop-1-to-32-first", dir)
+}
+
+/// Builds the update of the recipe at `path` from the official update into `dir`, as `name`.
+fn build(update: &Path, path: &Path, name: &str, dir: &Path) -> PathBuf {
+    let output_path = dir.join(format!("{name}.UPD"));
     let output = cli()
         .args(["patch", "--no-protected-set", "--recipe"])
-        .arg(format!("recipes/xdj700-v1.15/{recipe}.json"))
+        .arg(path)
         .arg("--input")
         .arg(update)
         .arg("--output")
@@ -94,6 +128,7 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
     let builds = tempfile::tempdir().expect("tempdir");
     let stage5 = stage(&update, "beat-loop-16-plays-32", builds.path());
     let stage7 = stage(&update, "beat-loop-1-to-32", builds.path());
+    let stage7_first = stage7_first(&update, builds.path());
     let neon_pads = stage(&update, "skin-perform-neon-pads", builds.path());
 
     let (lengths_32, lengths_16, lit) = (
@@ -135,9 +170,9 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         Run {
             test: lit,
             update: stage5,
-            fails: &[74],
+            fails: &[79],
         },
-        // Stage 7: 1 to 32 beats; the pad to the right of the touched one lights, none for 32.
+        // Stage 7: 1 to 32 beats, and the touched pad lights (its lit list follows the table).
         Run {
             test: lengths_32,
             update: stage7.clone(),
@@ -151,7 +186,14 @@ fn each_build_passes_its_beat_loop_tests_and_the_tests_tell_builds_apart() {
         Run {
             test: lit,
             update: stage7,
-            fails: &[23, 25, 34, 35, 44, 45, 54, 55, 64, 65, 74],
+            fails: &[],
+        },
+        // Stage 7 as first published, without the lit list: the pad to the right of the touched
+        // one lights, none for 32. The failing control for the checks that other pads stay unlit.
+        Run {
+            test: lit,
+            update: stage7_first,
+            fails: &[28, 30, 39, 40, 49, 50, 59, 60, 69, 70, 79],
         },
         // The Neon pads skin changes only images: the pads light (the test it names) and set
         // lengths as on stock.

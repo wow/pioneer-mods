@@ -390,6 +390,15 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   swapped to a FIFO cannot hang `open()`, and the open handle is checked again before reading.
 
 ### Changed
+- Stage 7 (`recipes/xdj700-v1.15/beat-loop-1-to-32.json`) now also changes the list of length
+  codes that decides which BEAT LOOP pad lights (decoded `0xD5470`, six entries), so the touched
+  pad lights, the 32 pad included; it reports `0.14` (`0d433b79…`; the superseded `0.12` file,
+  `259c75da…`, was rehearsed only). Protected code reads that list at start-up and during
+  updates: the owner accepted that as the one exception to the data rule, on rehearsals both ways
+  (`docs/xdj700-flashing.md`, section 5). Its window lies over data, a known exception
+  (`docs/recipes.md`). The feature names the lit-pad acceptance test, and its limit is now that
+  exception; stage 5 keeps its lit-pad limit: a window before its one entry would overlap stage
+  7's lit-list window, and no window after it passes the value check.
 - Decided: community skins are licensed under CC BY-SA 4.0 (`LICENSE-ART`), and code and feature
   recipes stay MIT; the builder runs in the browser on the owner's computer, the official update
   never uploaded (`docs/modular-builds.md`, "Decisions"; `CONTRIBUTING.md`). A skin entry now

@@ -50,7 +50,7 @@ What this means:
   application only.
 - **A modified application reports a version lower than 1.15**: `patch-cli rebuild --report-version`
   (for example `0.10`) or a schema-v2 recipe's `reported_version` with `patch` (stage 5: `0.11`,
-  stage 7: `0.12`). Both refuse 1.15 or higher. The unit then reports that version, so **the
+  stage 7: `0.14`). Both refuse 1.15 or higher. The unit then reports that version, so **the
   official v1.15 file is written over it and restores the stock application with the vendor's own
   file**. *(Observed on an owner's unit: stages 3 and 4, 2026-10-08, `Ver0.10 -> Ver1.15` progressed
   for about 3 minutes and UTILITY returned to `1.15`; stages 5 and 6, 2026-10-09, the unit went from
@@ -74,33 +74,37 @@ table says otherwise. Photograph the **MAIN line** of every update (section 4).
 | 4 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-08: `MAIN Ver0.10 -> Ver1.15` progressed for about 3 minutes and UTILITY returned to `1.15`.)* **Real flash:** `MAIN Ver0.10 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again: the vendor file restores stock. **If it is skipped** (`MAIN Ver0.10 -> Ver1.15` at 100% at once, UTILITY still `0.10`): use the `Ver1.16` stock no-op stick, which is higher than `0.10`, and report it | Done: the unit runs the official application. Stage 5 is an optional experiment |
 | 5 | **Beat-loop experiment, reporting `0.11`, labelled `Ver1.16`** (`patch` with `recipes/xdj700-v1.15/beat-loop-16-plays-32.json`). **The first file that changes behaviour.** Besides the version string, one table entry differs from stock: the BEAT LOOP button labelled 16 selects the player's existing 32-beat length instead of 16. By static analysis only the PERFORM screen's BEAT LOOP touch handler reads that table, so the change acts when the button is touched, not during start-up. While its 32-beat loop plays, no pad lights (in emulation; see [the lit BEAT LOOP pad](#the-lit-beat-loop-pad-stages-5-and-7)) | *(Passed on an owner's unit, 2026-10-09: the owner reported that all steps were tested and worked as expected, and that BEAT LOOP 16 looped 32 beats. Which storage options were tried, and how long the update ran, were not stated.)* **Real flash:** `MAIN Ver1.15 -> Ver1.16` progressing for about 3 minutes; UTILITY shows **`0.11`**; three cold boots reach the normal screen. **Skipped**, or UTILITY still shows `1.15`: stop and report it. The experiment was not installed, so the checks below would say nothing about it. Then, with an analysed track (beat grid) loaded, touch BEAT LOOP **16**: the loop should span **32 beats** (8 bars: count bars on the waveform or the beat display). Touch 1/2, 1, 2, 4 and 8: each unchanged. Exit and reloop, and loop with QUANTIZE on and off: unchanged. Also try the cases most likely to differ from stock: a **slow track** (about 70 BPM: 32 beats last about 27 seconds, twice the longest loop this button gave before); **storing the 32-beat loop** wherever the unit can (REC to a hot cue, a memory) and recalling it; **loading another track** while the loop plays; and **three more cold boots after** these checks, in case loop state is saved. **16 still gives 16 beats** (after a real flash): the player limits this path; report it. No pad lit while the 32-beat loop plays is expected (see [the lit BEAT LOOP pad](#the-lit-beat-loop-pad-stages-5-and-7)): do not report it. **Anything odd** (a freeze, a wrong length, a display glitch): note it and go to stage 6. **An error:** section 6 | Stage 6 |
 | 6 | The **official** v1.15 update | *(Passed on an owner's unit, 2026-10-09: with the official v1.15 file, `MAIN Ver0.11 -> Ver1.15` progressed and the unit went from `0.11` back to `1.15`.)* **Real flash:** `MAIN Ver0.11 -> Ver1.15` progressing for about 3 minutes, and UTILITY shows `1.15` again. **If it is skipped:** use the `Ver1.16` stock no-op stick, which is higher than `0.11`, and report it | Done. Stage 7 is an optional experiment |
-| 7 | **BEAT LOOP 1, 2, 4, 8, 16, 32, reporting `0.12`, labelled `Ver1.16`** (`patch` with `recipes/xdj700-v1.15/beat-loop-1-to-32.json`), flashed over the official v1.15 application. It builds on stage 5: besides the version string, the first byte of each of the six entries of the BEAT LOOP button table changes, so the six buttons select 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16 (**1/2 is no longer on the pads**). Each button's six images (normal, pressed, greyed-out, and their lit versions) are relabelled with the project's own digits: **the first file that changes images.** By static analysis only the BEAT LOOP touch handler reads the table; *in emulation* no code read the table or the images at start-up, in update mode, or while installing in either direction (section 5). Not yet tested on hardware. **Known limit:** the lengths are right, but the pad to the right of the touched pad lights, the 32 pad lights none, and the "1" pad never lights (in emulation; see [the lit BEAT LOOP pad](#the-lit-beat-loop-pad-stages-5-and-7)) | **Real flash:** `MAIN Ver1.15 -> Ver1.16` progressing for about 3 minutes; UTILITY shows **`0.12`**; three cold boots reach the normal screen. **Skipped**, or UTILITY still shows `1.15`: stop and report it. Then open PERFORM: the BEAT LOOP pads should read **1, 2, 4, 8, 16, 32** from left to right. Photograph them without a track (greyed out), with a track loaded, while touching one (pressed), and while a loop plays (lit). Because of the known limit, the lit pad is the one to the right of the touched pad, so the "1" pad's lit images cannot be shown at this stage, and touching a lit pad moves the light on, so lit-and-pressed is not a steady state: photograph whatever lit states you see. When the sixth state, lit and greyed out, appears is not known: if you see it, photograph it too (the owner-input tests check only that its changes stay inside the label box). With an analysed track (beat grid) loaded, touch each pad: the loop should span 1, 2, 4, 8, 16 and 32 beats (count beats or bars on the waveform or the beat display), and the pad to the right of the touched one lights (none for 32): expected (see [the lit BEAT LOOP pad](#the-lit-beat-loop-pad-stages-5-and-7)), so photograph it but do not stop for it. Exit and reloop, and loop with QUANTIZE on and off: as before. Also try the stage-5 cases with 32: a **slow track**, **storing the loop** (REC to a hot cue, a memory) and recalling it, **loading another track** while the loop plays, and **three more cold boots after** these checks. **A label wrong, garbled or missing, or a length that differs from its label:** note the pad and its state, photograph it, and go to stage 8 (a lit state the known limit makes unreachable is not missing). **Anything odd** (a freeze, a display glitch): note it and go to stage 8. **An error:** section 6 | Stage 8 |
-| 8 | The **official** v1.15 update | **Real flash:** `MAIN Ver0.12 -> Ver1.15` progressing for about 3 minutes; UTILITY shows `1.15` again, the pads read 1/2, 1, 2, 4, 8, 16 again, and a touched pad lights itself again (16 lights its own pad). **If it is skipped:** use the `Ver1.16` stock no-op stick, which is higher than `0.12`, and report it | Done |
+| 7 | **BEAT LOOP 1, 2, 4, 8, 16, 32, reporting `0.14`, labelled `Ver1.16`** (`patch` with `recipes/xdj700-v1.15/beat-loop-1-to-32.json`), flashed over the official v1.15 application. It builds on stage 5: besides the version string, the first byte of each of the six entries of the BEAT LOOP button table changes, so the six buttons select 1, 2, 4, 8, 16 and 32 beats instead of 1/2, 1, 2, 4, 8 and 16 (**1/2 is no longer on the pads**). Each button's six images (normal, pressed, greyed-out, and their lit versions) are relabelled with the project's own digits: **the first file that changes images.** The first byte of each of the six entries of the list of length codes that decides which pad lights changes too, so the touched pad lights, the 32 pad included: **the first file that changes data the firmware reads at start-up and during updates, besides the version block**, an exception the owner accepted (section 5). By static analysis only the BEAT LOOP touch handler reads the table; *in emulation* no code read the table or the images at start-up, in update mode, or while installing in either direction (section 5). Not yet tested on hardware. (Until 2026-10-16 stage 7 reported `0.12` and left that list stock, so the pad to the right of the touched one lit; that file was rehearsed, never flashed, and is superseded.) | **Real flash:** `MAIN Ver1.15 -> Ver1.16` progressing for about 3 minutes; UTILITY shows **`0.14`**; three cold boots reach the normal screen. **Skipped**, or UTILITY still shows `1.15`: stop and report it. Then open PERFORM: the BEAT LOOP pads should read **1, 2, 4, 8, 16, 32** from left to right. Photograph them without a track (greyed out), with a track loaded, while touching one (pressed), and while a loop plays (lit). The touched pad should light, so every pad's lit images can be photographed, and touching a lit pad again shows it lit and pressed. When the sixth state, lit and greyed out, appears is not known: if you see it, photograph it too (the owner-input tests check only that its changes stay inside the label box). With an analysed track (beat grid) loaded, touch each pad: the loop should span 1, 2, 4, 8, 16 and 32 beats (count beats or bars on the waveform or the beat display), and the touched pad lights, the 32 pad included (in emulation; [the lit BEAT LOOP pad](#the-lit-beat-loop-pad-stages-5-and-7)). **Another pad lights, or none:** note which, photograph it, and go to stage 8. Exit and reloop, and loop with QUANTIZE on and off: as before. Also try the stage-5 cases with 32: a **slow track**, **storing the loop** (REC to a hot cue, a memory) and recalling it, **loading another track** while the loop plays, and **three more cold boots after** these checks. **A label wrong, garbled or missing, or a length that differs from its label:** note the pad and its state, photograph it, and go to stage 8. **Anything odd** (a freeze, a display glitch): note it and go to stage 8. **An error:** section 6 | Stage 8 |
+| 8 | The **official** v1.15 update | **Real flash:** `MAIN Ver0.14 -> Ver1.15` progressing for about 3 minutes; UTILITY shows `1.15` again, the pads read 1/2, 1, 2, 4, 8, 16 again, and a touched pad lights itself again (16 lights its own pad). **If it is skipped:** use the `Ver1.16` stock no-op stick, which is higher than `0.14`, and report it | Done |
 
 ### The lit BEAT LOOP pad (stages 5 and 7)
 
-*In emulation* (2026-10-10), the firmware lights the BEAT LOOP pad whose **stock** length matches
-the current loop: a 1/2-beat loop lights the first pad, 1 beat the second, 2, 4 and 8 the next
-three, 16 the sixth, and a 32-beat loop none. It does not use the button table the recipes
-change. The effect:
-- **stage 5:** while the sixth pad's 32-beat loop plays, no pad lights;
-- **stage 7:** each pad sets the length on its label, but the pad to its right lights, and the 32
-  pad lights none, so the first ("1") pad never lights and its lit images cannot be seen;
+*In emulation* (2026-10-10 and 2026-10-16), the firmware lights the BEAT LOOP pad whose entry in a
+list of six length codes, one per pad (decoded `0xD5470`, 4 bytes each), matches the playing loop.
+Stock's list holds the stock lengths (1/2, 1, 2, 4, 8 and 16 beats), and the button table the
+recipes change does not feed it. The effect:
+- **stage 5:** it leaves the list stock, so while the sixth pad's 32-beat loop plays, no pad
+  lights (its known limit);
+- **stage 7:** it changes the list with the table, so the touched pad lights, the 32 pad
+  included. A 64- or 128-beat loop (2X from 32) lights none, and halving back to 32 lights the 32
+  pad again. (The superseded `0.12` stage-7 file left the list stock: the pad to the right of the
+  touched one lit, and none for 32.);
 - **after a restore (stages 6 and 8):** a touched pad lights itself again.
 
-No data table holding this mapping was found (searches covered 8-, 16- and 32-bit values,
-strided records, and the lengths as values or as pairs), and the place where the firmware derives
-the lit pad from the loop length is not located yet, so a fix appears to need a code change. Not
-yet observed on hardware. The acceptance test `beat-loop-lit-pad-follows-touch` checks it in
-emulation ([acceptance.md](./acceptance.md#the-beat-loop-tests)).
+The code that reads the list is in the protected set and runs from start-up on, so stage 7
+changes data read at start-up and during updates: the exception recorded in section 5. Stage 5
+cannot carry the change as well: no window around its one entry passes the leak rules without
+overlapping stage 7's ([recipes.md](./recipes.md#known-exceptions)). Not yet observed on hardware.
+The acceptance test `beat-loop-lit-pad-follows-touch` checks it in emulation: stock and stage 7
+pass, stage 5 fails ([acceptance.md](./acceptance.md#the-beat-loop-tests)).
 
 A no-op rebuild's application is the official one, re-compressed, so nothing should change
-functionally in it. Stage 3 changes only the text of the application's version string. Stage 5
-also changes one table entry, the first change to behaviour. Stage 7 changes the table's six
-entries and the six buttons' 36 images; no code. From 2026-10-09 every new stage file is
-rehearsed in emulation before it is offered. Stages 1b, 3 and 5 were rehearsed after they had
-been flashed, and the rehearsals agree with the hardware results; stage 7 was rehearsed before
-it was offered (section 5).
+functionally in it. Stage 3 changes only the text of the application's version string. Stage 5 also
+changes one table entry, the first change to behaviour. Stage 7 changes the table's six entries, the
+lit list's six entries and the six buttons' 36 images; no code. From 2026-10-09 every new stage file
+is rehearsed in emulation before it is offered. Stages 1b, 3 and 5 were rehearsed after they had
+been flashed, and the rehearsals agree with the hardware results; stage 7 was rehearsed before it
+was offered (section 5).
 
 The stage files built from the official v1.15 file (`XDJ700.UPD`, 17,371,335 bytes, SHA-256
 `73edec9802da51672257c2599efc04209dc92478fcbaa1a0425b3b122e33f99c`) are always the same. All are
@@ -130,11 +134,13 @@ application has SHA-256 `dd5adad4ae531db95c9dae10d9fa534afc4e31d2ffd54daadc22da6
 differs from stock in exactly three bytes (two in the version string, one table entry), as the
 owner-input tests check.
 
-The stage-7 file (`patch` with `recipes/xdj700-v1.15/beat-loop-1-to-32.json`) is 17,367,457
-bytes with SHA-256 `259c75daa04356d2be433ea731ed38b20fbc8cdea12e4fe14fe1dda353befa58`; its
-application has SHA-256 `e3581ea660afc7c1317dcd79f7076d089a1da41c6750df5342623fb2362c0593`. It
-differs from stock only in the version string, the first byte of each of the six table entries,
-and inside the label boxes of the 36 images, as the owner-input tests check.
+The stage-7 file (`patch` with `recipes/xdj700-v1.15/beat-loop-1-to-32.json`) is 17,367,473
+bytes with SHA-256 `0d433b79d04f32c8835b78dc799305c831af5765039ac922b856d25c0119888c`; its
+application has SHA-256 `aabdbf0619bddb12b29b4a5c3b9b0606a0c8df9fffe2da16e347e4e70b2ec855`. It
+differs from stock only in the version string, the first byte of each of the six entries of the
+lit list and of the button table, and inside the label boxes of the 36 images, as the
+owner-input tests check. (The superseded `0.12` stage-7 file, without the lit list:
+17,367,457 bytes, `259c75da…`.)
 
 ## 3. Before every flash
 
@@ -163,7 +169,7 @@ and inside the label boxes of the 36 images, as the owner-input tests check.
      --recipe recipes/xdj700-v1.15/beat-loop-16-plays-32.json \
      --output ~/xdj700-stage5/XDJ700.UPD --no-protected-set
 
-   # Stage 7: BEAT LOOP 1, 2, 4, 8, 16, 32 (reports 0.12)
+   # Stage 7: BEAT LOOP 1, 2, 4, 8, 16, 32 (reports 0.14)
    mkdir -p ~/xdj700-stage7
    cargo run --release -p patch-cli -- patch --input /path/to/XDJ700.UPD \
      --recipe recipes/xdj700-v1.15/beat-loop-1-to-32.json \
@@ -184,7 +190,7 @@ and inside the label boxes of the 36 images, as the owner-input tests check.
    - eject the stick and plug it back in;
    - run `shasum -a 256 /Volumes/<stick>/XDJ700.UPD`;
    - it must equal the identity **for the stage you are flashing** in section 2 (stage 1b:
-     `9e1ac10e…`; stage 5: `144f4b55…`; stage 7: `259c75da…`). **On any mismatch, stop.** The
+     `9e1ac10e…`; stage 5: `144f4b55…`; stage 7: `0d433b79…`). **On any mismatch, stop.** The
      read-back done by `patch-cli` can be served from the operating system's cache, so it does not
      prove what is on the stick.
 5. **Recovery sticks ready**, each checked the same way (re-insert, then `shasum`):
@@ -194,7 +200,7 @@ and inside the label boxes of the 36 images, as the owner-input tests check.
      application). It is higher than any version a modified application reports (lower than
      1.15), so it is the backup restore stick for those too (untested over a modified
      application: stages 4 and 6 did not need it). **Check that its SHA-256 is `9e1ac10e…`:**
-     the stage-3 (`84cbd263…`), stage-5 (`144f4b55…`) and stage-7 (`259c75da…`) files have the
+     the stage-3 (`84cbd263…`), stage-5 (`144f4b55…`) and stage-7 (`0d433b79…`) files have the
      same name and label, and the stage-5 or stage-7 file, flashed by mistake, progresses like a
      restore but reinstalls an experiment.
    - **Official v1.15 file: the first restore stick for a modified application.** On a unit that
@@ -225,17 +231,17 @@ expected outcome (section 2). **Photograph the MAIN line**: its left-hand versio
 reports. While the unit runs the stock application it should be `Ver1.15` (section 1): at stages 1b,
 2, 3, 5 and 7 (at stages 5 and 7, after a restore to stock: `MAIN Ver1.15 -> Ver1.16`). At stage 4,
 after stage 3, it should be `Ver0.10`, at stage 6, after stage 5, `Ver0.11`, and at stage 8, after
-stage 7, `Ver0.12`. Report anything else.
+stage 7, `Ver0.14`. Report anything else.
 
 Then check each of these:
 - the update completed with no error message;
 - the UTILITY screen (hold MENU/UTILITY for over a second) shows a version; write it down. After a
   no-op rebuild or stages 4, 6 and 8 it shows `1.15` (section 1), after stage 3 `0.10`, after
-  stage 5 `0.11`, after stage 7 `0.12`. All are expected;
+  stage 5 `0.11`, after stage 7 `0.14`. All are expected;
 - three cold boots reach the normal screen;
 - browsing, playback, cue and loop behave as before (after stage 5, except the BEAT LOOP 16
   button, which should give 32 beats; after stage 7, except the BEAT LOOP pads, which should
-  read and give 1, 2, 4, 8, 16 and 32 beats, with the lit pad one to the right and none for 32;
+  read and give 1, 2, 4, 8, 16 and 32 beats, and the touched pad lights, the 32 pad included;
   see [the lit BEAT LOOP pad](#the-lit-beat-loop-pad-stages-5-and-7)).
 
 ## 5. Recovery: what protects the unit, and what does not
@@ -263,7 +269,7 @@ compressed, so a flash offset does not map to a run-time address.
 - **Interruptions in the loader region are not covered.** The file carries loader-region
   records, identical to the installed bytes on a unit already running v1.15 (an official update
   over an older version may differ there). Whether the updater writes them was unknown. *In
-  emulation* it does not: in the eleven rehearsals listed at the end of this section, the
+  emulation* it does not: in the seventeen rehearsals listed at the end of this section, the
   updater never erased or wrote the loader region `0x000000`–`0x03FFFF`. Installing a file
   erased the application region `0x040000`–`0x7DFFFF` and the settings area at the top of the
   flash (from `0x7E0000` in the emulated layout, whose sector sizes may differ from the unit's).
@@ -287,8 +293,9 @@ compressed, so a flash offset does not map to a run-time address.
     stream and needs its own test. Stage 5 was that test for a one-entry table change read, by
     static analysis, only by a touch handler: on an owner's unit (2026-10-09) it was written,
     the unit booted normally and behaved as expected, and its update mode still worked (stage 6,
-    with the official file). Stage 7 changes table and image data only and is not yet tested on
-    hardware. An application whose code is changed is still untested.
+    with the official file). Stage 7 changes table and image data only (one list read at start-up
+    and during updates, the exception below) and is not yet tested on hardware. An application
+    whose code is changed is still untested.
   - Files that change behaviour can cause it, so every future modification must stay out of the
     code that runs before the update-mode decision and out of the update path.
 - **Rules for every future modification** (this list is the project's authoritative statement
@@ -298,9 +305,9 @@ compressed, so a flash offset does not map to a run-time address.
     before the branch at `0x08D50D78`, those an update-mode boot runs, and those the complete
     updates of the rehearsals below run (reading the file from the stick, the version check,
     erasing and writing flash). That is 1,692 ranges of run-time addresses, about 460 KiB of
-    the application; the eleven rehearsals below added no new function to it. It is a lower bound:
-    the unit runs code the model does not (the real panel and storage, the DSP's replies).
-    Every recipe window must lie outside it; all three committed recipes do. The set is kept outside
+    the application; the seventeen rehearsals below added no new function to it. It is a lower
+    bound: the unit runs code the model does not (the real panel and storage, the DSP's replies).
+    Every recipe window must lie outside it; all committed recipes do. The set is kept outside
     this repository. `patch` and `precondition` refuse a recipe whose span or window overlaps it,
     or a set for another release or one that covers the version string, before reading the
     firmware; without a set they refuse to run unless `--no-protected-set` skips the check on
@@ -321,7 +328,18 @@ compressed, so a flash offset does not map to a run-time address.
     CPU watch does not see, so for them this shows that no code reads them. With a track loaded,
     the pads read 1, 2, 4, 8, 16, 32 on the emulated screen, and touching them from left to
     right made the player take the 1, 2, 4, 8, 16 and 32-beat entries of its length list; which
-    pad lit is described in [the lit BEAT LOOP pad](#the-lit-beat-loop-pad-stages-5-and-7);
+    pad lit is described in [the lit BEAT LOOP pad](#the-lit-beat-loop-pad-stages-5-and-7).
+    **One accepted exception** (the owner, 2026-10-16): stage 7 (`0.14`) also changes the list
+    of length codes that decides which BEAT LOOP pad lights (decoded `0xD5470`, the first byte of
+    each of its six entries), and two instructions of protected code read that list from
+    power-on on (about 12,500 times each in the first 100 seconds, to the main screen) and
+    throughout an install (about 70,000 reads, in both directions). *In emulation*, changing
+    its values changed only which pad lit: over twelve steps (each pad, 2X and 1/2X), the 40
+    deck-status words read after each step differed between the old and the new stage 7 only in
+    the pads' lit states. No loop plays at start-up or during an update. In the rehearsals every
+    other check passed both ways, including with stage 7's own application running the install,
+    and the table and the images were again not read. The owner accepted the change on that
+    evidence; every other recipe still meets the rule;
   - **rehearse every new stage file in emulation before it is offered.** The rehearsal builds
     a flash from the file the unit runs, installs the new file through the application's own
     update mode, and checks that the flash then holds the new file's MAIN records exactly,
@@ -340,9 +358,10 @@ compressed, so a flash offset does not map to a run-time address.
     `Ver1.16` stock no-op are then both higher, so both can restore the stock application. A
     modified application that reported 1.16 or more would make the updater skip both.
 
-**Rehearsals so far** (*in emulation*, 2026-10-09). Each starts from a flash built from the first
-file and booted through the loader. In every run the loader region was untouched, a normal
-reboot reached the running system, and a reboot holding IN + RELOOP/EXIT reached the update path.
+**Rehearsals so far** (*in emulation*, 2026-10-09 to 2026-10-16). Each starts from a flash built
+from the first file and booted through the loader. In every run the loader region was untouched,
+a normal reboot reached the running system, and a reboot holding IN + RELOOP/EXIT reached the
+update path.
 
 | Flash built from | File installed | Update | Also checked | Result |
 | --- | --- | --- | --- | --- |
@@ -352,8 +371,10 @@ reboot reached the running system, and a reboot holding IN + RELOOP/EXIT reached
 | stage 3 | official v1.15 | written | flash holds the file's records | passed |
 | official v1.15 | stage 5, reports `0.11` | written | records; the replaced byte was not read | passed |
 | stage 5 | official v1.15 | written | records; the replaced byte was not read | passed |
-| official v1.15 | stage 7, reports `0.12` | written | records; neither the table nor the images were read (two runs, one watch each) | passed |
-| stage 7 | official v1.15 | written | records; neither the table nor the images were read (two runs, one watch each) | passed |
+| official v1.15 | stage 7 as first published, reports `0.12` (superseded) | written | records; neither the table nor the images were read (two runs, one watch each) | passed |
+| stage 7 as first published (superseded) | official v1.15 | written | records; neither the table nor the images were read (two runs, one watch each) | passed |
+| official v1.15 | stage 7, reports `0.14` | written | records; neither the table nor the images were read; the lit list was read, the accepted exception (three runs, one watch each) | passed, but for the list |
+| stage 7, reports `0.14` | official v1.15 | written | records; neither the table nor the images were read; the lit list was read, the accepted exception (three runs, one watch each) | passed, but for the list |
 | official v1.15 | official v1.15 | skipped, equal version | application region unchanged | passed |
 
 Stages 1b, 3 and 5 were flashed on an owner's unit before these rehearsals existed; the rehearsals

@@ -2,9 +2,9 @@
 
 An acceptance test drives one player's panel and touch screen in the emulator and checks what the
 running application does: which length a touched BEAT LOOP pad selects, which pad lights. It is
-roadmap step 2 of [modular-builds.md](./modular-builds.md) ("Verification"). Stage 7 shows why it
-is needed: its lengths were right, but the pad that lights follows the stock lengths, and only a
-test of the lit pad would have caught it.
+roadmap step 2 of [modular-builds.md](./modular-builds.md) ("Verification"). Stage 7 as first
+published (`0.12`) showed why it is needed: its lengths were right, but the pad that lit followed
+the stock lengths, and only a test of the lit pad caught it.
 
 **Status.** The format, the checks that need no firmware and the runner are implemented: tests
 load with the catalog ([catalog.md](./catalog.md)), implementations name the tests they must
@@ -170,7 +170,7 @@ until deleted.
 Three tests touch the six BEAT LOOP pads of the PERFORM screen left to right, with a track loaded
 from the owner's stick (`"stick": true`). The stick's first track must load after USB and seven
 pushes of the rotary selector; the PERFORM screen opens when its tab is touched. Each test first
-checks that no loop is set yet (and the lit-pad test that the first pad is not lit), then touches
+checks that no loop is set yet (and the lit-pad test that no pad is lit), then touches
 each pad and polls for a value no earlier touch can leave: the touched pad's index, and for the
 first pad (index 0 before any touch) its length or its lit state. A length test then expects the
 length; the lit-pad test waits 2 s more for the lit states to settle, then expects the touched pad
@@ -181,16 +181,19 @@ passes the test or not, and a failing run fails at the same steps every time:
 | --- | --- | --- | --- | --- | --- |
 | `beat-loop-1-to-32-pads-select-lengths` | lengths 1, 2, 4, 8, 16, 32 | FAIL | FAIL | PASS | FAIL |
 | `beat-loop-16-plays-32-pads-select-lengths` | lengths 1/2, 1, 2, 4, 8, 32 | FAIL | PASS | FAIL | FAIL |
-| `beat-loop-lit-pad-follows-touch` | the touched pad lights | PASS | FAIL | FAIL | PASS |
+| `beat-loop-lit-pad-follows-touch` | the touched pad lights | PASS | FAIL | PASS | PASS |
 
-Stage 7 names the first test and stage 5 the second. No feature names the lit-pad test yet: stock
-passes it, and stages 5 and 7 fail it, their known limit
-([xdj700-flashing.md](./xdj700-flashing.md), "The lit BEAT LOOP pad"); a lit-pad fix would name it.
+Stage 7 names the first test and the lit-pad test, and stage 5 the second. Stock and stage 7 pass
+the lit-pad test (stage 7 changes the list that decides the lit pad along with its lengths); stage
+5 fails it, its known limit ([xdj700-flashing.md](./xdj700-flashing.md), "The lit BEAT LOOP pad").
 The Neon pads skin names it: it changes only images, so the pads light and set lengths as on
-stock, and it fails the length tests at stock's steps.
-All twelve results are the owner suite's (`official_accept_beat_loop`), in the owner's emulator with
-the official v1.15 file and the stage and skin files built from it; for each failing run it also
-checks which steps fail. Boot and browsing are waited out for fixed times (about two and a half
+stock, and it fails the length tests at stock's steps. The suite also runs the lit-pad test on
+stage 7 as first published (`0.12`, without the lit list), which lights the pad to the right of
+the touched one and none for 32: the failing control that shows the checks that the other pads
+stay unlit can fail.
+All thirteen results are the owner suite's (`official_accept_beat_loop`), in the owner's emulator
+with the official v1.15 file and the stage and skin files built from it; for each failing run it
+also checks which steps fail. Boot and browsing are waited out for fixed times (about two and a half
 minutes, host time), which a much slower or busier host may outrun; the suite runs at most one
 emulator per two host cores, three at most, for that reason. The waits become polls when a state
 range shows that a track is loaded.
@@ -199,5 +202,5 @@ range shows that a track is loaded.
 
 A feature's or skin's implementation names the tests it must pass (`acceptance`, a list of test
 ids). Each must exist and be for the implementation's player. A test an implementation does not
-pass yet is not named by it: stage 7 fails a lit-pad test until the lit-pad fix exists, and that
-result goes with its known limits.
+pass yet is not named by it: stage 5 fails the lit-pad test, and that result goes with its known
+limits.
