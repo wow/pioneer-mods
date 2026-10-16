@@ -397,7 +397,8 @@ The format is inspired by Keep a Changelog and follows [VERSIONING.md](./VERSION
   updates: the owner accepted that as the one exception to the data rule, on rehearsals both ways
   (`docs/xdj700-flashing.md`, section 5). Its window lies over data, a known exception
   (`docs/recipes.md`). The feature names the lit-pad acceptance test, and its limit is now that
-  exception; stage 5 keeps its lit-pad limit, since no window around its one entry passes.
+  exception; stage 5 keeps its lit-pad limit: a window before its one entry would overlap stage
+  7's lit-list window, and no window after it passes the value check.
 - Decided: community skins are licensed under CC BY-SA 4.0 (`LICENSE-ART`), and code and feature
   recipes stay MIT; the builder runs in the browser on the owner's computer, the official update
   never uploaded (`docs/modular-builds.md`, "Decisions"; `CONTRIBUTING.md`). A skin entry now

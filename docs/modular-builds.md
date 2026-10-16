@@ -209,8 +209,8 @@ is available the builder rehearses it both ways before writing it.
 - **Acceptance tests:** scripted emulator runs that drive the panel and touch screen and assert
   behaviour: which length-list entry a touch selects, which pad lights, that changed data is not
   read at start-up. The probes used on 2026-10-10 (call logs, the pad-state array, screen-region
-  measurements) become these tests. Stage 7 shows why: its lengths were right, but a test of the
-  lit pad would have caught that the lighting follows the stock lengths.
+  measurements) become these tests. Stage 7 as first published (`0.12`) showed why: its lengths
+  were right, but only a test of the lit pad caught that the lighting followed the stock lengths.
 - **Maturity tiers:** `stable` (passed a hardware stage, and the maintainer offers it by
   default), `experimental` (emulator rehearsals at least; a hardware pass alone does not make an
   implementation `stable`), `dev` (not offered). The builder offers `stable` by default.

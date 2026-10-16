@@ -91,6 +91,10 @@ pub const STAGE5_UPD_SHA256: &str =
 /// The decoded offset of the list of length codes that decides which BEAT LOOP pad lights, one
 /// 4-byte entry per pad, which stage 7 changes.
 pub const LIT_CODES_OFFSET: usize = 0xd5470;
+/// A pad lights while the playing loop's length code equals its lit-list entry; a code is the
+/// length's index in the player's length list (the button table's entries) plus this, in
+/// emulation (docs/xdj700-flashing.md, "The lit BEAT LOOP pad").
+pub const LIT_CODE_ABOVE_INDEX: u8 = 4;
 
 /// Stage 7: BEAT LOOP 1, 2, 4, 8, 16, 32, built with `patch` from the committed recipe below. Its
 /// application reports `0.14` and differs from stock in the version string, the first byte of
@@ -107,6 +111,15 @@ pub const STAGE7_MAIN_SHA256: &str =
 pub const STAGE7_UPD_LEN: usize = 17_367_473;
 pub const STAGE7_UPD_SHA256: &str =
     "0d433b79d04f32c8835b78dc799305c831af5765039ac922b856d25c0119888c";
+
+/// Stage 7 as first published (until 2026-10-16): the committed recipe without its lit-list
+/// replacement, reporting `0.12`. The pad to the right of the touched one lights, which the
+/// acceptance owner suite keeps as the lit-pad test's failing control.
+pub const STAGE7_FIRST_REPORTED_VERSION: &str = "0.12";
+pub const STAGE7_FIRST_APPLICATION_SHA256: &str =
+    "e3581ea660afc7c1317dcd79f7076d089a1da41c6750df5342623fb2362c0593";
+pub const STAGE7_FIRST_UPD_SHA256: &str =
+    "259c75daa04356d2be433ea731ed38b20fbc8cdea12e4fe14fe1dda353befa58";
 
 /// A committed recipe's stage file: its pinned identities, and the offsets outside the edited
 /// images at which its application differs from stock.

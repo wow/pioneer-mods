@@ -136,6 +136,13 @@ repeating the replacement exactly.
     what the recipes and the PERFORM map publish.
   - Stage 5 cannot carry this change too: a window around its one entry would either lie after
     it, where no size passes, or overlap this one.
+  - What lies between this window and the table's: the SLIP LOOP pads' lit list, right after this
+    one (decoded `0xD5488`, six 4-byte entries, read by the same code; *in emulation*, with SLIP
+    on, the pad whose entry matches the slip loop's code lights). A recipe changing it could take
+    only a window after it, up to the table's window: 448 to 459 bytes pass (48.8 percent at
+    best), holding 13 values that are neither zero, small numbers, text, pointers nor round
+    floats. A SLIP LOOP length feature would have that thin window, or would change this recipe's
+    lit-list replacement to cover both lists, a change review would weigh against this hash.
 
 Stock values the catalogue publishes inside these windows (accepted by the owner, 2026-10-15):
 
@@ -144,21 +151,21 @@ Stock values the catalogue publishes inside these windows (accepted by the owner
   (x, y, width, height) and a handler's run-time address. Its BEAT LOOP pads' `tables` give the
   BEAT LOOP table's indices (6, 8, 9, 10, 11, 12, decoded `0xD6220`) and the SLIP LOOP table's (3,
   4, 6, 8, 5, 7, `0xD6238`), one byte of each 4-byte entry.
-  - The records lie in stage 7's window and the two tables after its span in stage 5's (which
-    stage 7 repeats). Counted as the window rules do, by aligned 32-bit words: every word the
+  - The records lie in stage 7's table window and the two tables after its span in stage 5's
+    (which stage 7 repeats). Counted as the window rules do, by aligned 32-bit words: every word the
     published bytes determine is below `0x10000` or a pointer into the application, the kinds the
     analyses above count as guessable.
   - Counting the windows' distinct 32-bit values outside their spans that are not zero, below
-    `0x10000`, text, application pointers or round floats (narrower exclusions than the count of
-    129 above, so more values count): stage 7's holds 144 and stage 5's 209 (2026-10-15). The
-    published bytes determine none of them, fully or in part.
+    `0x10000`, text, application pointers or round floats (narrower exclusions than the count of 129
+    above, so more values count): stage 7's table window holds 144 and stage 5's 209 (2026-10-15).
+    The published bytes determine none of them, fully or in part.
   - Three of stage 5's 209 are guessable from the published layout, so not counted as
     protection: the touch-zone edges (`0xD6250`, six 16-bit values, two to a word). The pads'
     touch zone gives the row's width, the map says each zone is a sixth of it, and the slot's
     elements show where each pad sits. Stage 5's window keeps 206 unknown values and stage 7's
-    144. The map still leaves the edges' values out and names only their offset.
-  - The BEAT LOOP table's indices are the stock bytes under stage 7's and stage 5's spans, which
-    the window rules already do not count, so publishing them costs those windows nothing.
+    table window 144. The map still leaves the edges' values out and names only their offset.
+  - The BEAT LOOP table's indices are the stock bytes under stage 7's table span and stage 5's span,
+    which the window rules already do not count, so publishing them costs those windows nothing.
   - A later window over these records, tables or edges counts their words as known, and so
     holds this many fewer unknown values; the record table and the two tables stay reserved like
     the windows around them.

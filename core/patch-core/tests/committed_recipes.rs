@@ -3,14 +3,18 @@
 //! committed recipes of a release, precondition windows must be disjoint (or belong to identical
 //! replacements). Applying them needs the official file; see the owner-input tests.
 
+#[path = "common/official_pins.rs"]
+mod official_pins;
 #[path = "common/recipe_files.rs"]
 mod recipe_files;
 
+use official_pins::{BEAT_LOOP_TABLE_OFFSET, LIT_CODE_ABOVE_INDEX, LIT_CODES_OFFSET};
 use patch_core::xdj700::{
     ProtectedSet, check_recipe_against_protected_set, check_recipe_v2, recipe_target,
 };
-use patch_schema::{ImageEdit, check_windows_across};
+use patch_schema::{ImageEdit, RecipeV2, check_windows_across};
 use recipe_files::committed_recipes;
+use std::collections::BTreeMap;
 
 #[test]
 fn every_committed_recipe_passes_the_firmware_free_checks() {
@@ -150,4 +154,50 @@ fn committed_recipes_avoid_the_protected_set() {
         checked.len(),
         set.len()
     );
+}
+
+/// A recipe that writes the lit list (the length codes that decide which BEAT LOOP pad lights)
+/// writes in each entry the code of its button's length: the button table's entry plus
+/// [`LIT_CODE_ABOVE_INDEX`]. The two are separate replacements, and a change to one alone would
+/// light the wrong pad, which with `expected` re-pinned only the emulator suite would show.
+#[test]
+fn a_recipe_writing_the_lit_list_writes_its_buttons_lengths() {
+    let mut checked = 0;
+    for (path, recipe) in committed_recipes() {
+        if recipe.target.release != "xdj700-v1.15" {
+            continue;
+        }
+        let written = written_bytes(&recipe);
+        let entry = |base: usize, pad: usize| written.get(&((base + 4 * pad) as u64)).copied();
+        if (0..6).all(|pad| entry(LIT_CODES_OFFSET, pad).is_none()) {
+            continue;
+        }
+        for pad in 0..6 {
+            let length = entry(BEAT_LOOP_TABLE_OFFSET, pad);
+            assert_eq!(
+                entry(LIT_CODES_OFFSET, pad),
+                length.map(|index| index + LIT_CODE_ABOVE_INDEX),
+                "{}: pad {}",
+                path.display(),
+                pad + 1
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked > 0, "stage 7 writes the lit list");
+}
+
+/// The bytes a recipe's replacements write (not those kept with `--`), by decoded offset.
+fn written_bytes(recipe: &RecipeV2) -> BTreeMap<u64, u8> {
+    let mut written = BTreeMap::new();
+    for replacement in &recipe.replacements {
+        for (index, pair) in replacement.bytes_hex.as_bytes().chunks(2).enumerate() {
+            if pair != b"--" {
+                let text = std::str::from_utf8(pair).expect("ASCII hex");
+                let byte = u8::from_str_radix(text, 16).expect("hex");
+                written.insert(replacement.offset + index as u64, byte);
+            }
+        }
+    }
+    written
 }
